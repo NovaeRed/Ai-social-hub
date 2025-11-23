@@ -11,6 +11,14 @@
     <name>redture parent configuration</name>
 
     <modules>
+        <module>ai-social-common</module>
+        <module>ai-social-identity</module>
+        <module>ai-social-chat</module>
+        <module>ai-social-schedule</module>
+        <module>ai-social-ai-engine</module>
+        <module>ai-social-gateway</module>
+        <module>ai-social-app</module>
+        <module>ai-social-friendship</module>
     </modules>
 
     <properties>
