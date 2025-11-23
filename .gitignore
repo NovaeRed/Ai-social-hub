@@ -22,3 +22,28 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# IDE specific files
+.cursor
+.vscode/
+.idea/
+.project/
+.classpath/
+
+# Maven target directory
+target/
+
+# Gradle build directory
+build/
+
+# Eclipse specific files
+.settings/
+
+# NetBeans specific files
+nbproject/private/
+dist/
+nbbuild/
+.nb-gradle/
+.cache/
+.generated/
+nbattrs/
