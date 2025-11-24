@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.redture</groupId>
+    <groupId>cn.redture</groupId>
     <artifactId>redture</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
@@ -39,6 +39,10 @@
         <langchain4j.community.version>1.0.1-beta6</langchain4j.community.version>
         <!-- Postgres -->
         <postgresql.version>42.7.8</postgresql.version>
+        <!-- JJWT -->
+        <jjwt.version>0.12.6</jjwt.version>
+        <!-- ULID -->
+        <ulid.version>5.2.0</ulid.version>
     </properties>
 
     <dependencyManagement>

@@ -85,7 +85,7 @@ CREATE INDEX idx_members_user ON conversation_members (user_id);
 CREATE UNIQUE INDEX idx_members_unique ON conversation_members (conversation_id, user_id);
 
 
--- 5. 消息表 (messages) - 增强版
+-- 5. 消息表 (messages)
 CREATE TABLE messages
 (
     id                BIGSERIAL PRIMARY KEY,
@@ -135,7 +135,7 @@ CREATE INDEX idx_schedules_user_time ON schedules (user_id, start_time);
 -- ==                        AI, VECTOR & TASK-RELATED TABLES                           ==
 -- =======================================================================================
 
--- 7. 异步AI任务追踪表 (ai_tasks) - [新增]
+-- 7. 异步AI任务追踪表 (ai_tasks)
 CREATE TABLE ai_tasks
 (
     id                BIGSERIAL PRIMARY KEY,
@@ -157,7 +157,7 @@ CREATE INDEX idx_ai_tasks_user_status ON ai_tasks (user_id, task_status);
 CREATE INDEX idx_ai_tasks_type_status ON ai_tasks (task_type, task_status);
 
 
--- 8. 用户AI上下文存储表 (user_ai_contexts) - 增强版
+-- 8. 用户AI上下文存储表 (user_ai_contexts)
 CREATE TABLE user_ai_contexts
 (
     id           BIGSERIAL PRIMARY KEY,

@@ -1,0 +1,8 @@
+# 调整 @Slf4j 日志级别为 Debug
+logging:
+  level:
+    cn.redture: debug
+
+jwt:
+  secret: ai-social-project-secret-key-for-jwt-authentication-hs256-20240520
+  expiration: 2000 # 24 hours in milliseconds
