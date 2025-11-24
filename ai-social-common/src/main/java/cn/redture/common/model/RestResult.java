@@ -1,4 +1,4 @@
-package cn.redture.model;
+package cn.redture.common.model;
 
 import lombok.Data;
 import org.springframework.http.HttpStatus;
@@ -27,12 +27,22 @@ public class RestResult<T> {
     private T data;
 
     /**
+     * 业务错误码，例如 REFRESH_TOKEN_EXPIRED，可选
+     */
+    private String errorCode;
+
+    /**
      * 内部使用的构造函数
      */
     private RestResult(int code, String msg, T data) {
+        this(code, msg, data, null);
+    }
+
+    private RestResult(int code, String msg, T data, String errorCode) {
         this.code = code;
         this.msg = msg;
         this.data = data;
+        this.errorCode = errorCode;
     }
 
     // --- 成功响应 ---
@@ -67,7 +77,7 @@ public class RestResult<T> {
     }
 
     /**
-     * 请求已接受，将异步处理 (202 Accepted)
+     * 请求已接受，将异 Async处理 (202 Accepted)
      *
      * @param data 通常是任务ID等信息
      * @return RestResult 实例
@@ -97,7 +107,11 @@ public class RestResult<T> {
      * @return RestResult 实例
      */
     public static <T> RestResult<T> error(HttpStatus status, String message) {
-        return new RestResult<>(status.value(), message, null);
+        return error(status, message, null);
+    }
+
+    public static <T> RestResult<T> error(HttpStatus status, String message, String errorCode) {
+        return new RestResult<>(status.value(), message, null, errorCode);
     }
 
     /**

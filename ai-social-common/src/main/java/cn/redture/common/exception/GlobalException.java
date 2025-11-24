@@ -1,6 +1,6 @@
-package cn.redture.exception;
+package cn.redture.common.exception;
 
-import cn.redture.model.RestResult;
+import cn.redture.common.model.RestResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -23,8 +23,8 @@ public class GlobalException {
      */
     @ExceptionHandler(BaseException.class)
     public RestResult<Void> handleBaseException(BaseException e) {
-        log.warn("业务异常: code={}, message={}", e.getCode(), e.getMessage());
-        return RestResult.error(HttpStatus.valueOf(e.getCode()), e.getMessage());
+        log.warn("业务异常: code={}, errorCode={}, message={}", e.getCode(), e.getErrorCode(), e.getMessage());
+        return RestResult.error(HttpStatus.valueOf(e.getCode()), e.getMessage(), e.getErrorCode());
     }
 
     /**

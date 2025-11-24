@@ -1,6 +1,6 @@
-package cn.redture.exception.jwt;
+package cn.redture.common.exception.jwt;
 
-import cn.redture.exception.BaseException;
+import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;
 
 /**

@@ -1,8 +1,8 @@
-package cn.redture.util;
+package cn.redture.common.util;
 
-import cn.redture.exception.BaseException;
-import cn.redture.exception.jwt.ExpiredTokenException;
-import cn.redture.exception.jwt.InvalidTokenException;
+import cn.redture.common.exception.BaseException;
+import cn.redture.common.exception.jwt.ExpiredTokenException;
+import cn.redture.common.exception.jwt.InvalidTokenException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -51,15 +51,7 @@ public class JwtUtil {
      * @return 生成的JWT字符串
      */
     public String generateToken(String userId) {
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expiration);
-
-        return Jwts.builder()
-                .subject(userId)
-                .issuedAt(now)
-                .expiration(expiryDate)
-                .signWith(secretKey)
-                .compact();
+        return generateToken(Map.of("uid", userId));
     }
 
     /**
@@ -74,6 +66,21 @@ public class JwtUtil {
 
         return Jwts.builder()
                 .claims(claims)
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(secretKey)
+                .compact();
+    }
+
+    /**
+     * 生成 Refresh Token（JWT）
+     */
+    public String generateRefreshToken(Long userId, long ttlMillis) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + ttlMillis);
+        return Jwts.builder()
+                .claim("uid", userId)
+                .claim("typ", "refresh")
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(secretKey)
@@ -147,5 +154,24 @@ public class JwtUtil {
             return true;
         }
     }
-}
 
+    /**
+     * 从 Refresh Token 中解析出 uid，并校验 typ=refresh。
+     */
+    public Long getUserIdFromRefreshToken(String refreshToken) {
+        Claims claims = getClaimsFromToken(refreshToken);
+        Object typ = claims.get("typ");
+        if (typ == null || !"refresh".equals(typ.toString())) {
+            throw new InvalidTokenException("无效的刷新令牌类型");
+        }
+        Object uidObj = claims.get("uid");
+        if (uidObj == null) {
+            throw new InvalidTokenException("刷新令牌缺少用户ID");
+        }
+        try {
+            return Long.valueOf(uidObj.toString());
+        } catch (NumberFormatException e) {
+            throw new InvalidTokenException("刷新令牌中的用户ID格式错误");
+        }
+    }
+}

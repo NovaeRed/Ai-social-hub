@@ -1,0 +1,27 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: ai-social-app
+  datasource:
+    url: jdbc:postgresql://192.168.80.128:5432/ai_social_hub
+    username: postgres
+    password: 123456
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: 192.168.80.128
+      port: 6379
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 10
+          min-idle: 1
+          time-between-eviction-runs: 10s
+  jackson:
+    default-property-inclusion: non_null # JSON处理时忽略非空字段
+mybatis-plus:
+  type-aliases-package: cn.redture
+logging:
+  level:
+    cn.redture: debug

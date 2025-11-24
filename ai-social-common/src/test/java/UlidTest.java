@@ -1,4 +1,4 @@
-import cn.redture.util.IdUtil;
+import cn.redture.common.util.IdUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 

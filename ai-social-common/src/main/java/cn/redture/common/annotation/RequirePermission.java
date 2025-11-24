@@ -1,4 +1,4 @@
-package cn.redture.annotation;
+package cn.redture.common.annotation;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

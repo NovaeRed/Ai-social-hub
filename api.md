@@ -71,6 +71,48 @@
 
 **Response 204 (No Content):** 成功登出，无返回内容。
 
+### 1.4 `POST /auth/refresh`
+
+**刷新访问令牌 (Access Token)**  
+使用仍在有效期内且未被撤销的 Refresh Token 换取新的 Access Token（以及新的 Refresh Token）。
+
+> 注意：
+> - Refresh Token 仅在服务端存储于 Redis（键为 `auth:refresh:<user_id>`），客户端通常只保存一个最新的 Refresh Token。
+> - 网关不会自动刷新 Token，有关续期逻辑完全通过本接口完成。
+
+**Request Body:**
+
+```json
+{
+  "refresh_token": "<refresh_token_string>"
+}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "access_token": "<new_access_token>",
+  "refresh_token": "<new_refresh_token>",
+  "token_type": "Bearer",
+  "expires_in": 900
+}
+```
+
+**客户端调用建议：**
+
+- Access Token 有效期为 15 分钟，Refresh Token 有效期为 7 天。
+- 推荐在以下时机调用 `/auth/refresh`：
+  - 收到后端返回 `401 UNAUTHORIZED` 且 `errorCode = "UNAUTHORIZED"` 或 `"TOKEN_EXPIRED"` 等标识 Access Token 过期的场景；
+  - 或在前端本地根据 `expires_in` 预估 Access Token 即将过期（例如剩余 < 2 分钟）时，提前调用一次刷新接口。
+- 收到 `REFRESH_TOKEN_EXPIRED` / `REFRESH_TOKEN_REVOKED` / `REFRESH_TOKEN_INVALID` 时，前端应清除本地 Token 并引导用户重新登录。
+
+**Possible Error Responses:**
+
+- `401 UNAUTHORIZED`：`REFRESH_TOKEN_EXPIRED` - 刷新令牌已过期或失效，需要重新登录。
+- `401 UNAUTHORIZED`：`REFRESH_TOKEN_INVALID` - 刷新令牌无效（格式错误、签名错误等）。
+- `401 UNAUTHORIZED`：`REFRESH_TOKEN_REVOKED` - 刷新令牌已被撤销（登出、改密码、封号等）。
+
 ---
 
 ## 2.0 用户模块 (Identity Service)

@@ -1,4 +1,4 @@
-import cn.redture.util.JwtUtil;
+import cn.redture.common.util.JwtUtil;
 import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
@@ -11,7 +11,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Slf4j
-@SpringBootTest(classes = cn.redture.util.JwtUtil.class)
+@SpringBootTest(classes = JwtUtil.class)
 public class JwtTokenTest {
 
     @Autowired

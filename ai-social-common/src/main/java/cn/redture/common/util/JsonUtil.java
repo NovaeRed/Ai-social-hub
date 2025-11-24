@@ -1,8 +1,8 @@
-package cn.redture.util;
+package cn.redture.common.util;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import cn.redture.exception.BaseException;
+import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;
 
 /**

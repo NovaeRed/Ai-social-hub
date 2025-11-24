@@ -43,6 +43,12 @@
         <jjwt.version>0.12.6</jjwt.version>
         <!-- ULID -->
         <ulid.version>5.2.0</ulid.version>
+        <!-- Lombok -->
+        <lombok.version>1.18.36</lombok.version>
+        <!-- Mybatis -->
+        <mybatis.version>3.0.4</mybatis.version>
+        <!-- MybatisPlus -->
+        <mybatis-plus.version>3.5.9</mybatis-plus.version>
     </properties>
 
     <dependencyManagement>
@@ -106,6 +112,25 @@
                 <version>4.1.112.Final</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- Lombok -->
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <!-- Mybatis -->
+            <dependency>
+                <groupId>org.mybatis.spring.boot</groupId>
+                <artifactId>mybatis-spring-boot-starter</artifactId>
+                <version>${mybatis.version}</version>
+            </dependency>
+            <!-- MybatisPlus -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
