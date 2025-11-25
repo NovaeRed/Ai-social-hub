@@ -2,6 +2,7 @@ package cn.redture.identity.controller;
 
 import cn.redture.common.model.RestResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
+import cn.redture.identity.pojo.dto.ChangePasswordDTO;
 import cn.redture.identity.pojo.dto.UpdateUserDTO;
 import cn.redture.identity.pojo.vo.UserInformation;
 import cn.redture.identity.service.UserService;
@@ -26,5 +27,12 @@ public class UserController {
     public RestResult<UserInformation> updateUserInformation(@RequestBody UpdateUserDTO updateUserDTO) {
         UserInformation updatedUser = userService.updateUserInfo(updateUserDTO);
         return RestResult.success(updatedUser);
+    }
+
+    @PostMapping("/me/password")
+    public RestResult<Void> changePassword(@RequestBody ChangePasswordDTO changePasswordDTO) {
+        Long userId = SecurityContextHolderUtil.getUserId();
+        userService.changePassword(userId, changePasswordDTO.getCurrentPassword(), changePasswordDTO.getNewPassword());
+        return RestResult.noContent();
     }
 }

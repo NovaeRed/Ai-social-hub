@@ -17,6 +17,7 @@ import cn.redture.identity.pojo.dto.TokenResponse;
 import cn.redture.identity.pojo.entity.User;
 import cn.redture.identity.mapper.UserMapper;
 import cn.redture.identity.service.AuthService;
+import cn.redture.identity.util.TokenManagementUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -42,6 +43,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Resource
     private JwtUtil jwtUtil;
+
+    @Resource
+    private TokenManagementUtil tokenManagementUtil;
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -76,8 +80,8 @@ public class AuthServiceImpl implements AuthService {
                 throw new InvalidInputException("邮箱格式不正确");
             }
             if (userMapper.selectCount(new LambdaQueryWrapper<User>()
-                .eq(User::getEmail, request.getEmail())
-                .isNull(User::getDeletedAt)) > 0) {
+                    .eq(User::getEmail, request.getEmail())
+                    .isNull(User::getDeletedAt)) > 0) {
                 throw new BaseException(HttpStatus.CONFLICT, "邮箱已被注册", "EMAIL_EXISTS");
             }
         }
@@ -87,8 +91,8 @@ public class AuthServiceImpl implements AuthService {
                 throw new InvalidInputException("手机号格式不正确");
             }
             if (userMapper.selectCount(new LambdaQueryWrapper<User>()
-                .eq(User::getPhone, request.getPhone())
-                .isNull(User::getDeletedAt)) > 0) {
+                    .eq(User::getPhone, request.getPhone())
+                    .isNull(User::getDeletedAt)) > 0) {
                 throw new BaseException(HttpStatus.CONFLICT, "手机号已被注册", "PHONE_EXISTS");
             }
         }
@@ -110,10 +114,7 @@ public class AuthServiceImpl implements AuthService {
         user.setUpdatedAt(OffsetDateTime.now());
         userMapper.insert(user);
 
-        // 生成 access token 和 refresh token
-        String accessToken = generateAccessToken(user);
-        String refreshToken = generateAndStoreRefreshToken(user.getId());
-        return buildTokenResponse(accessToken, refreshToken);
+        return generateAccessAndRefreshToken(user);
     }
 
     @Override
@@ -128,9 +129,7 @@ public class AuthServiceImpl implements AuthService {
             throw new BaseException(HttpStatus.UNAUTHORIZED, "用户名或密码错误", "BAD_CREDENTIALS");
         }
 
-        String accessToken = generateAccessToken(user);
-        String refreshToken = generateAndStoreRefreshToken(user.getId());
-        return buildTokenResponse(accessToken, refreshToken);
+        return generateAccessAndRefreshToken(user);
     }
 
     @Override
@@ -145,7 +144,7 @@ public class AuthServiceImpl implements AuthService {
             Long userId = jwtUtil.getUserIdFromExpiredToken(accessToken);
 
             // 2. 将当前 access token 加入黑名单
-            addAccessTokenToBlacklist(accessToken);
+            tokenManagementUtil.addAccessTokenToBlacklist(accessToken);
 
             // 3. 从 Redis 中删除对应的 refresh token
             if (userId != null) {
@@ -198,7 +197,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         // 5. 将旧的、已过期的 access token 加入黑名单，防止重放
-        addAccessTokenToBlacklist(expiredAccessToken);
+        tokenManagementUtil.addAccessTokenToBlacklist(expiredAccessToken);
 
         // 6. 验证通过，生成一对全新的 token
         User user = userMapper.selectById(uidFromRefreshToken);
@@ -206,56 +205,18 @@ public class AuthServiceImpl implements AuthService {
             throw new RevokedRefreshTokenException("用户状态异常，请重新登录");
         }
 
-        String newAccessToken = generateAccessToken(user);
-        String newRefreshToken = generateAndStoreRefreshToken(user.getId());
-        return buildTokenResponse(newAccessToken, newRefreshToken);
-    }
-
-    private TokenResponse buildTokenResponse(String accessToken, String refreshToken) {
-        TokenResponse resp = new TokenResponse();
-        resp.setAccess_token(accessToken);
-        resp.setRefresh_token(refreshToken);
-        resp.setToken_type("Bearer");
-        resp.setExpires_in(jwtUtil.getAccessTokenExpirationSeconds());
-        return resp;
+        return generateAccessAndRefreshToken(user);
     }
 
     /**
-     * 将 Access Token 加入 Redis 黑名单
-     *
-     * @param accessToken 要拉黑的令牌
+     * 生成一对新的访问令牌和刷新令牌
+     * @param user 用户实体
+     * @return TokenResponse 包含新的访问令牌和刷新令牌
      */
-    private void addAccessTokenToBlacklist(String accessToken) {
-        try {
-            String jti = jwtUtil.getJtiFromToken(accessToken);
-            long remainingSeconds = jwtUtil.getRemainingExpirationSeconds(accessToken);
-            if (remainingSeconds > 0) {
-                String key = RedisConstants.AUTH_JWT_BLACKLIST_KEY_PREFIX + jti;
-                stringRedisTemplate.opsForValue().set(key, "1", Duration.ofSeconds(remainingSeconds));
-            }
-        } catch (Exception e) {
-            // 忽略解析失败的 token，因为它本身就无法通过验证
-        }
-    }
-
-    private String generateAccessToken(User user) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("uid", user.getId());
-        // claims.put("pid", user.getPublicId() != null ? user.getPublicId() : null);
-        claims.put("username", user.getUsername());
-        // claims.put("vip", user.getVipLevel());
-        return jwtUtil.generateAccessToken(claims);
-    }
-
-    private String generateAndStoreRefreshToken(Long userId) {
-        long ttlMillis = jwtUtil.getRefreshTokenExpirationSeconds() * 1000L;
-        String refreshToken = jwtUtil.generateRefreshToken(userId, ttlMillis);
-        String key = RedisConstants.AUTH_REFRESH_TOKEN_KEY_PREFIX + userId;
-        stringRedisTemplate.opsForValue().set(
-                key,
-                refreshToken,
-                Duration.ofSeconds(jwtUtil.getRefreshTokenExpirationSeconds())
-        );
-        return refreshToken;
+    private TokenResponse generateAccessAndRefreshToken(User user) {
+        // 生成 access token 和 refresh token
+        String accessToken = tokenManagementUtil.generateAccessToken(user);
+        String refreshToken = tokenManagementUtil.generateAndStoreRefreshToken(user.getId());
+        return tokenManagementUtil.buildTokenResponse(accessToken, refreshToken);
     }
 }

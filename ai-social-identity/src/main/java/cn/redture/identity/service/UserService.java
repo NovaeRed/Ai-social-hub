@@ -13,4 +13,6 @@ public interface UserService {
      * @return 更新后的用户信息
      */
     UserInformation updateUserInfo(UpdateUserDTO updateUserDTO);
+
+    void changePassword(Long userId, String currentPassword, String newPassword);
 }

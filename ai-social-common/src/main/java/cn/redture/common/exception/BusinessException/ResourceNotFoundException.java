@@ -25,7 +25,7 @@ public class ResourceNotFoundException extends BaseException {
      * @param message 自定义消息
      */
     public ResourceNotFoundException(String resourceName, String message) {
-        super(HttpStatus.NOT_FOUND, message, DEFAULT_ERROR_CODE);
+        super(HttpStatus.NOT_FOUND, String.format("%s: %s", resourceName,  message), DEFAULT_ERROR_CODE);
     }
 }
 

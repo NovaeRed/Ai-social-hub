@@ -4,15 +4,20 @@ import cn.redture.common.exception.BusinessException.InvalidInputException;
 import cn.redture.common.exception.BusinessException.ResourceNotFoundException;
 import cn.redture.common.util.RegexUtil;
 import cn.redture.common.util.SecurityContextHolderUtil;
+import cn.redture.common.dto.UserPrincipal;
 import cn.redture.identity.pojo.dto.UpdateUserDTO;
 import cn.redture.identity.pojo.entity.User;
 import cn.redture.identity.mapper.UserMapper;
 import cn.redture.identity.pojo.vo.UserInformation;
 import cn.redture.identity.service.UserService;
+import cn.redture.identity.util.TokenManagementUtil;
 import cn.redture.identity.util.converter.UserConverter;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -25,10 +30,16 @@ public class UserServiceImpl implements UserService {
     @Resource
     private UserMapper userMapper;
 
+    @Resource
+    private PasswordEncoder passwordEncoder;
+
+    @Resource
+    private TokenManagementUtil tokenManagementUtil;
+
     @Override
     public UserInformation getUserById(String userId) {
         if (!StringUtils.hasText(userId)) {
-            throw new ResourceNotFoundException("用户", "用户ID不能为空");
+            throw new ResourceNotFoundException("用户", "ID不能为空");
         }
 
         try {
@@ -64,5 +75,57 @@ public class UserServiceImpl implements UserService {
         log.info("用户 {} 更新了个人信息", userId);
 
         return UserConverter.INSTANCE.toUserInformation(user);
+    }
+
+    @Override
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+
+        if (userId == null) {
+            throw new ResourceNotFoundException("用户", "ID不能为空");
+        }
+
+        if (!userId.equals(SecurityContextHolderUtil.getUserId())) {
+            throw new InvalidInputException("只能修改当前登录用户的密码");
+        }
+
+        if (!RegexUtil.isStrongPassword(newPassword)) {
+            throw new InvalidInputException("新密码不符合强密码要求，密码至少8位，且包含大小写字母、数字和特殊字符");
+        }
+
+        User user = Optional.ofNullable(userMapper.selectById(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("用户"));
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new InvalidInputException("旧密码不正确");
+        }
+
+        String newHashedPassword = passwordEncoder.encode(newPassword);
+        LambdaUpdateWrapper<User> updateWrapper = new LambdaUpdateWrapper<User>()
+                .eq(User::getId, userId)
+                .set(User::getPasswordHash, newHashedPassword);
+        userMapper.update(null, updateWrapper);
+        log.debug("用户 {} 修改了密码", userId);
+
+        // 尝试将当前请求的 Access Token 加入黑名单，防止继续使用
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null) {
+                Object principal = authentication.getPrincipal();
+                if (principal instanceof UserPrincipal) {
+                    String currentAccessToken = ((UserPrincipal) principal).getAccessToken();
+                    tokenManagementUtil.addAccessTokenToBlacklist(currentAccessToken);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("在将当前 access token 加入黑名单时发生异常：{}", e.getMessage());
+        }
+
+        tokenManagementUtil.deleteRefreshToken(userId);
+        try {
+            SecurityContextHolder.clearContext();
+        } catch (Exception ignored) {
+        }
+
+        log.info("用户 {} 修改密码后，已签发的令牌已加入黑名单", userId);
+
     }
 }
