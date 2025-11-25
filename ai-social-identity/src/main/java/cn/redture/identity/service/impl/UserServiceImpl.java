@@ -105,7 +105,7 @@ public class UserServiceImpl implements UserService {
         userMapper.update(null, updateWrapper);
         log.debug("用户 {} 修改了密码", userId);
 
-        // 尝试将当前请求的 Access Token 加入黑名单，防止继续使用
+        // 将当前请求的 Access Token 加入黑名单，防止继续使用
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication != null) {
@@ -125,7 +125,7 @@ public class UserServiceImpl implements UserService {
         } catch (Exception ignored) {
         }
 
-        log.info("用户 {} 修改密码后，已签发的令牌已加入黑名单", userId);
+        log.debug("用户 {} 修改密码后，已签发的令牌已加入黑名单", userId);
 
     }
 }

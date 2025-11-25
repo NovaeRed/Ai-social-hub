@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class RefreshTokenRequest {
+public class RefreshTokenRequestDTO {
     @JsonProperty("refresh_token")
     private String refreshToken;
 }

@@ -1,14 +1,12 @@
 package cn.redture.identity.controller;
 
 import cn.redture.common.model.RestResult;
-import cn.redture.identity.pojo.dto.LoginRequest;
-import cn.redture.identity.pojo.dto.RefreshTokenRequest;
-import cn.redture.identity.pojo.dto.RegisterRequest;
-import cn.redture.identity.pojo.dto.TokenResponse;
+import cn.redture.identity.pojo.dto.LoginRequestDTO;
+import cn.redture.identity.pojo.dto.RefreshTokenRequestDTO;
+import cn.redture.identity.pojo.dto.RegisterRequestDTO;
+import cn.redture.identity.pojo.dto.TokenResponseDTO;
 import cn.redture.identity.service.AuthService;
 import jakarta.annotation.Resource;
-import org.apache.ibatis.annotations.Param;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -20,14 +18,14 @@ public class AuthController {
 
 
     @PostMapping("/register")
-    public RestResult<TokenResponse> register(@RequestBody RegisterRequest request) {
-        TokenResponse response = authService.register(request);
+    public RestResult<TokenResponseDTO> register(@RequestBody RegisterRequestDTO request) {
+        TokenResponseDTO response = authService.register(request);
         return RestResult.created(response);
     }
 
     @PostMapping("/login")
-    public RestResult<TokenResponse> login(@RequestBody LoginRequest request) {
-        TokenResponse response = authService.login(request);
+    public RestResult<TokenResponseDTO> login(@RequestBody LoginRequestDTO request) {
+        TokenResponseDTO response = authService.login(request);
         return RestResult.success(response);
     }
 
@@ -38,13 +36,13 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public RestResult<TokenResponse> refresh(@RequestHeader(value = "Authorization", required = false) String authorizationHeader,
-                                             @RequestBody RefreshTokenRequest request) {
+    public RestResult<TokenResponseDTO> refresh(@RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+                                                @RequestBody RefreshTokenRequestDTO request) {
         String accessToken = null;
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             accessToken = authorizationHeader.substring("Bearer ".length());
         }
-        TokenResponse response = authService.refreshToken(accessToken, request.getRefreshToken());
+        TokenResponseDTO response = authService.refreshToken(accessToken, request.getRefreshToken());
         return RestResult.success(response);
     }
 }

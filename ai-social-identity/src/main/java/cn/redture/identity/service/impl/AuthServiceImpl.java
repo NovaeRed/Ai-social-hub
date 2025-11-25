@@ -1,7 +1,6 @@
 package cn.redture.identity.service.impl;
 
 import cn.redture.common.constants.RedisConstants;
-import cn.redture.common.dto.UserPrincipal;
 import cn.redture.common.exception.BaseException;
 import cn.redture.common.exception.BusinessException.InvalidInputException;
 import cn.redture.common.exception.jwt.ExpiredRefreshTokenException;
@@ -11,9 +10,9 @@ import cn.redture.common.exception.jwt.RevokedRefreshTokenException;
 import cn.redture.common.util.IdUtil;
 import cn.redture.common.util.JwtUtil;
 import cn.redture.common.util.RegexUtil;
-import cn.redture.identity.pojo.dto.LoginRequest;
-import cn.redture.identity.pojo.dto.RegisterRequest;
-import cn.redture.identity.pojo.dto.TokenResponse;
+import cn.redture.identity.pojo.dto.LoginRequestDTO;
+import cn.redture.identity.pojo.dto.RegisterRequestDTO;
+import cn.redture.identity.pojo.dto.TokenResponseDTO;
 import cn.redture.identity.pojo.entity.User;
 import cn.redture.identity.mapper.UserMapper;
 import cn.redture.identity.service.AuthService;
@@ -22,16 +21,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import static cn.redture.common.constants.SystemConstants.USER_DEFAULT_NICKNAME_PREFIX;
 
@@ -54,7 +47,7 @@ public class AuthServiceImpl implements AuthService {
     private UserMapper userMapper;
 
     @Override
-    public TokenResponse register(RegisterRequest request) {
+    public TokenResponseDTO register(RegisterRequestDTO request) {
         // 检查用户名是否已存在
         Long count = userMapper.selectCount(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, request.getUsername())
@@ -118,7 +111,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public TokenResponse login(LoginRequest request) {
+    public TokenResponseDTO login(LoginRequestDTO request) {
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, request.getUsername())
                 .isNull(User::getDeletedAt));
@@ -156,7 +149,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public TokenResponse refreshToken(String expiredAccessToken, String refreshToken) {
+    public TokenResponseDTO refreshToken(String expiredAccessToken, String refreshToken) {
         if (expiredAccessToken == null || refreshToken == null) {
             throw new InvalidRefreshTokenException("访问令牌和刷新令牌均不能为空");
         }
@@ -211,9 +204,9 @@ public class AuthServiceImpl implements AuthService {
     /**
      * 生成一对新的访问令牌和刷新令牌
      * @param user 用户实体
-     * @return TokenResponse 包含新的访问令牌和刷新令牌
+     * @return TokenResponseDTO 包含新的访问令牌和刷新令牌
      */
-    private TokenResponse generateAccessAndRefreshToken(User user) {
+    private TokenResponseDTO generateAccessAndRefreshToken(User user) {
         // 生成 access token 和 refresh token
         String accessToken = tokenManagementUtil.generateAccessToken(user);
         String refreshToken = tokenManagementUtil.generateAndStoreRefreshToken(user.getId());

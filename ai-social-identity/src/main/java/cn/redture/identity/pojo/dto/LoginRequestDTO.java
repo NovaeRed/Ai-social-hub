@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class LoginRequest {
+public class LoginRequestDTO {
     private String username;
     private String password;
 }

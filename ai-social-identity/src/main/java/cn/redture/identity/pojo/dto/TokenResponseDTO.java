@@ -1,6 +1,7 @@
 package cn.redture.identity.pojo.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -12,26 +13,30 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class TokenResponse {
+public class TokenResponseDTO {
 
     /**
      * 访问令牌（Access Token）
      */
-    private String access_token;
+    @JsonProperty("access_token")
+    private String accessToken;
 
     /**
      * 刷新令牌（Refresh Token）
      */
-    private String refresh_token;
+    @JsonProperty("refresh_token")
+    private String refreshToken;
 
     /**
      * 令牌类型，固定为 Bearer
      */
-    private String token_type;
+    @JsonProperty("token_type")
+    private String tokenType;
 
     /**
      * Access Token 的有效期，单位：秒
      */
-    private long expires_in;
+    @JsonProperty("expires_in")
+    private long expiresIn;
 }
 

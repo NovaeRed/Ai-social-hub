@@ -2,7 +2,7 @@ package cn.redture.identity.util;
 
 import cn.redture.common.constants.RedisConstants;
 import cn.redture.common.util.JwtUtil;
-import cn.redture.identity.pojo.dto.TokenResponse;
+import cn.redture.identity.pojo.dto.TokenResponseDTO;
 import cn.redture.identity.pojo.entity.User;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -58,12 +58,12 @@ public class TokenManagementUtil {
         stringRedisTemplate.delete(key);
     }
 
-    public TokenResponse buildTokenResponse(String accessToken, String refreshToken) {
-        TokenResponse resp = new TokenResponse();
-        resp.setAccess_token(accessToken);
-        resp.setRefresh_token(refreshToken);
-        resp.setToken_type("Bearer");
-        resp.setExpires_in(jwtUtil.getAccessTokenExpirationSeconds());
+    public TokenResponseDTO buildTokenResponse(String accessToken, String refreshToken) {
+        TokenResponseDTO resp = new TokenResponseDTO();
+        resp.setAccessToken(accessToken);
+        resp.setRefreshToken(refreshToken);
+        resp.setTokenType("Bearer");
+        resp.setExpiresIn(jwtUtil.getAccessTokenExpirationSeconds());
         return resp;
     }
 
