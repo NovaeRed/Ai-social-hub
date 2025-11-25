@@ -3,12 +3,14 @@ package cn.redture.identity.service.impl;
 import cn.redture.common.constants.RedisConstants;
 import cn.redture.common.dto.UserPrincipal;
 import cn.redture.common.exception.BaseException;
+import cn.redture.common.exception.BusinessException.InvalidInputException;
 import cn.redture.common.exception.jwt.ExpiredRefreshTokenException;
 import cn.redture.common.exception.jwt.InvalidRefreshTokenException;
 import cn.redture.common.exception.jwt.InvalidTokenException;
 import cn.redture.common.exception.jwt.RevokedRefreshTokenException;
 import cn.redture.common.util.IdUtil;
 import cn.redture.common.util.JwtUtil;
+import cn.redture.common.util.RegexUtil;
 import cn.redture.identity.pojo.dto.LoginRequest;
 import cn.redture.identity.pojo.dto.RegisterRequest;
 import cn.redture.identity.pojo.dto.TokenResponse;
@@ -57,13 +59,51 @@ public class AuthServiceImpl implements AuthService {
             throw new BaseException(HttpStatus.CONFLICT, "用户名已存在", "USERNAME_EXISTS");
         }
 
-        // TODO 校验邮箱格式和密码强度等
+        if (!RegexUtil.isStrongPassword(request.getPassword())) {
+            throw new InvalidInputException("密码强度不足，密码应至少包含8位，且包含大小写字母、数字和特殊字符");
+        }
+
+        // 校验邮箱和手机号，要求至少提供一个且格式正确
+        boolean hasEmail = request.getEmail() != null && !request.getEmail().isEmpty();
+        boolean hasPhone = request.getPhone() != null && !request.getPhone().isEmpty();
+
+        if (!hasEmail && !hasPhone) {
+            throw new InvalidInputException("必须提供邮箱或手机号");
+        }
+
+        if (hasEmail) {
+            if (!RegexUtil.isEmail(request.getEmail())) {
+                throw new InvalidInputException("邮箱格式不正确");
+            }
+            if (userMapper.selectCount(new LambdaQueryWrapper<User>()
+                .eq(User::getEmail, request.getEmail())
+                .isNull(User::getDeletedAt)) > 0) {
+                throw new BaseException(HttpStatus.CONFLICT, "邮箱已被注册", "EMAIL_EXISTS");
+            }
+        }
+
+        if (hasPhone) {
+            if (!RegexUtil.isPhone(request.getPhone())) {
+                throw new InvalidInputException("手机号格式不正确");
+            }
+            if (userMapper.selectCount(new LambdaQueryWrapper<User>()
+                .eq(User::getPhone, request.getPhone())
+                .isNull(User::getDeletedAt)) > 0) {
+                throw new BaseException(HttpStatus.CONFLICT, "手机号已被注册", "PHONE_EXISTS");
+            }
+        }
+
         User user = new User();
         user.setUsername(request.getUsername());
         user.setNickname(USER_DEFAULT_NICKNAME_PREFIX + IdUtil.nextId());
         user.setPublicId(IdUtil.nextId());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-        user.setEmail(request.getEmail());
+        if (request.getEmail() != null && !request.getEmail().isEmpty()) {
+            user.setEmail(request.getEmail());
+        }
+        if (request.getPhone() != null && !request.getPhone().isEmpty()) {
+            user.setPhone(request.getPhone());
+        }
         user.setVipLevel("FREE");
         user.setAiAnalysisEnabled(false);
         user.setCreatedAt(OffsetDateTime.now());
@@ -182,6 +222,7 @@ public class AuthServiceImpl implements AuthService {
 
     /**
      * 将 Access Token 加入 Redis 黑名单
+     *
      * @param accessToken 要拉黑的令牌
      */
     private void addAccessTokenToBlacklist(String accessToken) {

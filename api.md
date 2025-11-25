@@ -30,7 +30,8 @@
 {
   "username": "new_user",
   "password": "a_strong_password_123",
-  "email": "new_user@example.com"
+  "email": "new_user@example.com",
+  "phone": "13800138000"
 }
 ```
 
@@ -164,7 +165,7 @@ Authorization: Bearer <expired_access_token>
 
 ```json
 {
-  "nickname": "Copilot Pro Coder",
+  "nickname": "Momo",
   "avatarUrl": "/uploads/avatars/new_avatar.jpg",
   "email": "new.email@example.com",
   "phone": "13800138001",

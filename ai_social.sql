@@ -15,9 +15,9 @@
 
 -- 0. 启用所需扩展
 CREATE
-EXTENSION IF NOT EXISTS vector;
+    EXTENSION IF NOT EXISTS vector;
 CREATE
-EXTENSION IF NOT EXISTS "uuid-ossp";
+    EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1. 创建所有 ENUM 类型
 CREATE TYPE conversation_type_enum AS ENUM ('PRIVATE', 'GROUP');
@@ -40,7 +40,7 @@ CREATE TABLE users
     avatar_url          TEXT,
     password_hash       TEXT               NOT NULL,
     email               VARCHAR(255) UNIQUE,
-    phone               VARCHAR(20),
+    phone               VARCHAR(20) UNIQUE,
     vip_level           VARCHAR(20)                 DEFAULT 'FREE',
     ai_analysis_enabled BOOLEAN                     DEFAULT false,
     created_at          TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
@@ -48,7 +48,7 @@ CREATE TABLE users
     deleted_at          TIMESTAMPTZ                 DEFAULT NULL
 );
 COMMENT
-ON TABLE users IS '用户主表';
+    ON TABLE users IS '用户主表';
 CREATE INDEX idx_users_public_id ON users (public_id);
 CREATE INDEX idx_users_username ON users (username);
 CREATE INDEX idx_users_active ON users (id) WHERE deleted_at IS NULL;
@@ -65,7 +65,7 @@ CREATE TABLE conversations
     deleted_at TIMESTAMPTZ                     DEFAULT NULL
 );
 COMMENT
-ON TABLE conversations IS '会话表（私聊/群聊）';
+    ON TABLE conversations IS '会话表（私聊/群聊）';
 CREATE INDEX idx_conv_public_id ON conversations (public_id);
 CREATE INDEX idx_conv_type ON conversations (type);
 CREATE INDEX idx_conversations_active ON conversations (id) WHERE deleted_at IS NULL;
@@ -80,7 +80,7 @@ CREATE TABLE conversation_members
     joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 COMMENT
-ON TABLE conversation_members IS '会话成员关系表';
+    ON TABLE conversation_members IS '会话成员关系表';
 CREATE INDEX idx_members_user ON conversation_members (user_id);
 CREATE UNIQUE INDEX idx_members_unique ON conversation_members (conversation_id, user_id);
 
@@ -101,11 +101,11 @@ CREATE TABLE messages
     deleted_at        TIMESTAMPTZ          DEFAULT NULL
 );
 COMMENT
-ON TABLE messages IS '消息表';
+    ON TABLE messages IS '消息表';
 COMMENT
-ON COLUMN messages.parent_message_id IS '关联父消息ID，用于实现AI润色、语音转文字等功能';
+    ON COLUMN messages.parent_message_id IS '关联父消息ID，用于实现AI润色、语音转文字等功能';
 COMMENT
-ON COLUMN messages.source_type IS '表明此消息的来源，用于UI区分展示';
+    ON COLUMN messages.source_type IS '表明此消息的来源，用于UI区分展示';
 CREATE INDEX idx_messages_conv_created ON messages (conversation_id, created_at DESC);
 CREATE INDEX idx_messages_parent ON messages (parent_message_id);
 CREATE INDEX idx_messages_active ON messages (id) WHERE deleted_at IS NULL;
@@ -115,19 +115,19 @@ CREATE INDEX idx_messages_active ON messages (id) WHERE deleted_at IS NULL;
 CREATE TABLE schedules
 (
     id                BIGSERIAL PRIMARY KEY,
-    public_id         VARCHAR(50) UNIQUE  NOT NULL,
-    user_id           BIGINT       NOT NULL REFERENCES users (id),
-    title             VARCHAR(200) NOT NULL,
+    public_id         VARCHAR(50) UNIQUE NOT NULL,
+    user_id           BIGINT             NOT NULL REFERENCES users (id),
+    title             VARCHAR(200)       NOT NULL,
     description       TEXT,
-    start_time        TIMESTAMPTZ  NOT NULL,
-    end_time          TIMESTAMPTZ  NOT NULL,
+    start_time        TIMESTAMPTZ        NOT NULL,
+    end_time          TIMESTAMPTZ        NOT NULL,
     location          VARCHAR(200),
-    is_ai_extracted   BOOLEAN               DEFAULT false,
-    source_message_id BIGINT       REFERENCES messages (id) ON DELETE SET NULL,
-    created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    is_ai_extracted   BOOLEAN                     DEFAULT false,
+    source_message_id BIGINT             REFERENCES messages (id) ON DELETE SET NULL,
+    created_at        TIMESTAMPTZ        NOT NULL DEFAULT NOW()
 );
 COMMENT
-ON TABLE schedules IS '日程事件表';
+    ON TABLE schedules IS '日程事件表';
 CREATE INDEX idx_schedules_user_time ON schedules (user_id, start_time);
 
 
@@ -152,7 +152,7 @@ CREATE TABLE ai_tasks
     completed_at      TIMESTAMPTZ
 );
 COMMENT
-ON TABLE ai_tasks IS '追踪所有异步AI任务的状态，用于前端展示与后端管理';
+    ON TABLE ai_tasks IS '追踪所有异步AI任务的状态，用于前端展示与后端管理';
 CREATE INDEX idx_ai_tasks_user_status ON ai_tasks (user_id, task_status);
 CREATE INDEX idx_ai_tasks_type_status ON ai_tasks (task_type, task_status);
 
@@ -170,9 +170,9 @@ CREATE TABLE user_ai_contexts
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 COMMENT
-ON TABLE user_ai_contexts IS '用户AI上下文存储（可读的原始数据），如性格画像、偏好等';
+    ON TABLE user_ai_contexts IS '用户AI上下文存储（可读的原始数据），如性格画像、偏好等';
 COMMENT
-ON COLUMN user_ai_contexts.model_name IS '生成此上下文的模型名称和版本，用于平滑升级';
+    ON COLUMN user_ai_contexts.model_name IS '生成此上下文的模型名称和版本，用于平滑升级';
 CREATE UNIQUE INDEX idx_ai_context_user_type ON user_ai_contexts (user_id, context_type);
 
 
@@ -184,14 +184,14 @@ CREATE TABLE user_ai_vectors
     user_id      BIGINT        NOT NULL,
     context_type VARCHAR(30)   NOT NULL,
     model_name   VARCHAR(50)   NOT NULL,
-    embedding    VECTOR(1536) NOT NULL,
+    embedding    VECTOR(1536)  NOT NULL,
     created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 COMMENT
-ON TABLE user_ai_vectors IS '用户AI向量表（不可读的数学表示），用于未来的相似度搜索、推荐、RAG等功能';
+    ON TABLE user_ai_vectors IS '用户AI向量表（不可读的数学表示），用于未来的相似度搜索、推荐、RAG等功能';
 COMMENT
-ON COLUMN user_ai_vectors.embedding IS '向量维度取决于选择的Embedding模型（例如OpenAI text-embedding-3-small 是 1536）';
+    ON COLUMN user_ai_vectors.embedding IS '向量维度取决于选择的Embedding模型（例如OpenAI text-embedding-3-small 是 1536）';
 CREATE INDEX idx_ai_vectors_user_type ON user_ai_vectors (user_id, context_type);
 CREATE INDEX idx_hnsw_embedding ON user_ai_vectors USING hnsw (embedding vector_l2_ops);
 
@@ -209,7 +209,7 @@ CREATE TABLE friendship_requests
     CONSTRAINT uq_sender_receiver UNIQUE (sender_id, receiver_id) -- 防止重复发送请求
 );
 COMMENT
-ON TABLE friendship_requests IS '好友请求表，管理请求的生命周期';
+    ON TABLE friendship_requests IS '好友请求表，管理请求的生命周期';
 CREATE INDEX idx_friendship_requests_receiver_status ON friendship_requests (receiver_id, status);
 
 -- 11. 好友关系表 (friendships)
@@ -223,7 +223,7 @@ CREATE TABLE friendships
     CONSTRAINT check_users_order CHECK (user_id_1 < user_id_2) -- 确保(1,2)和(2,1)不会同时存在
 );
 COMMENT
-ON TABLE friendships IS '好友关系表，用于快速查询好友列表';
+    ON TABLE friendships IS '好友关系表，用于快速查询好友列表';
 CREATE INDEX idx_friendships_user2 ON friendships (user_id_2);
 
 -- =======================================================================================
