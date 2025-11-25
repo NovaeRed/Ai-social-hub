@@ -1,4 +1,4 @@
-package cn.redture.identity.dto;
+package cn.redture.identity.pojo.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;

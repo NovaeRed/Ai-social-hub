@@ -9,6 +9,7 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * JWT (JSON Web Token) 工具类
@@ -30,9 +32,15 @@ public class JwtUtil {
     @Value("${jwt.secret:default_secret_key_that_is_long_enough_to_be_secure_with_hs256}")
     private String secret;
 
-    // 从配置文件中读取JWT的过期时间（单位：毫秒），默认为1天
-    @Value("${jwt.expiration:86400000}")
-    private long expiration;
+    // 从配置文件中读取JWT过期时间（单位：秒），默认为15分钟
+    @Getter
+    @Value("${jwt.access_token_expiration:900}")
+    private long accessTokenExpirationSeconds;
+
+    // 从配置文件中读取JWT刷新令牌过期时间（单位：秒），默认为7天
+    @Getter
+    @Value("${jwt.refresh_token_expiration_seconds:604800}")
+    private long refreshTokenExpirationSeconds;
 
     private SecretKey secretKey;
 
@@ -45,31 +53,33 @@ public class JwtUtil {
     }
 
     /**
-     * 根据用户ID生成一个JWT
+     * 根据自定义的claims和过期时间生成一个JWT
      *
-     * @param userId 用户ID
+     * @param claims           包含在token中的自定义数据
+     * @param expiresInSeconds 过期时间（秒）
      * @return 生成的JWT字符串
      */
-    public String generateToken(String userId) {
-        return generateToken(Map.of("uid", userId));
-    }
-
-    /**
-     * 根据自定义的claims生成一个JWT
-     *
-     * @param claims 包含在token中的自定义数据
-     * @return 生成的JWT字符串
-     */
-    public String generateToken(Map<String, Object> claims) {
+    public String generateToken(Map<String, Object> claims, long expiresInSeconds) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expiration);
+        Date expiryDate = new Date(now.getTime() + expiresInSeconds * 1000);
 
         return Jwts.builder()
                 .claims(claims)
+                .id(UUID.randomUUID().toString()) // 添加 JTI
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(secretKey)
                 .compact();
+    }
+
+    /**
+     * 根据自定义的claims生成一个JWT，使用默认过期时间
+     *
+     * @param claims 包含在token中的自定义数据
+     * @return 生成的JWT字符串
+     */
+    public String generateAccessToken(Map<String, Object> claims) {
+        return generateToken(claims, accessTokenExpirationSeconds);
     }
 
     /**
@@ -120,20 +130,15 @@ public class JwtUtil {
     }
 
     /**
-     * 验证JWT是否有效且未过期
+     * 验证JWT是否有效且未过期。如果无效，则抛出相应的异常。
      *
      * @param token JWT字符串
-     * @return 如果token有效且未过期，则返回true
+     * @throws ExpiredTokenException 如果token过期
+     * @throws InvalidTokenException 如果token无效
      */
-    public boolean validateToken(String token) {
-        try {
-            // getClaimsFromToken会处理所有解析和验证逻辑，如果没抛异常就代表有效
-            getClaimsFromToken(token);
-            return true;
-        } catch (BaseException e) {
-            // 捕获我们自定义的异常，说明token无效或过期
-            return false;
-        }
+    public void validateToken(String token) {
+        // getClaimsFromToken会处理所有解析和验证逻辑，如果没抛异常就代表有效
+        getClaimsFromToken(token);
     }
 
     /**
@@ -156,6 +161,44 @@ public class JwtUtil {
     }
 
     /**
+     * 从JWT中解析出所有的Claims，忽略过期时间
+     *
+     * @param token JWT字符串
+     * @return Claims对象，包含了token中的所有信息
+     * @throws InvalidTokenException 如果token无效（签名错误、格式错误等）
+     */
+    private Claims getClaimsFromTokenIgnoringExpiration(String token) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (ExpiredJwtException e) {
+            return e.getClaims();
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new InvalidTokenException("无效的Token");
+        }
+    }
+
+    /**
+     * 从可能已过期的 Access Token 中解析出 uid。
+     * 此方法不验证过期时间，但会验证签名。
+     */
+    public Long getUserIdFromExpiredToken(String accessToken) {
+        Claims claims = getClaimsFromTokenIgnoringExpiration(accessToken);
+        Object uidObj = claims.get("uid");
+        if (uidObj == null) {
+            throw new InvalidTokenException("令牌缺少用户ID");
+        }
+        try {
+            return Long.valueOf(uidObj.toString());
+        } catch (NumberFormatException e) {
+            throw new InvalidTokenException("令牌中的用户ID格式错误");
+        }
+    }
+
+    /**
      * 从 Refresh Token 中解析出 uid，并校验 typ=refresh。
      */
     public Long getUserIdFromRefreshToken(String refreshToken) {
@@ -172,6 +215,30 @@ public class JwtUtil {
             return Long.valueOf(uidObj.toString());
         } catch (NumberFormatException e) {
             throw new InvalidTokenException("刷新令牌中的用户ID格式错误");
+        }
+    }
+
+    /**
+     * 从 token 中获取 JTI (JWT ID)
+     * @param token JWT
+     * @return JTI
+     */
+    public String getJtiFromToken(String token) {
+        return getClaimsFromTokenIgnoringExpiration(token).getId();
+    }
+
+    /**
+     * 计算 token 剩余的有效时间（秒）
+     * @param token JWT
+     * @return 剩余有效时间（秒），如果已过期或无效则返回 0
+     */
+    public long getRemainingExpirationSeconds(String token) {
+        try {
+            Date expiration = getClaimsFromToken(token).getExpiration();
+            long remainingMillis = expiration.getTime() - System.currentTimeMillis();
+            return remainingMillis > 0 ? remainingMillis / 1000 : 0;
+        } catch (BaseException e) {
+            return 0;
         }
     }
 }

@@ -1,6 +1,6 @@
 package cn.redture.identity.mapper;
 
-import cn.redture.identity.entity.User;
+import cn.redture.identity.pojo.entity.User;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 

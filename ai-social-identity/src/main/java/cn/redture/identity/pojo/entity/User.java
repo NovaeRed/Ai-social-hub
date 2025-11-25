@@ -1,4 +1,4 @@
-package cn.redture.identity.entity;
+package cn.redture.identity.pojo.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -18,7 +18,7 @@ public class User {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private UUID publicId;
+    private String publicId;
 
     private String username;
 

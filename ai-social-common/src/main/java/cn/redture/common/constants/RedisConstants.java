@@ -8,7 +8,7 @@ public class RedisConstants {
     public static final String AUTH_REFRESH_TOKEN_KEY_PREFIX = "auth:refresh:";
 
     /**
-     * 刷新令牌有效期（秒）：7 天
+     * JWT 黑名单 Redis Key 前缀：blacklist:jwt:<jti>
      */
-    public static final long AUTH_REFRESH_TOKEN_TTL_SECONDS = 7L * 24 * 60 * 60;
+    public static final String AUTH_JWT_BLACKLIST_KEY_PREFIX = "blacklist:jwt:";
 }

@@ -25,7 +25,7 @@ public class JwtTokenTest {
         claims.put("mobile", "13800138000");
 
         // 2. 使用 JwtUtil 生成令牌
-        String token = jwtUtil.generateToken(claims);
+        String token = jwtUtil.generateAccessToken(claims);
 
         // 3. 使用 JwtUtil 解析令牌
         Claims parsedClaims = jwtUtil.getClaimsFromToken(token);

@@ -67,18 +67,34 @@
 ### 1.3 `POST /auth/logout`
 
 **用户登出**
-服务端可能会使Token失效。客户端应清除本地存储的Token。
+此操作将吊销当前会话，使 `access_token` 和 `refresh_token` 立即失效。
 
-**Response 204 (No Content):** 成功登出，无返回内容。
+> **重要:** 无论 `access_token` 是否过期，客户端都应调用此接口来确保会话被彻底清除。
+
+**Request Header:**
+
+```
+Authorization: Bearer <current_access_token_even_if_expired>
+```
+
+**Response 204 (No Content):** 成功登出，无返回内容。客户端收到此响应后，应立即清除本地存储的所有 Token。
 
 ### 1.4 `POST /auth/refresh`
 
 **刷新访问令牌 (Access Token)**  
-使用仍在有效期内且未被撤销的 Refresh Token 换取新的 Access Token（以及新的 Refresh Token）。
+使用 Refresh Token 换取新的 Access Token，并实施令牌轮换（Token Rotation）策略以增强安全性。
 
-> 注意：
-> - Refresh Token 仅在服务端存储于 Redis（键为 `auth:refresh:<user_id>`），客户端通常只保存一个最新的 Refresh Token。
-> - 网关不会自动刷新 Token，有关续期逻辑完全通过本接口完成。
+> **安全机制 (Token Rotation):**
+> - 客户端必须同时提供过期的 Access Token（在请求头）和有效的 Refresh Token（在请求体）。
+> - 服务端会验证两个 Token 是否属于同一用户，并与 Redis 中存储的 Refresh Token 进行比对。
+> - 验证成功后，会签发**一对全新的 Access Token 和 Refresh Token**，旧的 Refresh Token 将立即失效。
+> - 如果服务端检测到已失效的 Refresh Token 被再次使用，会判定为令牌泄露，并立即吊销该用户的所有会话。
+
+**Request Header:**
+
+```
+Authorization: Bearer <expired_access_token>
+```
 
 **Request Body:**
 
@@ -99,19 +115,20 @@
 }
 ```
 
+**Possible Error Responses:**
+
+- `401 UNAUTHORIZED` (`TOKEN_EXPIRED`): Access Token 已过期。这是调用本接口的**预期**场景之一。
+- `401 UNAUTHORIZED` (`INVALID_TOKEN`): Access Token 无效（格式错误、签名错误等）。
+- `401 UNAUTHORIZED` (`INVALID_REFRESH_TOKEN`): Refresh Token 无效。
+- `401 UNAUTHORIZED` (`TOKEN_BLACKLISTED`): Access Token 已被吊销（例如，在别处登出或刷新过）。
+- `401 UNAUTHORIZED` (`REVOKED_REFRESH_TOKEN`): Refresh Token 已被吊销。
+
 **客户端调用建议：**
 
 - Access Token 有效期为 15 分钟，Refresh Token 有效期为 7 天。
-- 推荐在以下时机调用 `/auth/refresh`：
-  - 收到后端返回 `401 UNAUTHORIZED` 且 `errorCode = "UNAUTHORIZED"` 或 `"TOKEN_EXPIRED"` 等标识 Access Token 过期的场景；
-  - 或在前端本地根据 `expires_in` 预估 Access Token 即将过期（例如剩余 < 2 分钟）时，提前调用一次刷新接口。
-- 收到 `REFRESH_TOKEN_EXPIRED` / `REFRESH_TOKEN_REVOKED` / `REFRESH_TOKEN_INVALID` 时，前端应清除本地 Token 并引导用户重新登录。
-
-**Possible Error Responses:**
-
-- `401 UNAUTHORIZED`：`REFRESH_TOKEN_EXPIRED` - 刷新令牌已过期或失效，需要重新登录。
-- `401 UNAUTHORIZED`：`REFRESH_TOKEN_INVALID` - 刷新令牌无效（格式错误、签名错误等）。
-- `401 UNAUTHORIZED`：`REFRESH_TOKEN_REVOKED` - 刷新令牌已被撤销（登出、改密码、封号等）。
+- 推荐在收到后端返回 `401 UNAUTHORIZED` 且错误码为 `TOKEN_EXPIRED` 时，调用本接口。
+- 每次调用成功后，客户端**必须**使用返回的**新 Refresh Token** 替换掉本地存储的旧 Refresh Token。
+- 收到任何关于 Refresh Token 的错误（如 `INVALID_REFRESH_TOKEN`, `REVOKED_REFRESH_TOKEN`）时，前端应清除本地所有 Token 并引导用户重新登录。
 
 ---
 
@@ -133,24 +150,25 @@
   "nickname": "Copilot Coder",
   "avatar_url": "/uploads/avatars/default.png",
   "email": "codetemp1@example.com",
-  "ai_analysis_enabled": true,
-  "created_at": "2025-11-23T15:35:09Z"
+  "ai_analysis_enabled": true
 }
 ```
 
 ### 2.2 `PATCH /users/me`
 
 **更新当前登录用户的信息**
-此接口用于更新昵称、头像，以及开启/关闭AI分析授权。
+此接口用于更新昵称、头像等，以及开启/关闭AI分析授权。
 
 **Request Body (Example):**
-*说明：只传递需要修改的字段。*
+*说明：只传递需要修改的字段。所有字段均为可选。*
 
 ```json
 {
   "nickname": "Copilot Pro Coder",
-  "avatar_url": "/uploads/avatars/new_avatar.jpg",
-  "ai_analysis_enabled": true
+  "avatarUrl": "/uploads/avatars/new_avatar.jpg",
+  "email": "new.email@example.com",
+  "phone": "13800138001",
+  "aiAnalysisEnabled": true
 }
 ```
 
@@ -562,7 +580,12 @@
 | HTTP Status | Error Code              | Description           |
 |:------------|:------------------------|:----------------------|
 | 400         | `INVALID_INPUT`         | 请求参数无效或缺失。            |
-| 401         | `UNAUTHORIZED`          | 认证失败或Token无效。         |
+| 401         | `UNAUTHORIZED`          | 认证失败（如用户名密码错误）。         |
+| 401         | `TOKEN_EXPIRED`         | Access Token 已过期。客户端应使用 Refresh Token 来获取新令牌。 |
+| 401         | `TOKEN_BLACKLISTED`     | Access Token 已被吊销（因为登出或刷新）。客户端应强制用户重新登录。 |
+| 401         | `INVALID_TOKEN`         | Access Token 无效（格式、签名错误或无法解析）。客户端应强制用户重新登录。 |
+| 401         | `INVALID_REFRESH_TOKEN` | Refresh Token 无效或已过期。客户端应强制用户重新登录。 |
+| 401         | `REVOKED_REFRESH_TOKEN` | Refresh Token 已被系统吊销（可能因为安全风险）。客户端应强制用户重新登录。 |
 | 403         | `FORBIDDEN`             | 无权访问该资源或执行该操作。        |
 | 404         | `NOT_FOUND`             | 请求的资源不存在。             |
 | 409         | `CONFLICT`              | 资源冲突（如用户名已存在）。        |

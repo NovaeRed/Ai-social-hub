@@ -34,7 +34,7 @@ CREATE TYPE friendship_request_status_enum AS ENUM ('PENDING', 'ACCEPTED', 'REJE
 CREATE TABLE users
 (
     id                  BIGSERIAL PRIMARY KEY,
-    public_id           UUID UNIQUE        NOT NULL DEFAULT gen_random_uuid(),
+    public_id           VARCHAR(50) UNIQUE NOT NULL,
     username            VARCHAR(64) UNIQUE NOT NULL,
     nickname            VARCHAR(64),
     avatar_url          TEXT,
@@ -58,7 +58,7 @@ CREATE INDEX idx_users_active ON users (id) WHERE deleted_at IS NULL;
 CREATE TABLE conversations
 (
     id         BIGSERIAL PRIMARY KEY,
-    public_id  UUID UNIQUE            NOT NULL DEFAULT gen_random_uuid(),
+    public_id  VARCHAR(50) UNIQUE     NOT NULL,
     type       conversation_type_enum NOT NULL,
     name       VARCHAR(100),
     created_at TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
@@ -115,7 +115,7 @@ CREATE INDEX idx_messages_active ON messages (id) WHERE deleted_at IS NULL;
 CREATE TABLE schedules
 (
     id                BIGSERIAL PRIMARY KEY,
-    public_id         UUID UNIQUE  NOT NULL DEFAULT gen_random_uuid(),
+    public_id         VARCHAR(50) UNIQUE  NOT NULL,
     user_id           BIGINT       NOT NULL REFERENCES users (id),
     title             VARCHAR(200) NOT NULL,
     description       TEXT,
@@ -139,7 +139,7 @@ CREATE INDEX idx_schedules_user_time ON schedules (user_id, start_time);
 CREATE TABLE ai_tasks
 (
     id                BIGSERIAL PRIMARY KEY,
-    public_id         UUID UNIQUE         NOT NULL DEFAULT gen_random_uuid(),
+    public_id         VARCHAR(50) UNIQUE  NOT NULL,
     user_id           BIGINT              NOT NULL REFERENCES users (id),
     task_type         ai_task_type_enum   NOT NULL,
     task_status       ai_task_status_enum NOT NULL DEFAULT 'PENDING',
@@ -199,7 +199,7 @@ CREATE INDEX idx_hnsw_embedding ON user_ai_vectors USING hnsw (embedding vector_
 CREATE TABLE friendship_requests
 (
     id          BIGSERIAL PRIMARY KEY,
-    public_id   UUID UNIQUE                    NOT NULL DEFAULT gen_random_uuid(),
+    public_id   VARCHAR(50) UNIQUE             NOT NULL,
     sender_id   BIGINT                         NOT NULL REFERENCES users (id),
     receiver_id BIGINT                         NOT NULL REFERENCES users (id),
     message     TEXT,
