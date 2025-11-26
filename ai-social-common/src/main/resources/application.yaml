@@ -2,8 +2,3 @@
 logging:
   level:
     cn.redture: debug
-
-jwt:
-  secret: ai-social-project-secret-key-for-jwt-authentication-hs256-20240520
-  access_token_expiration: 900 # 15 minutes in seconds
-  refresh_token_expiration_seconds: 604800 # 7 days in seconds

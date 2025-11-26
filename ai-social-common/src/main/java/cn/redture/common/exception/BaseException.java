@@ -19,6 +19,13 @@ public class BaseException extends RuntimeException {
     private final String errorCode;
 
     /**
+     * 无参构造，提供默认值，兼容某些反序列化或框架场景
+     */
+    public BaseException() {
+        this(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Internal Server Error", null);
+    }
+
+    /**
      * 使用HTTP状态和消息构造异常
      * @param status HTTP状态
      * @param message 异常信息

@@ -1,5 +1,6 @@
 package cn.redture.identity.pojo.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 /**
@@ -16,6 +17,6 @@ public class UpdateUserDTO {
 
     private String phone;
 
-    // TODO 对该字段产生的影响进行评估
+    @JsonProperty("ai_analysis_enabled")
     private Boolean aiAnalysisEnabled;
 }

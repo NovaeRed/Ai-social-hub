@@ -11,4 +11,9 @@ public class RedisConstants {
      * JWT 黑名单 Redis Key 前缀：blacklist:jwt:<jti>
      */
     public static final String AUTH_JWT_BLACKLIST_KEY_PREFIX = "blacklist:jwt:";
+
+    /**
+     * AI 画像任务队列 Redis Key：ai:persona:tasks
+     */
+    public static final String PERSONA_TASK_QUEUE_KEY = "ai:persona:tasks";
 }

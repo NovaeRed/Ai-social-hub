@@ -2,7 +2,7 @@ package cn.redture.common.util;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import cn.redture.common.exception.BaseException;
+import cn.redture.common.exception.JsonException;
 import org.springframework.http.HttpStatus;
 
 /**
@@ -15,7 +15,7 @@ public class JsonUtil {
 
     /**
      * 将对象序列化为 JSON 字符串。
-     * 如序列化失败，抛出自定义业务异常，便于在全局异常处理里统一处理。
+     * 如序列化失败，抛出自定义业务异常
      */
     public static String toJson(Object value) {
         if (value == null) {
@@ -24,13 +24,12 @@ public class JsonUtil {
         try {
             return OBJECT_MAPPER.writeValueAsString(value);
         } catch (JsonProcessingException e) {
-            // 使用 500 作为内部服务器错误码，交由 GlobalException 统一处理
-            throw new BaseException(HttpStatus.INTERNAL_SERVER_ERROR, "JSON 序列化失败");
+            throw new JsonException(HttpStatus.INTERNAL_SERVER_ERROR, "JSON 序列化失败");
         }
     }
 
     /**
-     * 将 JSON 字符串反序列化为指定类型对象。
+     * 将 JSON 字符串反序列化为指定类型对象
      */
     public static <T> T fromJson(String json, Class<T> type) {
         if (json == null || json.isEmpty()) {
@@ -39,8 +38,7 @@ public class JsonUtil {
         try {
             return OBJECT_MAPPER.readValue(json, type);
         } catch (JsonProcessingException e) {
-            // 使用 400 表示请求体格式错误
-            throw new BaseException(HttpStatus.BAD_REQUEST, "JSON 解析失败");
+            throw new JsonException(HttpStatus.BAD_REQUEST, "JSON 解析失败");
         }
     }
 }

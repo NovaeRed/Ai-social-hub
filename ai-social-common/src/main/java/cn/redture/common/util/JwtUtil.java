@@ -113,7 +113,7 @@ public class JwtUtil {
                     .parseSignedClaims(token)
                     .getPayload();
         } catch (ExpiredJwtException e) {
-            throw new ExpiredTokenException("Token已过期");
+            throw new ExpiredTokenException("Token已过期", "TOKEN_EXPIRED");
         } catch (JwtException | IllegalArgumentException e) {
             throw new InvalidTokenException("无效的Token");
         }

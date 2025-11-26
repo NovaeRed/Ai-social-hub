@@ -1,10 +1,11 @@
 package cn.redture.identity.service.impl;
 
+import cn.redture.aiEngine.service.AiPersonaService;
+import cn.redture.common.dto.UserPrincipal;
 import cn.redture.common.exception.BusinessException.InvalidInputException;
 import cn.redture.common.exception.BusinessException.ResourceNotFoundException;
 import cn.redture.common.util.RegexUtil;
 import cn.redture.common.util.SecurityContextHolderUtil;
-import cn.redture.common.dto.UserPrincipal;
 import cn.redture.identity.pojo.dto.UpdateUserDTO;
 import cn.redture.identity.pojo.entity.User;
 import cn.redture.identity.mapper.UserMapper;
@@ -36,6 +37,9 @@ public class UserServiceImpl implements UserService {
     @Resource
     private TokenManagementUtil tokenManagementUtil;
 
+    @Resource
+    private AiPersonaService aiPersonaService;
+
     @Override
     public UserInformation getUserById(String userId) {
         if (!StringUtils.hasText(userId)) {
@@ -59,6 +63,12 @@ public class UserServiceImpl implements UserService {
         User user = Optional.ofNullable(userMapper.selectById(userId))
                 .orElseThrow(() -> new ResourceNotFoundException("用户"));
 
+        // 记录 AI 授权旧值（null 视为 false）
+        Boolean oldAiEnabled = user.getAiAnalysisEnabled();
+        if (oldAiEnabled == null) {
+            oldAiEnabled = Boolean.FALSE;
+        }
+
         // 如果提供了 email，则校验格式
         if (StringUtils.hasText(updateUserDTO.getEmail()) && !RegexUtil.isEmail(updateUserDTO.getEmail())) {
             throw new InvalidInputException("邮箱格式不正确");
@@ -73,6 +83,15 @@ public class UserServiceImpl implements UserService {
 
         userMapper.updateById(user);
         log.info("用户 {} 更新了个人信息", userId);
+
+        // 如果 AI 授权状态发生变化，通知 AI 引擎模块
+        Boolean newAiEnabled = user.getAiAnalysisEnabled();
+        if (newAiEnabled == null) {
+            newAiEnabled = Boolean.FALSE;
+        }
+        if (!oldAiEnabled.equals(newAiEnabled)) {
+            aiPersonaService.onAiAnalysisToggled(userId, newAiEnabled);
+        }
 
         return UserConverter.INSTANCE.toUserInformation(user);
     }
