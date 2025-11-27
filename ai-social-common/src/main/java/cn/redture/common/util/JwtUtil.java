@@ -1,8 +1,8 @@
 package cn.redture.common.util;
 
 import cn.redture.common.exception.BaseException;
-import cn.redture.common.exception.jwt.ExpiredTokenException;
-import cn.redture.common.exception.jwt.InvalidTokenException;
+import cn.redture.common.exception.jwtException.ExpiredTokenException;
+import cn.redture.common.exception.jwtException.InvalidTokenException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;

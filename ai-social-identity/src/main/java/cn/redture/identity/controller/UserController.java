@@ -1,6 +1,6 @@
 package cn.redture.identity.controller;
 
-import cn.redture.common.model.RestResult;
+import cn.redture.common.pojo.model.RestResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
 import cn.redture.aiEngine.service.AiPersonaService;
 import cn.redture.identity.pojo.dto.ChangePasswordDTO;

@@ -1,9 +1,9 @@
 package cn.redture.gateway.security;
 
-import cn.redture.common.dto.UserPrincipal;
+import cn.redture.common.pojo.dto.UserPrincipal;
 import cn.redture.common.exception.BaseException;
-import cn.redture.common.exception.jwt.InvalidTokenException;
-import cn.redture.common.exception.jwt.TokenBlacklistedException;
+import cn.redture.common.exception.jwtException.InvalidTokenException;
+import cn.redture.common.exception.jwtException.TokenBlacklistedException;
 import cn.redture.common.util.JwtUtil;
 import jakarta.annotation.Resource;
 import jakarta.servlet.FilterChain;

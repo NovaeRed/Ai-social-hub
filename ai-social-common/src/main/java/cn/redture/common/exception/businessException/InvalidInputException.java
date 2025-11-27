@@ -1,4 +1,4 @@
-package cn.redture.common.exception.BusinessException;
+package cn.redture.common.exception.businessException;
 
 import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;

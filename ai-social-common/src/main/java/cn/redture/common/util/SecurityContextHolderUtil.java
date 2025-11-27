@@ -1,6 +1,6 @@
 package cn.redture.common.util;
 
-import cn.redture.common.dto.UserPrincipal;
+import cn.redture.common.pojo.dto.UserPrincipal;
 import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;

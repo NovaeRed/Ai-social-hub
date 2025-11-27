@@ -1,9 +1,9 @@
 package cn.redture.identity.service.impl;
 
 import cn.redture.aiEngine.service.AiPersonaService;
-import cn.redture.common.dto.UserPrincipal;
-import cn.redture.common.exception.BusinessException.InvalidInputException;
-import cn.redture.common.exception.BusinessException.ResourceNotFoundException;
+import cn.redture.common.pojo.dto.UserPrincipal;
+import cn.redture.common.exception.businessException.InvalidInputException;
+import cn.redture.common.exception.businessException.ResourceNotFoundException;
 import cn.redture.common.util.RegexUtil;
 import cn.redture.common.util.SecurityContextHolderUtil;
 import cn.redture.identity.pojo.dto.UpdateUserDTO;
@@ -43,7 +43,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserInformation getUserById(String userId) {
         if (!StringUtils.hasText(userId)) {
-            throw new ResourceNotFoundException("用户", "ID不能为空");
+            throw new ResourceNotFoundException("用户ID");
         }
 
         try {
@@ -53,7 +53,7 @@ public class UserServiceImpl implements UserService {
             log.debug("找到用户: {}", user);
             return UserConverter.INSTANCE.toUserInformation(user);
         } catch (NumberFormatException e) {
-            throw new ResourceNotFoundException("用户", "无效的用户ID格式");
+            throw new InvalidInputException("无效的用户ID格式");
         }
     }
 
@@ -100,7 +100,7 @@ public class UserServiceImpl implements UserService {
     public void changePassword(Long userId, String currentPassword, String newPassword) {
 
         if (userId == null) {
-            throw new ResourceNotFoundException("用户", "ID不能为空");
+            throw new ResourceNotFoundException("用户ID");
         }
 
         if (!userId.equals(SecurityContextHolderUtil.getUserId())) {

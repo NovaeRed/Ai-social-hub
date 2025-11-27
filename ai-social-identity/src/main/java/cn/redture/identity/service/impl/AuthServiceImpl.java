@@ -2,11 +2,11 @@ package cn.redture.identity.service.impl;
 
 import cn.redture.common.constants.RedisConstants;
 import cn.redture.common.exception.BaseException;
-import cn.redture.common.exception.BusinessException.InvalidInputException;
-import cn.redture.common.exception.jwt.ExpiredRefreshTokenException;
-import cn.redture.common.exception.jwt.InvalidRefreshTokenException;
-import cn.redture.common.exception.jwt.InvalidTokenException;
-import cn.redture.common.exception.jwt.RevokedRefreshTokenException;
+import cn.redture.common.exception.businessException.InvalidInputException;
+import cn.redture.common.exception.jwtException.ExpiredRefreshTokenException;
+import cn.redture.common.exception.jwtException.InvalidRefreshTokenException;
+import cn.redture.common.exception.jwtException.InvalidTokenException;
+import cn.redture.common.exception.jwtException.RevokedRefreshTokenException;
 import cn.redture.common.util.IdUtil;
 import cn.redture.common.util.JwtUtil;
 import cn.redture.common.util.RegexUtil;

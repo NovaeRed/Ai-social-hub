@@ -201,7 +201,7 @@ Authorization: Bearer <expired_access_token>
 
 ## 3.0 好友关系模块 (Friendship Service)
 
-* **Implementation:** `ai-social-friendship`
+* **Implementation:** `ai-social-identity`
 * **Description:** 负责管理用户之间的好友关系。
 
 ### 3.1 `GET /friends`

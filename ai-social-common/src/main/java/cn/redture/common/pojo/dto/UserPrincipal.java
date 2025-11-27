@@ -1,4 +1,4 @@
-package cn.redture.common.dto;
+package cn.redture.common.pojo.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

@@ -1,6 +1,6 @@
 package cn.redture.identity.controller;
 
-import cn.redture.common.model.RestResult;
+import cn.redture.common.pojo.model.RestResult;
 import cn.redture.identity.pojo.dto.LoginRequestDTO;
 import cn.redture.identity.pojo.dto.RefreshTokenRequestDTO;
 import cn.redture.identity.pojo.dto.RegisterRequestDTO;

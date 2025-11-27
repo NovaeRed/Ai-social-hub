@@ -1,4 +1,4 @@
-package cn.redture.common.model;
+package cn.redture.common.pojo.model;
 
 import lombok.Data;
 import org.springframework.http.HttpStatus;

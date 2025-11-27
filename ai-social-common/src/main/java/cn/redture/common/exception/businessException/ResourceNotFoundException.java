@@ -1,4 +1,4 @@
-package cn.redture.common.exception.BusinessException;
+package cn.redture.common.exception.businessException;
 
 import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;
@@ -17,15 +17,7 @@ public class ResourceNotFoundException extends BaseException {
      * @param resourceName 资源名称，例如 "用户"
      */
     public ResourceNotFoundException(String resourceName) {
-        super(HttpStatus.NOT_FOUND, String.format("指定的%s不存在", resourceName), DEFAULT_ERROR_CODE);
-    }
-
-    /**
-     * 构造一个自定义消息的“资源未找到”异常
-     * @param message 自定义消息
-     */
-    public ResourceNotFoundException(String resourceName, String message) {
-        super(HttpStatus.NOT_FOUND, String.format("%s: %s", resourceName,  message), DEFAULT_ERROR_CODE);
+        super(HttpStatus.NOT_FOUND, String.format("%s不存在", resourceName), DEFAULT_ERROR_CODE);
     }
 }
 
