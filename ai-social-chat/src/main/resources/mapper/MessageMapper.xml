@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="cn.redture.chat.mapper.MessageMapper">
+
+    <select id="selectByCursor" resultType="cn.redture.chat.pojo.entity.Message">
+        SELECT *
+        FROM messages
+        WHERE conversation_id = #{conversationId}
+        <if test="cursorId != null">
+            AND id &lt; #{cursorId}
+        </if>
+        ORDER BY id DESC
+        LIMIT #{pageSize}
+    </select>
+
+</mapper>

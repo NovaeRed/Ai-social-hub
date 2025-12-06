@@ -35,7 +35,7 @@ public class AiPersonaTaskConsumer {
 
     private Thread consumerThread;
 
-    @Value("${ai.persona.consumer.enabled:true}")
+    @Value("${ai.persona.consumer.enabled:false}")
     private boolean consumerEnabled;
 
     @PostConstruct

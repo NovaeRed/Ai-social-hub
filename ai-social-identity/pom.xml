@@ -18,17 +18,20 @@
     </properties>
 
     <dependencies>
-        <!-- ai-social-ai-engine -->
+        <!-- Local modules -->
         <dependency>
             <groupId>cn.redture</groupId>
             <artifactId>ai-social-ai-engine</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
-
-        <!-- Local modules -->
         <dependency>
             <groupId>cn.redture</groupId>
             <artifactId>ai-social-common</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>cn.redture</groupId>
+            <artifactId>ai-social-ai-engine</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 

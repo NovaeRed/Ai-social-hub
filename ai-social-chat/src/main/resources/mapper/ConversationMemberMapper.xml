@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="cn.redture.chat.mapper.ConversationMemberMapper">
+    <!-- 批量插入 -->
+    <insert id="insertBatch" parameterType="java.util.List">
+        INSERT INTO conversation_members (conversation_id, user_id, joined_at)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.conversationId}, #{item.userId}, #{item.joinedAt})
+        </foreach>
+    </insert>
+
+    <update id="batchUpdateRoleToAdmin" parameterType="map">
+        UPDATE conversation_members
+        SET role = 'ADMIN'::conversation_member_role_enum
+        WHERE conversation_id = #{conversationId}
+        AND user_id IN
+        <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+            #{userId}
+        </foreach>
+    </update>
+
+    <update id="batchUpdateRoleToMember" parameterType="java.util.List">
+        UPDATE conversation_members
+        SET role = 'MEMBER'::conversation_member_role_enum
+        WHERE conversation_id = #{conversationId}
+        AND user_id IN
+        <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+            #{userId}
+        </foreach>
+    </update>
+
+    <update id="updateRoleToOwner" parameterType="map">
+        UPDATE conversation_members
+        SET role = 'OWNER'::conversation_member_role_enum
+        WHERE conversation_id = #{conversationId}
+        AND user_id = #{userId}
+    </update>
+</mapper>

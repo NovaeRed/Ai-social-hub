@@ -25,6 +25,7 @@ CREATE TYPE media_type_enum AS ENUM ('TEXT', 'IMAGE', 'VOICE', 'VIDEO', 'FILE');
 CREATE TYPE ai_task_status_enum AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED');
 CREATE TYPE ai_task_type_enum AS ENUM ('POLISH', 'SCHEDULE_EXTRACTION', 'PERSONA_ANALYSIS', 'SPEECH_TO_TEXT', 'CHAT_SUMMARY');
 CREATE TYPE friendship_request_status_enum AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED');
+CREATE TYPE conversation_member_role_enum AS ENUM ('MEMBER', 'ADMIN', 'OWNER');
 
 -- =======================================================================================
 -- ==                              CORE BUSINESS TABLES                                 ==
@@ -57,12 +58,14 @@ CREATE INDEX idx_users_active ON users (id) WHERE deleted_at IS NULL;
 -- 3. 会话表 (conversations)
 CREATE TABLE conversations
 (
-    id         BIGSERIAL PRIMARY KEY,
-    public_id  VARCHAR(50) UNIQUE     NOT NULL,
-    type       conversation_type_enum NOT NULL,
-    name       VARCHAR(100),
-    created_at TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMPTZ                     DEFAULT NULL
+    id                BIGSERIAL PRIMARY KEY,
+    public_id         VARCHAR(50) UNIQUE     NOT NULL,
+    type              conversation_type_enum NOT NULL,
+    name              VARCHAR(100),
+    member_count      INTEGER                         DEFAULT 0,
+    latest_message_id BIGINT                          DEFAULT 0,
+    created_at        TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
+    deleted_at        TIMESTAMPTZ                     DEFAULT NULL
 );
 COMMENT
     ON TABLE conversations IS '会话表（私聊/群聊）';
@@ -74,15 +77,20 @@ CREATE INDEX idx_conversations_active ON conversations (id) WHERE deleted_at IS 
 -- 4. 会话成员关系表 (conversation_members)
 CREATE TABLE conversation_members
 (
-    id              BIGSERIAL PRIMARY KEY,
-    conversation_id BIGINT      NOT NULL REFERENCES conversations (id),
-    user_id         BIGINT      NOT NULL REFERENCES users (id),
-    joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                   BIGSERIAL PRIMARY KEY,
+    conversation_id      BIGINT                        NOT NULL REFERENCES conversations (id),
+    user_id              BIGINT                        NOT NULL REFERENCES users (id),
+    joined_at            TIMESTAMPTZ                   NOT NULL DEFAULT NOW(),
+    -- 角色：OWNER（创建者），ADMIN（管理员），MEMBER（普通成员）
+    role                 conversation_member_role_enum NOT NULL DEFAULT 'MEMBER',
+    last_read_message_id BIGINT                                 DEFAULT 0,
+    last_read_at         TIMESTAMPTZ                            DEFAULT NOW()
 );
 COMMENT
     ON TABLE conversation_members IS '会话成员关系表';
 CREATE INDEX idx_members_user ON conversation_members (user_id);
 CREATE UNIQUE INDEX idx_members_unique ON conversation_members (conversation_id, user_id);
+CREATE INDEX idx_conv_members_lastread ON conversation_members (conversation_id, user_id, last_read_message_id);
 
 
 -- 5. 消息表 (messages)

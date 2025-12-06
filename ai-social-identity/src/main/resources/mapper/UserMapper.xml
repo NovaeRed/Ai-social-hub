@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="cn.redture.identity.mapper.UserMapper">
+
+    <select id="selectByPublicId" resultType="cn.redture.identity.pojo.entity.User">
+        SELECT *
+        FROM users
+        WHERE public_id = #{publicId}
+        LIMIT 1
+    </select>
+
+    <select id="selectIdsByPublicIds" resultType="long">
+        SELECT id
+        FROM users
+        WHERE public_id IN
+        <foreach collection="list" item="publicId" open="(" separator="," close=")">
+            #{publicId}
+        </foreach>
+    </select>
+</mapper>

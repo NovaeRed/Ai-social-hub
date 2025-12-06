@@ -284,56 +284,54 @@ Authorization: Bearer <expired_access_token>
 * **Implementation:** `ai-social-chat`
 * **Description:** 负责会话、消息、群组管理，并与AI模块协作处理消息内的AI任务。
 
-### 4.1 `GET /conversations`
+### 4.1.1 `GET /conversations`
 
-**获取当前用户的会话列表**
+**获取当前用户的会话列表（最近活跃优先）**
+
+**Query Parameters:**
+
+- `cursor` (string, optional): 预留的游标参数，当前实现通常一次性返回最近会话，客户端可忽略。
+- `limit` (int, optional, default: 200): 返回的最大会话数量，通常足以覆盖近期会话列表。
 
 **Response 200 (Success):**
 
-```json
+```json5
 {
-  "page": 1,
-  "size": 20,
-  "total_items": 2,
   "items": [
     {
       "public_id": "conv_a1b2c3d4",
       "type": "PRIVATE",
       "name": "Bob",
       "latest_message": {
+        "public_id": "msg_latest_001",
         "content": "好的，明天见！",
         "created_at": "2025-11-23T10:00:00Z"
-      }
+      },
+      "member_count": 10, // 仅群组会话返回
+      "unread_count": 3
     }
-  ]
+  ],
+  "next_cursor": 1234,
+  "has_more": true
 }
 ```
 
-### 4.2 `POST /conversations`
+### 4.1.2 `POST /conversations`
 
-**创建新会话**
+**创建或获取一个私聊会话**
 
-**Request Body (Private Chat):**
+**Request Body:**
 
 ```json
 {
-  "type": "PRIVATE",
   "target_user_public_id": "user_u1v2w3e4"
 }
 ```
 
-**Request Body (Group Chat):**
+**行为说明：**
 
-```json
-{
-  "type": "GROUP",
-  "name": "新项目组",
-  "member_public_ids": [
-    "user_u1...",
-    "user_v2..."
-  ]
-}
-```
+- 如果当前用户与目标用户之间已存在 `type = "PRIVATE"` 的会话，则直接返回该会话；
+- 否则新建一个 `type = "PRIVATE"` 的会话，并插入两条 `conversation_members` 记录。
 
 **Response 201 (Created):**
 
@@ -343,17 +341,19 @@ Authorization: Bearer <expired_access_token>
 }
 ```
 
-### 4.3 `GET /conversations/{conversation_public_id}/messages`
+### 4.2.1 `GET /conversations/{conversation_public_id}/messages`
 
-**分页获取消息历史**
+**游标分页获取消息历史（向上滑加载更多）**
+
+**Query Parameters:**
+
+- `before_message_id` (Long, optional): 上一页最早一条消息的 `id`；不传表示拉取最近消息。
+- `limit` (int, optional, default: 50): 每次拉取的消息数量。
 
 **Response 200 (Success):**
 
 ```json
 {
-  "page": 1,
-  "size": 20,
-  "total_items": 42,
   "items": [
     {
       "public_id": "msg_voice_123",
@@ -371,16 +371,20 @@ Authorization: Bearer <expired_access_token>
         "public_id": "system_ai",
         "nickname": "AI助手"
       },
-      "content": "“今天下午的会，你准备得怎么样了？”",
+      "content": "今天下午的会，你准备得怎么样了？",
       "media_type": "TEXT",
       "source_type": "SPEECH_TRANSCRIPT",
       "parent_message_public_id": "msg_voice_123"
     }
-  ]
+  ],
+  "next_cursor": {
+    "before_message_id": 1234
+  },
+  "has_more": true
 }
 ```
 
-### 4.4 `POST /conversations/{conversation_public_id}/messages`
+### 4.2.2 `POST /conversations/{conversation_public_id}/messages`
 
 **发送消息**
 
@@ -397,16 +401,75 @@ Authorization: Bearer <expired_access_token>
 
 ```json
 {
-  "public_id": "msg_q7r8s9t0"
+  "public_id": "msg_abc123",
+  "sender": {
+    "public_id": "user_me",
+    "nickname": "我自己"
+  },
+  "content": "明天的会议确认一下时间。",
+  "media_type": "TEXT",
+  "media_url": null,
+  "source_type": null,
+  "parent_message_public_id": null,
+  "created_at": "2025-11-23T10:05:00Z"
 }
 ```
 
-### 4.5 `GET /conversations/{conversation_public_id}/stream`
+**实时行为说明：**
 
-**通过SSE接收实时消息**
-此长连接用于接收新消息、AI任务状态更新等实时事件。
+- 服务器会在消息写入数据库后，异步地向会话中**其他在线成员**推送一条 `MESSAGE_CREATED` 事件（通过 SSE，详见 4.6）。
+- 发送方可以：
+  - 在点击发送时本地先做乐观更新（插入一条“发送中”的气泡）；
+  - 收到本响应后，用返回的 `public_id` / 时间戳覆盖本地占位；
+  - 也可以订阅 SSE，自身通过 `MESSAGE_CREATED` 事件确认送达。     
 
-### 4.6 `PATCH /conversations/{conversation_public_id}`
+---
+
+
+### 4.3.1 `POST /conversations/{conversation_public_id}/typing`
+
+**上报当前用户在指定会话中的“正在输入”状态**
+
+**行为说明：**
+
+- 仅当目标会话为**私聊会话**（`type = "PRIVATE"`）时才会生效，群组会话不会产生任何实时事件；
+- 客户端在用户开始输入时，按一定频率（例如每 500ms 以上）调用此接口即可，无需在停止输入时额外上报；
+- 服务端不落库，只在内存或缓存中短暂记录状态，并通过 SSE 向会话内**其他成员**广播 `TYPING` 事件（事件类型为 `TYPING`，详见 4.6.3），当前上报用户自身不会收到该事件；
+- 前端可以在收到一条 `TYPING` 事件后，显示“对方正在输入...”，并在若干秒内未再收到新的 `TYPING` 事件时自动隐藏提示。
+
+**Response 204 (No Content):** 上报成功。
+
+---
+
+## 群组管理 (Group APIs)
+
+* **说明：** 群组在存储层复用 `conversations` 表（`type = 'GROUP'`）以及 `conversation_members` 表；本小节路由仅聚焦群资料和成员管理。
+
+### 4.4.1 `POST /groups`
+
+**创建新群组**
+
+**Request Body:**
+
+```json
+{
+  "name": "新项目组",
+  "member_public_ids": [
+    "user_u1...",
+    "user_v2..."
+  ]
+}
+```
+
+**Response 201 (Created):**
+
+```json
+{
+  "public_id": "group_c1d2e3f4"
+}
+```
+
+### 4.4.2 `PATCH /groups/{group_public_id}`
 
 **修改群信息**
 
@@ -414,14 +477,13 @@ Authorization: Bearer <expired_access_token>
 
 ```json
 {
-  "name": "新的项目组名称",
-  "avatar_url": "/uploads/groups/new_group_avatar.png"
+  "name": "新的项目组名称"
 }
 ```
 
 **Response 200 (Success):** 返回更新后的群信息。
 
-### 4.7 `POST /conversations/{conversation_public_id}/members`
+### 4.4.3 `POST /groups/{group_public_id}/members`
 
 **邀请用户加入群聊**
 
@@ -438,14 +500,282 @@ Authorization: Bearer <expired_access_token>
 
 **Response 204 (No Content):** 邀请成功。
 
-### 4.8 `DELETE /conversations/{conversation_public_id}/members/{user_public_id}`
+### 4.4.4 `GET /groups/{group_public_id}/members/admins`
+**获取群管理员列表**
+**Response 200 (Success):**
 
-**移出群成员 或 主动退群**
-*说明：当 `user_public_id` 为 `@me` 时，表示当前用户主动退出群聊。*
+```json
+[
+  {
+    "public_id": "user_e5f6g7h8",
+    "nickname": "管理员A",
+    "avatar_url": "/uploads/avatars/admin_a.jpg"
+  }
+]
+```
+
+
+### 4.4.5 `POST /groups/{group_public_id}/members/admins`
+
+**设置群管理员**
+**Request Body:**
+
+```json
+{
+  "user_public_ids": [
+    "user_e5f6g7h8",
+    "user_f6g7h8i9"
+  ]
+}
+```
+
+**Response 204 (No Content):** 设置成功。
+
+### 4.4.6 `DELETE /groups/{group_public_id}/members/admins`
+**取消群管理员**
+**Request Body:**
+```json
+{
+  "user_public_ids": [
+    "user_e5f6g7h8",
+    "user_f6g7h8i9"
+  ]
+}
+```
+
+**Response 204 (No Content):** 取消成功。
+
+### 4.4.7 `POST /groups/{group_public_id}/members/owner`
+**转让群主**
+**Request Body:**
+```json
+{
+  "new_owner_public_id": "user_e5f6g7h8"
+}
+```
+
+**Response 204 (No Content):** 转让成功。
+
+### 4.4.8 `DELETE /groups/{group_public_id}/members/{user_public_id}`
+
+**移出群成员**
 
 **Response 204 (No Content):** 操作成功。
 
+### 4.4.9 `DELETE /groups/{group_public_id}/members/me`
+
+**退出群聊**
+
+**Response 204 (No Content):** 退出群聊成功。
+
+### 4.4.10 `DELETE /groups/{group_public_id}/members/owner`
+
+**解散群聊**
+*说明：仅群主可调用此接口，解散群聊将删除该群组的所有成员记录及会话记录。*
+
+**Response 204 (No Content):** 群聊解散成功。
+
 ---
+
+### 4.5.1 `GET /groups`
+
+**获取当前用户所在的群组列表**
+
+**Query Parameters:**
+
+- `cursor` (string, optional): 游标，用于翻页，后端可基于 `conversations.id` 或 `created_at` 实现；
+- `limit` (int, optional, default: 20): 每页数量，最大 100。
+
+**Response 200 (Success):**
+
+```json
+{
+  "items": [
+    {
+      "public_id": "group_c1d2e3f4",
+      "name": "新项目组",
+      "member_count": 5,
+      "created_at": "2025-11-26T10:00:00Z"
+    }
+  ],
+  "next_cursor": 1234,
+  "has_more": true
+}
+```
+
+### 4.5.2 `GET /groups/{group_public_id}`
+
+**获取单个群组详情**
+
+**Response 200 (Success):**
+
+```json
+{
+  "public_id": "group_c1d2e3f4",
+  "name": "新项目组",
+  "member_count": 5,
+  "created_at": "2025-11-26T10:00:00Z",
+  "members": [
+    {
+      "public_id": "user_u1v2w3e4",
+      "nickname": "张三",
+      "is_admin": true,
+      "joined_at": "2025-11-26T10:05:00Z"
+    }
+  ]
+}
+```
+
+### 4.6 实时事件 (SSE)
+
+**Implementation:** `ai-social-chat`
+
+**Description:** 通过 Server-Sent Events (SSE) 将新消息、正在输入等事件实时推送给在线客户端。
+
+#### 4.6.1 `GET /api/v1/sse/subscribe`
+
+**建立 SSE 订阅连接**
+
+- 建立一个与当前登录用户绑定的 SSE 长连接，用于接收后台推送的各种通知事件。
+- 需要携带正常的认证 Header（`Authorization: Bearer <access_token>`）。
+
+**Request:**
+
+```http
+GET /api/v1/sse/subscribe HTTP/1.1
+Accept: text/event-stream
+Authorization: Bearer <access_token>
+```
+
+**Response 200:**
+
+- Header: `Content-Type: text/event-stream;charset=UTF-8`
+- Body: 持续的 SSE 事件流，每条事件的数据部分是一个 JSON 对象：
+
+```json
+{
+  "type": "MESSAGE_CREATED",
+  "payload": { ... }
+}
+```
+
+**客户端接入示例（浏览器）：**
+
+```js
+const es = new EventSource('/api/v1/sse/subscribe', { withCredentials: true });
+
+es.onmessage = (event) => {
+  const notification = JSON.parse(event.data);
+  switch (notification.type) {
+    case 'MESSAGE_CREATED':
+      handleMessageCreated(notification.payload);
+      break;
+    case 'TYPING':
+      handleTyping(notification.payload);
+      break;
+    default:
+      console.warn('Unknown SSE event type', notification.type);
+  }
+};
+```
+
+#### 4.6.2 事件：`MESSAGE_CREATED`
+
+**触发时机：**
+
+- 当任意用户调用 `POST /conversations/{conversation_public_id}/messages` 发送新消息且写入成功后，
+- 服务器会异步地向该会话中所有**其他成员**推送一条 `MESSAGE_CREATED` 事件。
+
+**事件格式：**
+
+```json
+{
+  "type": "MESSAGE_CREATED",
+  "payload": {
+    "public_id": "msg_abc123",
+    "sender": {
+      "public_id": "user_bob",
+      "nickname": "Bob"
+    },
+    "content": "明天的会议确认一下时间。",
+    "media_type": "TEXT",
+    "media_url": null,
+    "source_type": null,
+    "parent_message_public_id": null,
+    "created_at": "2025-11-23T10:05:00Z"
+  }
+}
+```
+
+> 注：`payload` 的结构与 `GET /conversations/{conversation_public_id}/messages` 返回的 `MessageItemVO` 完全一致，前端可直接复用同一套类型定义。
+
+**前端建议处理逻辑：**
+
+- **聊天窗口：**
+  - 如果 `payload` 所属会话正是当前打开的会话：
+    - 将该消息 append 到本地消息数组末尾；
+    - 如果当前处于底部，可自动滚动到底部 / 播放提示音。
+- **会话列表：**
+  - 在本地找到对应会话条目，更新：
+    - `latest_message` 字段为该条消息的 `public_id` / `content` / `created_at`；
+    - 若该会话当前不在前台聊天窗口，则 `unread_count += 1`；
+  - 将该会话移动到列表顶部，以模拟微信的“最近会话置顶”效果。
+
+--- 
+
+#### 4.6.3 事件：`TYPING`
+
+**适用范围：**
+
+- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `POST /conversations/{conversation_public_id}/typing` 将不会产生任何 SSE 事件。
+
+**触发时机：**
+
+- 当某个用户在私聊会话中调用 `POST /conversations/{conversation_public_id}/typing` 上报输入状态（`is_typing = true/false`）时；
+- 服务端会向该会话中的**另一方用户**推送 `TYPING` 事件，上报方自己不会收到该事件。
+
+**事件格式：**
+
+```json
+{
+  "type": "TYPING",
+  "payload": {
+    "conversation_public_id": "conv_a1b2c3d4",
+    "user_id": 123
+  }
+}
+```
+
+**前端建议处理逻辑：**
+
+- 在对应会话窗口中，根据 `payload.is_typing` 显示或隐藏对方的“正在输入...”指示；
+- 可以对同一用户、同一会话的 `TYPING` 事件做简单节流/去抖，避免频繁刷新 UI。
+
+---
+
+### 4.6.4 事件：`STOP_TYPING`
+**适用范围：**
+
+- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `DELETE /conversations/{conversation_public_id}/typing` 将不会产生任何 SSE 事件。
+
+**触发时机：**
+
+- 当某个用户在私聊会话中调用 `DELETE /conversations/{conversation_public_id}/typing` 上报停止输入状态时；
+- 服务端会向该会话中的**另一方用户**推送 `STOP_TYPING` 事件，上报方自己不会收到该事件。
+
+**事件格式：**
+
+```json
+{
+  "type": "STOP_TYPING",
+  "payload": {
+    "conversation_public_id": "conv_a1b2c3d4",
+    "user_id": 123
+  }
+}
+```
+
+--- 
 
 ## 5.0 AI 引擎模块 (AI Engine Service)
 

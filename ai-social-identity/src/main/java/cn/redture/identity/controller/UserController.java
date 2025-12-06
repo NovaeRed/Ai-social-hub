@@ -22,7 +22,7 @@ public class UserController {
     @GetMapping("/me")
     public RestResult<UserInformation> getUserInformation() {
         Long userId = SecurityContextHolderUtil.getUserId();
-        UserInformation userResult = userService.getUserById(String.valueOf(userId));
+        UserInformation userResult = userService.getUserById(userId);
         return RestResult.success(userResult);
     }
 

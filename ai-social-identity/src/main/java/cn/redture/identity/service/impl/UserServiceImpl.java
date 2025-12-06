@@ -22,7 +22,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.Optional;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -41,14 +41,13 @@ public class UserServiceImpl implements UserService {
     private AiPersonaService aiPersonaService;
 
     @Override
-    public UserInformation getUserById(String userId) {
-        if (!StringUtils.hasText(userId)) {
+    public UserInformation getUserById(Long userId) {
+        if (userId == null) {
             throw new ResourceNotFoundException("用户ID");
         }
 
         try {
-            Long id = Long.valueOf(userId);
-            User user = Optional.ofNullable(userMapper.selectById(id))
+            User user = Optional.ofNullable(userMapper.selectById(userId))
                     .orElseThrow(() -> new ResourceNotFoundException("用户"));
             log.debug("找到用户: {}", user);
             return UserConverter.INSTANCE.toUserInformation(user);
@@ -146,5 +145,23 @@ public class UserServiceImpl implements UserService {
 
         log.debug("用户 {} 修改密码后，已签发的令牌已加入黑名单", userId);
 
+    }
+
+    @Override
+    public Long resolveUserIdByPublicId(String publicId) {
+        if (!StringUtils.hasText(publicId)) {
+            return null;
+        }
+
+        User user = userMapper.selectByPublicId(publicId);
+        return user != null ? user.getId() : null;
+    }
+
+    @Override
+    public List<Long> getUserIdsByPublicIds(List<String> publicIds) {
+        if (publicIds == null || publicIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return userMapper.selectIdsByPublicIds(publicIds);
     }
 }
