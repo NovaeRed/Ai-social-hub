@@ -8,13 +8,13 @@ import cn.redture.chat.pojo.entity.Conversation;
 import cn.redture.chat.pojo.entity.ConversationMember;
 import cn.redture.chat.pojo.entity.Message;
 import cn.redture.chat.pojo.enums.MediaTypeEnum;
-import cn.redture.chat.pojo.vo.CursorPageResult;
 import cn.redture.chat.pojo.vo.MessageItemVO;
 import cn.redture.chat.service.MessageService;
 import cn.redture.chat.sse.Notification;
 import cn.redture.chat.sse.SseEmitterService;
 import cn.redture.chat.util.converter.MessageConverter;
 import cn.redture.common.exception.businessException.ResourceNotFoundException;
+import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
@@ -64,13 +64,8 @@ public class MessageServiceImpl implements MessageService {
         List<Message> page = hasMore ? messages.subList(0, limit) : messages;
 
         List<MessageItemVO> items = page.stream().map(msg -> {
-            MessageItemVO vo = MessageConverter.INSTANCE.toMessageItemVO(msg);
-            if (msg.getParentMessageId() != null) {
-                // 这里只能先填 null，占位：需要根据 parentMessageId 再查一遍获取其 public_id
-                vo.setParentMessagePublicId(null);
-            }
             // sender 信息后续可通过联表/批量查询用户表填充
-            return vo;
+            return MessageConverter.INSTANCE.toMessageItemVO(msg);
         }).toList();
 
         CursorPageResult<MessageItemVO> result = new CursorPageResult<>();
@@ -139,5 +134,17 @@ public class MessageServiceImpl implements MessageService {
         }
 
         return vo;
+    }
+
+    @Override
+    public List<MessageItemVO> getUserRecentMessages(Long userId, int limit) {
+        List<Message> messages = messageMapper.selectList(new LambdaQueryWrapper<Message>()
+                .eq(Message::getSenderId, userId)
+                .orderByDesc(Message::getCreatedAt)
+                .last("LIMIT " + limit));
+
+        return messages.stream()
+                .map(MessageConverter.INSTANCE::toMessageItemVO)
+                .toList();
     }
 }

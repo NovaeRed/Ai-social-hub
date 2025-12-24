@@ -1,10 +1,8 @@
 package cn.redture.chat.service;
 
 import cn.redture.chat.pojo.vo.ConversationSummaryVO;
-import cn.redture.chat.pojo.vo.CursorPageResult;
 import cn.redture.chat.pojo.entity.Conversation;
-
-import java.util.List;
+import cn.redture.common.pojo.vo.CursorPageResult;
 
 public interface ConversationService {
 

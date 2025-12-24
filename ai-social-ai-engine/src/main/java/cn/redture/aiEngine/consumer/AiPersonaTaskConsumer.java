@@ -1,7 +1,7 @@
 package cn.redture.aiEngine.consumer;
 
-import cn.redture.aiEngine.dto.AiPersonaTaskDTO;
-import cn.redture.aiEngine.persona.handler.AiPersonaTaskHandlerRegistry;
+import cn.redture.aiEngine.handler.AiPersonaTaskHandlerRegistry;
+import cn.redture.aiEngine.pojo.dto.AiPersonaTaskDTO;
 import cn.redture.common.util.JsonUtil;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -35,7 +35,7 @@ public class AiPersonaTaskConsumer {
 
     private Thread consumerThread;
 
-    @Value("${ai.persona.consumer.enabled:false}")
+    @Value("${ai.persona.consumer.enabled:true}")
     private boolean consumerEnabled;
 
     @PostConstruct

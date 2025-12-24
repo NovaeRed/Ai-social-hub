@@ -49,4 +49,12 @@ public interface UserService {
      * @return 对应的内部用户 ID 列表，无序
      */
     List<Long> getUserIdsByPublicIds(List<String> publicIds);
+
+    /**
+     * 检查用户是否开启了 AI 画像分析
+     *
+     * @param userId 用户 ID
+     * @return 是否开启
+     */
+    boolean isAiAnalysisEnabled(Long userId);
 }

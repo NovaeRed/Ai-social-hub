@@ -9,6 +9,7 @@ import cn.redture.chat.pojo.vo.*;
 import cn.redture.chat.service.GroupService;
 import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.pojo.model.RestResult;
+import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
 import jakarta.annotation.Resource;
 import org.springframework.security.access.prepost.PreAuthorize;

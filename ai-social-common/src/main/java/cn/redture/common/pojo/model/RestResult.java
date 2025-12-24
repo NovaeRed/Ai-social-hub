@@ -67,6 +67,17 @@ public class RestResult<T> {
     }
 
     /**
+     * 成功，自定义消息 (200 OK)
+     *
+     * @param message 自定义消息
+     * @param data    响应数据
+     * @return RestResult 实例
+     */
+    public static <T> RestResult<T> success(String message, T data) {
+        return new RestResult<>(HttpStatus.OK.value(), message, data);
+    }
+
+    /**
      * 资源创建成功 (201 Created)
      *
      * @param data 创建的资源
@@ -77,7 +88,7 @@ public class RestResult<T> {
     }
 
     /**
-     * 请求已接受，将异 Async处理 (202 Accepted)
+     * 请求已接受，正在处理 (202 Accepted)
      *
      * @param data 通常是任务ID等信息
      * @return RestResult 实例

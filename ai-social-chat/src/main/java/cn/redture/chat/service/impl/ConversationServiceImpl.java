@@ -8,12 +8,11 @@ import cn.redture.chat.pojo.entity.ConversationMember;
 import cn.redture.chat.pojo.entity.Message;
 import cn.redture.chat.pojo.enums.ConversationTypeEnum;
 import cn.redture.chat.pojo.vo.ConversationSummaryVO;
-import cn.redture.chat.pojo.vo.CursorPageResult;
 import cn.redture.chat.service.ConversationService;
 import cn.redture.chat.util.converter.ConversationConverter;
 import cn.redture.chat.util.converter.MessageConverter;
 import cn.redture.common.exception.businessException.InvalidInputException;
-import cn.redture.common.exception.businessException.ResourceNotFoundException;
+import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.IdUtil;
 import cn.redture.identity.service.FriendshipService;
 import cn.redture.identity.service.UserService;
@@ -22,7 +21,6 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 
 @Slf4j

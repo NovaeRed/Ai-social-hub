@@ -2,6 +2,7 @@ package cn.redture.chat.service;
 
 import cn.redture.chat.pojo.entity.Conversation;
 import cn.redture.chat.pojo.vo.*;
+import cn.redture.common.pojo.vo.CursorPageResult;
 
 import java.util.List;
 

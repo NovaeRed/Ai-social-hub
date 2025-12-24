@@ -1,6 +1,6 @@
 package cn.redture.identity.service.impl;
 
-import cn.redture.aiEngine.service.AiPersonaService;
+import cn.redture.aiEngine.service.AiConfigService;
 import cn.redture.common.pojo.dto.UserPrincipal;
 import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.exception.businessException.ResourceNotFoundException;
@@ -38,7 +38,7 @@ public class UserServiceImpl implements UserService {
     private TokenManagementUtil tokenManagementUtil;
 
     @Resource
-    private AiPersonaService aiPersonaService;
+    private AiConfigService aiConfigService;
 
     @Override
     public UserInformation getUserById(Long userId) {
@@ -89,7 +89,7 @@ public class UserServiceImpl implements UserService {
             newAiEnabled = Boolean.FALSE;
         }
         if (!oldAiEnabled.equals(newAiEnabled)) {
-            aiPersonaService.onAiAnalysisToggled(userId, newAiEnabled);
+            aiConfigService.onAiAnalysisToggled(userId, newAiEnabled);
         }
 
         return UserConverter.INSTANCE.toUserInformation(user);
@@ -163,5 +163,11 @@ public class UserServiceImpl implements UserService {
             return Collections.emptyList();
         }
         return userMapper.selectIdsByPublicIds(publicIds);
+    }
+
+    @Override
+    public boolean isAiAnalysisEnabled(Long userId) {
+        User user = userMapper.selectById(userId);
+        return user != null && Boolean.TRUE.equals(user.getAiAnalysisEnabled());
     }
 }

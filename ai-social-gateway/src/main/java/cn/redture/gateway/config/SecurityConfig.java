@@ -3,6 +3,7 @@ package cn.redture.gateway.config;
 import cn.redture.common.util.JwtUtil;
 import cn.redture.gateway.security.JwtAuthenticationFilter;
 import jakarta.annotation.Resource;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -33,6 +34,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable) // 前后端分离，关闭 CSRF
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers(
                                 "/auth/login",
                                 "/auth/register",

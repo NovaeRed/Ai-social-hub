@@ -12,6 +12,7 @@ import cn.redture.chat.util.converter.ConversationConverter;
 import cn.redture.common.exception.businessException.AccessDeniedException;
 import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.exception.businessException.ResourceNotFoundException;
+import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.IdUtil;
 import cn.redture.identity.pojo.vo.UserInformation;
 import cn.redture.identity.service.UserService;

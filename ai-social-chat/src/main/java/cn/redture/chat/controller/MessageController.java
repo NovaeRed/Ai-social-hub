@@ -1,10 +1,10 @@
 package cn.redture.chat.controller;
 
 import cn.redture.chat.pojo.dto.CreateMessageDTO;
-import cn.redture.chat.pojo.vo.CursorPageResult;
 import cn.redture.chat.pojo.vo.MessageItemVO;
 import cn.redture.chat.service.MessageService;
 import cn.redture.common.pojo.model.RestResult;
+import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;

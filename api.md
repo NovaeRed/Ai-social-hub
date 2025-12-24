@@ -9,7 +9,7 @@
 **Architecture Overview:**
 
 - **网关优先：** 所有请求通过 `ai-social-gateway` 路由，负责认证、限流和文件上传。
-- **模块化服务：** 网关将请求分发到专用的下游服务（`identity`、`friendship`、`chat` 等）。
+- **模块化服务：** 网关将请求分发到专用的下游服务（`identity`、`chat`、`schedule`、`ai-engine` 模块）。
 - **异步 AI：** 所有计算密集型的 AI 任务通过任务队列以异步方式处理，确保非阻塞的用户体验。
 
 ---
@@ -129,7 +129,8 @@ Authorization: Bearer <expired_access_token>
 - Access Token 有效期为 15 分钟，Refresh Token 有效期为 7 天。
 - 推荐在收到后端返回 `401 UNAUTHORIZED` 且错误码为 `TOKEN_EXPIRED` 时，调用本接口。
 - 每次调用成功后，客户端**必须**使用返回的**新 Refresh Token** 替换掉本地存储的旧 Refresh Token。
-- 收到任何关于 Refresh Token 的错误（如 `INVALID_REFRESH_TOKEN`, `REVOKED_REFRESH_TOKEN`）时，前端应清除本地所有 Token 并引导用户重新登录。
+- 收到任何关于 Refresh Token 的错误（如 `INVALID_REFRESH_TOKEN`, `REVOKED_REFRESH_TOKEN`）时，前端应清除本地所有 Token
+  并引导用户重新登录。
 
 ---
 
@@ -307,7 +308,8 @@ Authorization: Bearer <expired_access_token>
         "content": "好的，明天见！",
         "created_at": "2025-11-23T10:00:00Z"
       },
-      "member_count": 10, // 仅群组会话返回
+      "member_count": 10,
+      // 仅群组会话返回
       "unread_count": 3
     }
   ],
@@ -419,12 +421,11 @@ Authorization: Bearer <expired_access_token>
 
 - 服务器会在消息写入数据库后，异步地向会话中**其他在线成员**推送一条 `MESSAGE_CREATED` 事件（通过 SSE，详见 4.6）。
 - 发送方可以：
-  - 在点击发送时本地先做乐观更新（插入一条“发送中”的气泡）；
-  - 收到本响应后，用返回的 `public_id` / 时间戳覆盖本地占位；
-  - 也可以订阅 SSE，自身通过 `MESSAGE_CREATED` 事件确认送达。     
+    - 在点击发送时本地先做乐观更新（插入一条“发送中”的气泡）；
+    - 收到本响应后，用返回的 `public_id` / 时间戳覆盖本地占位；
+    - 也可以订阅 SSE，自身通过 `MESSAGE_CREATED` 事件确认送达。
 
 ---
-
 
 ### 4.3.1 `POST /conversations/{conversation_public_id}/typing`
 
@@ -434,7 +435,8 @@ Authorization: Bearer <expired_access_token>
 
 - 仅当目标会话为**私聊会话**（`type = "PRIVATE"`）时才会生效，群组会话不会产生任何实时事件；
 - 客户端在用户开始输入时，按一定频率（例如每 500ms 以上）调用此接口即可，无需在停止输入时额外上报；
-- 服务端不落库，只在内存或缓存中短暂记录状态，并通过 SSE 向会话内**其他成员**广播 `TYPING` 事件（事件类型为 `TYPING`，详见 4.6.3），当前上报用户自身不会收到该事件；
+- 服务端不落库，只在内存或缓存中短暂记录状态，并通过 SSE 向会话内**其他成员**广播 `TYPING` 事件（事件类型为 `TYPING`，详见
+  4.6.3），当前上报用户自身不会收到该事件；
 - 前端可以在收到一条 `TYPING` 事件后，显示“对方正在输入...”，并在若干秒内未再收到新的 `TYPING` 事件时自动隐藏提示。
 
 **Response 204 (No Content):** 上报成功。
@@ -501,6 +503,7 @@ Authorization: Bearer <expired_access_token>
 **Response 204 (No Content):** 邀请成功。
 
 ### 4.4.4 `GET /groups/{group_public_id}/members/admins`
+
 **获取群管理员列表**
 **Response 200 (Success):**
 
@@ -513,7 +516,6 @@ Authorization: Bearer <expired_access_token>
   }
 ]
 ```
-
 
 ### 4.4.5 `POST /groups/{group_public_id}/members/admins`
 
@@ -532,8 +534,10 @@ Authorization: Bearer <expired_access_token>
 **Response 204 (No Content):** 设置成功。
 
 ### 4.4.6 `DELETE /groups/{group_public_id}/members/admins`
+
 **取消群管理员**
 **Request Body:**
+
 ```json
 {
   "user_public_ids": [
@@ -546,8 +550,10 @@ Authorization: Bearer <expired_access_token>
 **Response 204 (No Content):** 取消成功。
 
 ### 4.4.7 `POST /groups/{group_public_id}/members/owner`
+
 **转让群主**
 **Request Body:**
+
 ```json
 {
   "new_owner_public_id": "user_e5f6g7h8"
@@ -652,30 +658,32 @@ Authorization: Bearer <access_token>
 - Header: `Content-Type: text/event-stream;charset=UTF-8`
 - Body: 持续的 SSE 事件流，每条事件的数据部分是一个 JSON 对象：
 
-```json
+```json5
 {
   "type": "MESSAGE_CREATED",
-  "payload": { ... }
+  "payload": {
+    // ...
+  }
 }
 ```
 
 **客户端接入示例（浏览器）：**
 
 ```js
-const es = new EventSource('/api/v1/sse/subscribe', { withCredentials: true });
+const es = new EventSource('/api/v1/sse/subscribe', {withCredentials: true});
 
 es.onmessage = (event) => {
-  const notification = JSON.parse(event.data);
-  switch (notification.type) {
-    case 'MESSAGE_CREATED':
-      handleMessageCreated(notification.payload);
-      break;
-    case 'TYPING':
-      handleTyping(notification.payload);
-      break;
-    default:
-      console.warn('Unknown SSE event type', notification.type);
-  }
+    const notification = JSON.parse(event.data);
+    switch (notification.type) {
+        case 'MESSAGE_CREATED':
+            handleMessageCreated(notification.payload);
+            break;
+        case 'TYPING':
+            handleTyping(notification.payload);
+            break;
+        default:
+            console.warn('Unknown SSE event type', notification.type);
+    }
 };
 ```
 
@@ -707,19 +715,20 @@ es.onmessage = (event) => {
 }
 ```
 
-> 注：`payload` 的结构与 `GET /conversations/{conversation_public_id}/messages` 返回的 `MessageItemVO` 完全一致，前端可直接复用同一套类型定义。
+> 注：`payload` 的结构与 `GET /conversations/{conversation_public_id}/messages` 返回的 `MessageItemVO`
+> 完全一致，前端可直接复用同一套类型定义。
 
 **前端建议处理逻辑：**
 
 - **聊天窗口：**
-  - 如果 `payload` 所属会话正是当前打开的会话：
-    - 将该消息 append 到本地消息数组末尾；
-    - 如果当前处于底部，可自动滚动到底部 / 播放提示音。
+    - 如果 `payload` 所属会话正是当前打开的会话：
+        - 将该消息 append 到本地消息数组末尾；
+        - 如果当前处于底部，可自动滚动到底部 / 播放提示音。
 - **会话列表：**
-  - 在本地找到对应会话条目，更新：
-    - `latest_message` 字段为该条消息的 `public_id` / `content` / `created_at`；
-    - 若该会话当前不在前台聊天窗口，则 `unread_count += 1`；
-  - 将该会话移动到列表顶部，以模拟微信的“最近会话置顶”效果。
+    - 在本地找到对应会话条目，更新：
+        - `latest_message` 字段为该条消息的 `public_id` / `content` / `created_at`；
+        - 若该会话当前不在前台聊天窗口，则 `unread_count += 1`；
+    - 将该会话移动到列表顶部，以模拟微信的“最近会话置顶”效果。
 
 --- 
 
@@ -727,11 +736,13 @@ es.onmessage = (event) => {
 
 **适用范围：**
 
-- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `POST /conversations/{conversation_public_id}/typing` 将不会产生任何 SSE 事件。
+- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `POST /conversations/{conversation_public_id}/typing` 将不会产生任何
+  SSE 事件。
 
 **触发时机：**
 
-- 当某个用户在私聊会话中调用 `POST /conversations/{conversation_public_id}/typing` 上报输入状态（`is_typing = true/false`）时；
+- 当某个用户在私聊会话中调用 `POST /conversations/{conversation_public_id}/typing` 上报输入状态（`is_typing = true/false`
+  ）时；
 - 服务端会向该会话中的**另一方用户**推送 `TYPING` 事件，上报方自己不会收到该事件。
 
 **事件格式：**
@@ -754,9 +765,11 @@ es.onmessage = (event) => {
 ---
 
 ### 4.6.4 事件：`STOP_TYPING`
+
 **适用范围：**
 
-- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `DELETE /conversations/{conversation_public_id}/typing` 将不会产生任何 SSE 事件。
+- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `DELETE /conversations/{conversation_public_id}/typing` 将不会产生任何
+  SSE 事件。
 
 **触发时机：**
 
@@ -775,31 +788,62 @@ es.onmessage = (event) => {
 }
 ```
 
---- 
+---
 
 ## 5.0 AI 引擎模块 (AI Engine Service)
 
-* **Description:** 提供统一的AI能力，通过异步任务接口进行交互。
+* **Description:** 提供统一的AI能力，支持多模型配置和流式输出，通过异步任务接口进行交互。
 
-### 5.1 `POST /ai/tasks`
-
-**提交一个异步AI任务**
+### 5.1 `POST /api/v1/ai/tasks/polish`
 
 **Request Body (AI润色):**
 
 ```json
 {
-  "task_type": "POLISH",
-  "source_message_public_id": "msg_draft_789"
+  "message": "我想要吃一个比较甜的食物可以吧",
+  "override_config": {
+    "temperature": 0.8,
+    "max_tokens": 1500
+  }
 }
 ```
 
-**Request Body (智能日程提取 - 文本):**
+**Response**: 流式输出
 
 ```json
 {
-  "task_type": "SCHEDULE_EXTRACTION",
-  "source_message_public_id": "msg_text_abc"
+  "output": "我想吃一些甜的食物，可以吗？"
+}
+```
+
+### 5.2 `POST /api/v1/ai/tasks/schedule`
+
+**Request Body (智能日程):**
+
+```json
+{
+  "messages": [
+    {
+      "sender": "user1",
+      "content": "@所有人 明天下午2点有个项目复盘会议，大家记得参加哦！",
+      "timestamp": "2025-12-01T10:00:00Z"
+    },
+    {
+      "sender": "user2",
+      "content": "时间变更通知：由于天气原因，项目复盘会议改到后天下午2点。",
+      "timestamp": "2025-12-01T11:00:00Z"
+    }
+  ],
+  "override_config": {
+    "temperature": 0.3,
+    "max_tokens": 500
+  },
+  "context": {
+    "timezone": "Asia/Shanghai",
+    "user_preferences": {
+      "meeting_reminder_minutes": 30
+    }
+  }
 }
 ```
 
@@ -807,26 +851,512 @@ es.onmessage = (event) => {
 
 ```json
 {
-  "task_public_id": "task_t1u2v3w4",
-  "status": "PENDING"
+  "task_public_id": "task_t1u2v3w4"
 }
 ```
 
-### 5.2 `GET /ai/tasks/{task_public_id}`
+### 5.3 `GET /api/v1/ai/tasks`
 
-**查询AI任务的状态和结果**
+**获取AI任务列表状态和结果**
 
-**Response 200 (Success, Completed - 智能日程):**
+**Query Parameters:**
+
+- `task_type` (string, optional): 任务类型过滤，如 `POLISH`, `SCHEDULE_EXTRACTION`, `PERSONA_ANALYSIS`。
+- `status` (string, optional): 任务状态过滤，如 `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `CANCELLED`。
+- `cursor` (long, optional): 游标（任务ID），用于翻页。
+- `limit` (int, optional, default: 20, max: 100): 每页数量。
+
+**Response 200 (Success):**
+
+```json5
+{
+  "items": [
+    {
+      "public_id": "task_t1u2v3w4",
+      "type": "SCHEDULE_EXTRACTION",
+      "status": "COMPLETED",
+      "created_at": "2025-12-01T10:00:00Z",
+      "completed_at": "2025-12-01T10:00:05Z",
+      "result": {
+        "schedules": [
+          {
+            "title": "项目复盘会议",
+            "start_time": "2025-12-05T14:00:00Z",
+            "end_time": "2025-12-05T15:00:00Z",
+            "attendees": [
+              "user1",
+              "user2"
+            ],
+            "location": "会议室A"
+          }
+        ]
+      },
+      "model_config": {
+        "model_name": "gpt-4o",
+        "temperature": 0.7
+      }
+    }
+  ],
+  "next_cursor": 12345,
+  "has_more": false
+}
+```
+
+### 5.4 `GET /api/v1/ai/tasks/{public_id}`
+
+**获取单个AI任务详情（用于异步任务轮询）**
+
+**Response 200 (Success):**
 
 ```json
 {
-  "public_id": "task_t1u2v3w4",
+  "public_id": "task_p1q2r3s4",
+  "type": "PERSONA_ANALYSIS",
   "status": "COMPLETED",
+  "input_payload": {
+    "messages": "...",
+    "target_user_id": "user1"
+  },
   "output_payload": {
-    "title": "项目复盘会议",
-    "start_time": "2025-12-06T14:00:00Z",
-    "end_time": "2025-12-06T15:00:00Z"
+    "analysis": {
+      "personality": "理性",
+      "traits": ["谨慎", "解决问题导向", "积极主动"],
+      "communication_style": "直接而建设性，善于提出具体建议。",
+      "interests": []
+    }
+  },
+  "error_message": null,
+  "model_config": {
+    "model_name": "gpt-4o",
+    "temperature": 0.7
+  },
+  "token_usage": {
+    "input_tokens": 150,
+    "output_tokens": 200,
+    "total_tokens": 350
+  },
+  "created_at": "2025-12-01T09:00:00Z",
+  "completed_at": "2025-12-01T09:00:10Z"
+}
+```
+
+### 5.5 `POST /api/v1/ai/tasks/personality-analysis`
+
+**Request Body (性格分析):**
+
+```json5
+{
+  "messages": [
+    {
+      "sender": "user1",
+      "content": "我觉得这个方案不太可行，风险太大了。",
+      "timestamp": "2025-12-01T09:00:00Z"
+    },
+    {
+      "sender": "user1",
+      "content": "不过我们可以考虑一些风险控制措施。",
+      "timestamp": "2025-12-01T09:05:00Z"
+    },
+    {
+      "sender": "user2",
+      "content": "是的，我同意你的看法。",
+      "timestamp": "2025-12-01T09:10:00Z"
+    }
+  ],
+  "target_user_id": "user1",
+  "analysis_config": {
+    "dimensions": [
+      "openness",
+      "conscientiousness",
+      "extraversion",
+      "agreeableness",
+      "neuroticism"
+    ],
+    "depth": "comprehensive"
+    // basic, standard, comprehensive
+  },
+  "override_config": {
+    "temperature": 0.5,
+    "max_tokens": 2000
   }
+}
+```
+
+**Response 202 (Accepted):**
+
+```json
+{
+  "task_public_id": "task_p1q2r3s4"
+}
+```
+
+### 5.6 `POST /api/v1/ai/tasks/smart-reply`
+
+**Request Body (智能回复建议):**
+
+```json
+{
+  "message": "明天的会议你参加吗？",
+  "conversation_history": [
+    {
+      "sender": "user1",
+      "content": "我们明天有个重要会议",
+      "timestamp": "2025-12-01T08:00:00Z"
+    }
+  ],
+  "user_profile": {
+    "name": "张三",
+    "role": "项目经理",
+    "communication_style": "professional"
+  },
+  "override_config": {
+    "temperature": 0.7,
+    "max_tokens": 500
+  }
+}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "output": [
+    "我会参加的，需要准备什么材料吗？",
+    "好的，会议几点开始？",
+    "我可能需要请假，有其他安排。"
+  ]
+}
+```
+
+### 5.7 `POST /api/v1/ai/tasks/summarize`
+
+**Request Body (内容总结):**
+
+```json5
+{
+  "content": "今天的会议主要讨论了项目进展和下一步计划。有人认为需要加快开发进度，同时也要注意质量控制。最后决定在下周召开一次全体会议，确保所有成员都了解最新情况。",
+  "summary_type": "meeting",
+  // meeting, chat, article, email
+  "target_length": "short",
+  // short, medium, long
+  "keywords": [
+    "重点",
+    "决策",
+    "行动项"
+  ],
+  "override_config": {
+    "temperature": 0.3,
+    "max_tokens": 1000
+  }
+}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "summary": "会议主要内容总结...",
+  "key_points": [
+    "要点1",
+    "要点2",
+    "要点3"
+  ],
+  "action_items": [
+    "行动项1",
+    "行动项2"
+  ]
+}
+```
+
+### 5.8 `POST /api/v1/ai/tasks/translate`
+
+**Request Body (智能翻译):**
+
+```json5
+{
+  "text": "Hello, how are you?",
+  "source_lang": "en",
+  "target_lang": "zh",
+  "domain": "business",
+  // business, casual, technical, academic
+  "override_config": {
+    "temperature": 0.1,
+    "max_tokens": 1000
+  }
+}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "output": "你好，你怎么样？"
+}
+```
+
+### 5.9 `GET /api/v1/ai/models`
+
+**获取可用AI模型列表**
+
+**Response 200 (Success):**
+
+```json
+{
+  "models": [
+    {
+      "name": "gpt-4o",
+      "provider": "openai",
+      "capabilities": [
+        "text",
+        "image",
+        "code",
+        "reasoning"
+      ],
+      "pricing": {
+        "input_token_price": 0.005,
+        "output_token_price": 0.015
+      },
+      "max_tokens": 128000
+    },
+    {
+      "name": "claude-3-opus",
+      "provider": "anthropic",
+      "capabilities": [
+        "text",
+        "reasoning",
+        "long_context"
+      ],
+      "pricing": {
+        "input_token_price": 0.015,
+        "output_token_price": 0.075
+      },
+      "max_tokens": 200000
+    }
+  ]
+}
+```
+
+### 5.10 `POST /api/v1/ai/config`
+
+**设置用户AI配置**
+
+开启 AI 画像分析功能后，系统不会自动读取历史消息。用户需要通过 `/api/v1/ai/profiles/init` 接口手动触发首次画像生成。
+
+**Request Body:**
+
+```json
+{
+  "default_model": "gpt-4o",
+  "preferences": {
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "auto_moderation": true,
+    "smart_reply_enabled": true
+  }
+}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "message": "配置已保存",
+  "config_id": "conf_123"
+}
+```
+
+### 5.11 `GET /api/v1/ai/config`
+
+**获取用户AI配置**
+
+**Response 200 (Success):**
+
+```json
+{
+  "default_model": "gpt-4o",
+  "preferences": {
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "auto_moderation": true,
+    "smart_reply_enabled": true
+  }
+}
+```
+
+### 5.12 `GET /api/v1/ai/profiles`
+
+**获取用户AI画像**
+
+**Query Parameters:**
+- `profile_type` (string, optional): 画像类型，如 `PERSONA`, `PREFERENCES`。
+
+**Response 200 (Success):**
+
+```json
+{
+  "items": [
+    {
+      "profile_type": "PERSONA",
+      "content": {
+        "personality": "理性",
+        "traits": ["谨慎", "解决问题导向"]
+      },
+      "updated_at": "2025-12-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+### 5.13 `POST /api/v1/ai/profiles/init`
+
+**手动触发 AI 画像初始化**
+
+基于用户最近的聊天记录生成性格画像。此操作需要用户在设置中已开启 AI 画像分析功能。
+
+**Response 200 (Success):**
+
+```json
+{
+  "message": "画像初始化任务已启动"
+}
+```
+
+### 5.14 `GET /api/v1/ai/usage`
+
+**获取AI使用统计**
+
+**Query Parameters:**
+- `date_from` (string, optional): 开始日期。
+- `date_to` (string, optional): 结束日期。
+- `provider` (string, optional): 提供商。
+
+**Response 200 (Success):**
+
+```json
+{
+  "total_tokens": 15000,
+  "total_cost": 0.25,
+  "usage_by_model": [
+    {
+      "model_name": "gpt-4o",
+      "tokens": 10000,
+      "cost": 0.15
+    }
+  ]
+}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "message": "配置已保存",
+  "config_id": "config_abc123"
+}
+```
+
+### 5.10 `GET /ai/config`
+
+**获取用户AI配置**
+
+**Response 200 (Success):**
+
+```json
+{
+  "default_model": "gpt-4o",
+  "providers": [
+    "openai",
+    "anthropic"
+  ],
+  "preferences": {
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "auto_moderation": true,
+    "smart_reply_enabled": true
+  },
+  "usage": {
+    "daily_tokens": 15000,
+    "monthly_tokens": 450000,
+    "cost": 25.50
+  }
+}
+```
+
+### 5.11 `GET /ai/profiles`
+
+**获取用户AI画像**
+
+**Query Parameters:**
+
+- `profile_type` (string, optional): 配置类型过滤，如 `PERSONA`, `PREFERENCES`, `BEHAVIOR`。
+
+**Response 200 (Success):**
+
+```json
+{
+  "items": [
+    {
+      "profile_type": "PERSONA",
+      "content": {
+        "big_five": {
+          "openness": 0.8,
+          "conscientiousness": 0.7,
+          "extraversion": 0.6,
+          "agreeableness": 0.9,
+          "neuroticism": 0.4
+        },
+        "communication_style": "collaborative",
+        "interests": [
+          "technology",
+          "business",
+          "innovation"
+        ]
+      },
+      "model_name": "gpt-4o",
+      "provider": "openai",
+      "created_at": "2025-12-01T10:00:00Z",
+      "updated_at": "2025-12-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+### 5.12 `GET /ai/usage`
+
+**获取AI使用统计**
+
+**Query Parameters:**
+
+- `date_from` (string, optional): 开始日期，格式 YYYY-MM-DD
+- `date_to` (string, optional): 结束日期，格式 YYYY-MM-DD
+- `provider` (string, optional): 服务提供商过滤
+
+**Response 200 (Success):**
+
+```json
+{
+  "summary": {
+    "total_tokens": 450000,
+    "input_tokens": 300000,
+    "output_tokens": 150000,
+    "total_cost": 25.50,
+    "date_from": "2025-12-01",
+    "date_to": "2025-12-31"
+  },
+  "daily_breakdown": [
+    {
+      "date": "2025-12-01",
+      "tokens_used": 15000,
+      "cost": 0.85
+    }
+  ],
+  "by_provider": [
+    {
+      "provider": "openai",
+      "tokens_used": 300000,
+      "cost": 18.00
+    }
+  ]
 }
 ```
 
@@ -908,21 +1438,21 @@ es.onmessage = (event) => {
 
 ## Appendix A: 错误码规范
 
-| HTTP Status | Error Code              | Description           |
-|:------------|:------------------------|:----------------------|
-| 400         | `INVALID_INPUT`         | 请求参数无效或缺失。            |
-| 401         | `UNAUTHORIZED`          | 认证失败（如用户名密码错误）。         |
+| HTTP Status | Error Code              | Description                                   |
+|:------------|:------------------------|:----------------------------------------------|
+| 400         | `INVALID_INPUT`         | 请求参数无效或缺失。                                    |
+| 401         | `UNAUTHORIZED`          | 认证失败（如用户名密码错误）。                               |
 | 401         | `TOKEN_EXPIRED`         | Access Token 已过期。客户端应使用 Refresh Token 来获取新令牌。 |
-| 401         | `TOKEN_BLACKLISTED`     | Access Token 已被吊销（因为登出或刷新）。客户端应强制用户重新登录。 |
-| 401         | `INVALID_TOKEN`         | Access Token 无效（格式、签名错误或无法解析）。客户端应强制用户重新登录。 |
-| 401         | `INVALID_REFRESH_TOKEN` | Refresh Token 无效或已过期。客户端应强制用户重新登录。 |
-| 401         | `REVOKED_REFRESH_TOKEN` | Refresh Token 已被系统吊销（可能因为安全风险）。客户端应强制用户重新登录。 |
-| 403         | `FORBIDDEN`             | 无权访问该资源或执行该操作。        |
-| 404         | `NOT_FOUND`             | 请求的资源不存在。             |
-| 409         | `CONFLICT`              | 资源冲突（如用户名已存在）。        |
-| 429         | `RATE_LIMIT_EXCEEDED`   | 请求过于频繁，请稍后再试。         |
-| 500         | `INTERNAL_SERVER_ERROR` | 服务器内部发生未知错误。          |
-| 503         | `SERVICE_UNAVAILABLE`   | 依赖的第三方服务（如AI模型）暂时不可用。 |
+| 401         | `TOKEN_BLACKLISTED`     | Access Token 已被吊销（因为登出或刷新）。客户端应强制用户重新登录。      |
+| 401         | `INVALID_TOKEN`         | Access Token 无效（格式、签名错误或无法解析）。客户端应强制用户重新登录。   |
+| 401         | `INVALID_REFRESH_TOKEN` | Refresh Token 无效或已过期。客户端应强制用户重新登录。            |
+| 401         | `REVOKED_REFRESH_TOKEN` | Refresh Token 已被系统吊销（可能因为安全风险）。客户端应强制用户重新登录。  |
+| 403         | `FORBIDDEN`             | 无权访问该资源或执行该操作。                                |
+| 404         | `NOT_FOUND`             | 请求的资源不存在。                                     |
+| 409         | `CONFLICT`              | 资源冲突（如用户名已存在）。                                |
+| 429         | `RATE_LIMIT_EXCEEDED`   | 请求过于频繁，请稍后再试。                                 |
+| 500         | `INTERNAL_SERVER_ERROR` | 服务器内部发生未知错误。                                  |
+| 503         | `SERVICE_UNAVAILABLE`   | 依赖的第三方服务（如AI模型）暂时不可用。                         |
 
 ## Appendix B: 技术实现注解
 

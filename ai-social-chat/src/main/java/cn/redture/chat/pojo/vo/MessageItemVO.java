@@ -25,9 +25,6 @@ public class MessageItemVO {
     @JsonProperty("source_type")
     private String sourceType;
 
-    @JsonProperty("parent_message_public_id")
-    private String parentMessagePublicId;
-
     @JsonProperty("created_at")
     private OffsetDateTime createdAt;
 

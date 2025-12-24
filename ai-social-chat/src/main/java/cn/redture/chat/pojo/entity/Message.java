@@ -31,8 +31,6 @@ public class Message {
 
     private String mediaUrl;
 
-    private Long parentMessageId;
-
     private String sourceType;
 
     private OffsetDateTime createdAt;

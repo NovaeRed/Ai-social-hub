@@ -4,9 +4,9 @@ spring:
   application:
     name: ai-social-app
   datasource:
-    url: jdbc:postgresql://192.168.80.128:5432/ai_social_hub
+    url: jdbc:postgresql://localhost/ai_social_hub
     username: postgres
-    password: 123456
+    password: 1234
     driver-class-name: org.postgresql.Driver
   data:
     redis:
@@ -20,6 +20,14 @@ spring:
           time-between-eviction-runs: 10s
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
+  # Spring AI Alibaba (Qwen)
+  ai:
+    dashscope:
+      api-key: ${Qwen-api}
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      default-model: qwen-max
+      timeout: 60000
+
 mybatis-plus:
   type-aliases-package: cn.redture
   configuration:
@@ -35,6 +43,13 @@ ai:
       corePoolSize: 4
       maxPoolSize: 8
       queueCapacity: 100
+
+  # Qwen配置
+  qwen:
+    api-key: ${Qwen-api}
+    base-url: ${Qwen-base-url:https://dashscope.aliyuncs.com/compatible-mode/v1}
+    default-model: qwen-max
+    timeout: 60000
 
 jwt:
   secret: ai-social-project-secret-key-for-jwt-authentication-hs256-20240520
