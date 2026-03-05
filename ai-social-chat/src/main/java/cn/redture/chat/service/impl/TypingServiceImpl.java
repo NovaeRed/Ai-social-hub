@@ -2,6 +2,7 @@ package cn.redture.chat.service.impl;
 
 import cn.redture.chat.mapper.ConversationMapper;
 import cn.redture.chat.mapper.ConversationMemberMapper;
+import cn.redture.chat.pojo.dto.TypingRequestDTO;
 import cn.redture.chat.pojo.entity.Conversation;
 import cn.redture.chat.pojo.entity.ConversationMember;
 import cn.redture.chat.pojo.enums.ConversationTypeEnum;
@@ -10,6 +11,7 @@ import cn.redture.chat.sse.Notification;
 import cn.redture.chat.sse.SseEmitterService;
 import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.exception.businessException.ResourceNotFoundException;
+import cn.redture.identity.service.UserService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.Data;
@@ -32,6 +34,8 @@ public class TypingServiceImpl implements TypingService {
     private ConversationMemberMapper conversationMemberMapper;
     @Resource
     private SseEmitterService sseEmitterService;
+    @Resource
+    private UserService userService;
 
     private static final String TYPING_VALUE_KEY = "typing:status";
     private static final int TYPING_EXPIRE_SECONDS = 30;
@@ -40,7 +44,10 @@ public class TypingServiceImpl implements TypingService {
      * 开始打字
      */
     @Override
-    public void reportTyping(String conversationPublicId, Long userId) {
+    public void reportTyping(Long userId, TypingRequestDTO typingRequestDTO) {
+        String conversationPublicId = typingRequestDTO == null ? null : typingRequestDTO.getConversationPublicId();
+        String targetUserPublicId = typingRequestDTO == null ? null : typingRequestDTO.getTargetUserPublicId();
+
         Conversation conversation = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
                 .eq(Conversation::getPublicId, conversationPublicId));
 
@@ -48,7 +55,11 @@ public class TypingServiceImpl implements TypingService {
             throw new ResourceNotFoundException("会话");
         }
 
-        if (conversation.getType() != ConversationTypeEnum.PRIVATE) {
+        if (targetUserPublicId == null || targetUserPublicId.isEmpty()) {
+            throw new ResourceNotFoundException("对方用户");
+        }
+
+        if (conversation.getType() != ConversationTypeEnum.PRIVATE || isUserTyping(conversation.getId(), userId)) {
             return;
         }
 
@@ -60,14 +71,9 @@ public class TypingServiceImpl implements TypingService {
 
         String typingField = buildTypingField(conversation.getId(), userId);
 
-        if (isUserTyping(conversation.getId(), userId)) {
-            // 如果用户已经在打字，先推送停止事件（避免状态不一致）
-            stopTypingInternal(conversation, userId, typingField);
-        }
-
         stringRedisTemplate.opsForValue().set(TYPING_VALUE_KEY + typingField, "1", Duration.ofSeconds(TYPING_EXPIRE_SECONDS));
 
-        pushTypingEvent(conversation, userId, "TYPING");
+        pushTypingEvent(conversation, userId, "TYPING", targetUserPublicId);
 
         log.debug("用户 {} 在会话 {} 开始打字", userId, conversationPublicId);
     }
@@ -76,7 +82,10 @@ public class TypingServiceImpl implements TypingService {
      * 停止打字
      */
     @Override
-    public void stopTyping(String conversationPublicId, Long userId) {
+    public void stopTyping(Long userId, TypingRequestDTO typingRequestDTO) {
+        String conversationPublicId = typingRequestDTO == null ? null : typingRequestDTO.getConversationPublicId();
+        String targetUserPublicId = typingRequestDTO == null ? null : typingRequestDTO.getTargetUserPublicId();
+
         Conversation conversation = conversationMapper.selectOne(
                 new LambdaQueryWrapper<Conversation>()
                         .eq(Conversation::getPublicId, conversationPublicId)
@@ -90,19 +99,18 @@ public class TypingServiceImpl implements TypingService {
 
         // 检查是否存在该打字状态
         if (isUserTyping(conversation.getId(), userId)) {
-            stopTypingInternal(conversation, userId, typingField);
+            stopTypingInternal(conversation, userId, typingField, targetUserPublicId);
         }
     }
 
     /**
      * 内部停止打字方法
      */
-    private void stopTypingInternal(Conversation conversation, Long userId, String typingField) {
-        // 从 Redis Hash 中移除
+    private void stopTypingInternal(Conversation conversation, Long userId, String typingField, String targetUserPublicId) {
         stringRedisTemplate.delete(TYPING_VALUE_KEY + typingField);
 
         // 推送停止打字事件给其他成员
-        pushTypingEvent(conversation, userId, "STOP_TYPING");
+        pushTypingEvent(conversation, userId, "STOP_TYPING", targetUserPublicId);
 
         log.debug("用户 {} 在会话 {} 停止打字", userId, conversation.getPublicId());
     }
@@ -124,33 +132,35 @@ public class TypingServiceImpl implements TypingService {
     /**
      * 推送打字事件给会话中的对方用户
      */
-    private void pushTypingEvent(Conversation conversation, Long userId, String eventType) {
-        List<ConversationMember> members = conversationMemberMapper.selectList(new LambdaQueryWrapper<ConversationMember>()
-                .eq(ConversationMember::getConversationId, conversation.getId()));
+    private void pushTypingEvent(Conversation conversation, Long userId, String eventType, String targetUserPublicId) {
+        if (targetUserPublicId == null || targetUserPublicId.isBlank()) {
+            return;
+        }
 
-        // 找到对方用户ID
-        Long peerUserId = members.stream()
-                .map(ConversationMember::getUserId)
-                .filter(peerId -> !peerId.equals(userId))
-                .findFirst()
-                .orElse(null);
+        List<Long> resolvedTargetUserIds = userService.getUserIdsByPublicIds(List.of(targetUserPublicId));
+        if (resolvedTargetUserIds == null || resolvedTargetUserIds.isEmpty()) {
+            return;
+        }
 
-        if (peerUserId != null) {
-            // 构建通知载荷
-            TypingPayload payload = new TypingPayload();
-            payload.setConversationPublicId(conversation.getPublicId());
-            payload.setUserId(userId);
+        Long peerUserId = resolvedTargetUserIds.getFirst();
+        if (peerUserId.equals(userId)) {
+            return;
+        }
 
-            Notification<TypingPayload> notification = Notification.<TypingPayload>builder()
-                    .type(eventType)
-                    .payload(payload)
-                    .build();
+        // 构建通知载荷
+        TypingPayload payload = new TypingPayload();
+        payload.setConversationPublicId(conversation.getPublicId());
+        payload.setUserId(userId);
 
-            try {
-                sseEmitterService.sendToUser(peerUserId, notification);
-            } catch (Exception e) {
-                log.warn("向用户 {} 推送打字事件失败: {}", peerUserId, e.getMessage());
-            }
+        Notification<TypingPayload> notification = Notification.<TypingPayload>builder()
+                .type(eventType)
+                .payload(payload)
+                .build();
+
+        try {
+            sseEmitterService.sendToUser(peerUserId, notification);
+        } catch (Exception e) {
+            log.warn("向用户 {} 推送打字事件失败: {}", peerUserId, e.getMessage());
         }
     }
 

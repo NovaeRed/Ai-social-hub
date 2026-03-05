@@ -68,6 +68,7 @@ public class AiConfigController {
     /**
      * 手动触发 AI 画像初始化（基于历史消息）
      */
+    // TODO 直接历史查询 or 用户自定义消息配置
     @PostMapping("/profiles/init")
     public RestResult<Map<String, String>> initProfiles() {
         Long userId = SecurityContextHolderUtil.getUserId();

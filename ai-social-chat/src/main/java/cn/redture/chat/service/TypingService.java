@@ -1,7 +1,9 @@
 package cn.redture.chat.service;
 
-public interface TypingService {
-    void reportTyping(String conversationPublicId, Long currentUserId);
+import cn.redture.chat.pojo.dto.TypingRequestDTO;
 
-    void stopTyping(String conversationPublicId, Long currentUserId);
+public interface TypingService {
+    void reportTyping(Long currentUserId, TypingRequestDTO typingRequestDTO1);
+
+    void stopTyping(Long currentUserId, TypingRequestDTO typingRequestDTO);
 }

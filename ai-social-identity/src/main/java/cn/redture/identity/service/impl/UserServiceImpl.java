@@ -165,6 +165,7 @@ public class UserServiceImpl implements UserService {
         return userMapper.selectIdsByPublicIds(publicIds);
     }
 
+    // TODO SQL优化，避免回表查询
     @Override
     public boolean isAiAnalysisEnabled(Long userId) {
         User user = userMapper.selectById(userId);

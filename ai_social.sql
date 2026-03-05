@@ -161,7 +161,7 @@ CREATE TABLE schedules
 );
 COMMENT
     ON TABLE schedules IS '日程事件表';
-CREATE INDEX idx_schedules_user_time ON schedules (user_id, start_time);
+CREATE INDEX idx_schedules_user_time ON schedules (user_id, start_time, end_time);
 
 
 -- 9. 异步AI任务追踪表 (ai_tasks)

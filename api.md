@@ -427,7 +427,16 @@ Authorization: Bearer <expired_access_token>
 
 ---
 
-### 4.3.1 `POST /conversations/{conversation_public_id}/typing`
+### 4.3.1 `POST /conversations/typing`
+
+**Request Body**
+
+```json
+{
+  "conversation_public_id": 1234,
+  "target_user_public_id": 1234
+}
+```
 
 **上报当前用户在指定会话中的“正在输入”状态**
 
@@ -736,12 +745,12 @@ es.onmessage = (event) => {
 
 **适用范围：**
 
-- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `POST /conversations/{conversation_public_id}/typing` 将不会产生任何
+- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `POST /conversations/typing` 将不会产生任何
   SSE 事件。
 
 **触发时机：**
 
-- 当某个用户在私聊会话中调用 `POST /conversations/{conversation_public_id}/typing` 上报输入状态（`is_typing = true/false`
+- 当某个用户在私聊会话中调用 `POST /conversations/typing` 上报输入状态（`is_typing = true/false`
   ）时；
 - 服务端会向该会话中的**另一方用户**推送 `TYPING` 事件，上报方自己不会收到该事件。
 
@@ -768,12 +777,12 @@ es.onmessage = (event) => {
 
 **适用范围：**
 
-- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `DELETE /conversations/{conversation_public_id}/typing` 将不会产生任何
+- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `DELETE /conversations/typing` 将不会产生任何
   SSE 事件。
 
 **触发时机：**
 
-- 当某个用户在私聊会话中调用 `DELETE /conversations/{conversation_public_id}/typing` 上报停止输入状态时；
+- 当某个用户在私聊会话中调用 `DELETE /conversations/typing` 上报停止输入状态时；
 - 服务端会向该会话中的**另一方用户**推送 `STOP_TYPING` 事件，上报方自己不会收到该事件。
 
 **事件格式：**
@@ -920,7 +929,11 @@ es.onmessage = (event) => {
   "output_payload": {
     "analysis": {
       "personality": "理性",
-      "traits": ["谨慎", "解决问题导向", "积极主动"],
+      "traits": [
+        "谨慎",
+        "解决问题导向",
+        "积极主动"
+      ],
       "communication_style": "直接而建设性，善于提出具体建议。",
       "interests": []
     }
@@ -1188,6 +1201,7 @@ es.onmessage = (event) => {
 **获取用户AI画像**
 
 **Query Parameters:**
+
 - `profile_type` (string, optional): 画像类型，如 `PERSONA`, `PREFERENCES`。
 
 **Response 200 (Success):**
@@ -1199,7 +1213,10 @@ es.onmessage = (event) => {
       "profile_type": "PERSONA",
       "content": {
         "personality": "理性",
-        "traits": ["谨慎", "解决问题导向"]
+        "traits": [
+          "谨慎",
+          "解决问题导向"
+        ]
       },
       "updated_at": "2025-12-01T10:00:00Z"
     }
@@ -1226,6 +1243,7 @@ es.onmessage = (event) => {
 **获取AI使用统计**
 
 **Query Parameters:**
+
 - `date_from` (string, optional): 开始日期。
 - `date_to` (string, optional): 结束日期。
 - `provider` (string, optional): 提供商。
@@ -1373,8 +1391,8 @@ es.onmessage = (event) => {
 
 **Query Parameters:**
 
-- `start_date` (string, required, format: YYYY-MM-DD)
-- `end_date` (string, required, format: YYYY-MM-DD)
+- `start_time` (string, required, format: ISO8601) - 开始时间（包含）
+- `end_time` (string, required, format: ISO8601) - 结束时间（包含）
 
 **Response 200 (Success):**
 
@@ -1383,9 +1401,12 @@ es.onmessage = (event) => {
   {
     "public_id": "sch_s1t2u3v4",
     "title": "项目复盘会议",
+    "description": "讨论上周项目进展",
     "start_time": "2025-12-05T14:00:00Z",
     "end_time": "2025-12-05T15:00:00Z",
-    "is_ai_extracted": true
+    "location": "会议室A",
+    "is_ai_extracted": true,
+    "source_message_id": 12345
   }
 ]
 ```
@@ -1400,9 +1421,12 @@ es.onmessage = (event) => {
 ```json
 {
   "title": "团队会议",
+  "description": "周会",
   "start_time": "2025-12-05T14:00:00Z",
   "end_time": "2025-12-05T15:00:00Z",
-  "is_ai_extracted": false
+  "location": "线上",
+  "is_ai_extracted": false,
+  "source_message_id": null
 }
 ```
 
@@ -1410,9 +1434,41 @@ es.onmessage = (event) => {
 
 ```json
 {
-  "public_id": "sch_s1t2u3v4"
+  "public_id": "sch_s1t2u3v4",
+  "title": "团队会议"
 }
 ```
+
+### 6.3 `PUT /schedules/{public_id}`
+
+**更新日程信息**
+
+**Request Body:**
+
+```json
+{
+  "title": "更新后的会议标题",
+  "description": "更新后的描述",
+  "start_time": "2025-12-05T15:00:00Z",
+  "end_time": "2025-12-05T16:00:00Z",
+  "location": "会议室B"
+}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "public_id": "sch_s1t2u3v4",
+  "title": "更新后的会议标题"
+}
+```
+
+### 6.4 `DELETE /schedules/{public_id}`
+
+**删除日程**
+
+**Response 204 (No Content):** 无返回内容。
 
 ---
 
