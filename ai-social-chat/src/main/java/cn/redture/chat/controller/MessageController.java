@@ -31,5 +31,4 @@ public class MessageController {
         MessageItemVO vo = messageService.createMessage(conversationPublicId, currentUserId, dto);
         return RestResult.created(vo);
     }
-
 }

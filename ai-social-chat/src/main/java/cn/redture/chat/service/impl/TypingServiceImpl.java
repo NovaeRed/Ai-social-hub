@@ -48,6 +48,7 @@ public class TypingServiceImpl implements TypingService {
         String conversationPublicId = typingRequestDTO == null ? null : typingRequestDTO.getConversationPublicId();
         String targetUserPublicId = typingRequestDTO == null ? null : typingRequestDTO.getTargetUserPublicId();
 
+        // TODO 将逻辑改成直接判断是否存在并返回 Boolean 类型，避免查询整个对象
         Conversation conversation = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
                 .eq(Conversation::getPublicId, conversationPublicId));
 

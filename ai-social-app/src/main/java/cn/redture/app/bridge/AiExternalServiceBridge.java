@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * AI 引擎外部数据服务的桥接实现
+ * AI 引擎调用的外部服务桥接实现，负责将 AI 引擎需要的数据请求转发到对应的服务，并将结果转换成 AI 引擎需要的格式。
  */
 @Service
 @RequiredArgsConstructor
@@ -29,9 +29,43 @@ public class AiExternalServiceBridge implements AiExternalService {
     @Override
     public List<MessageItem> getUserRecentMessages(Long userId, int limit) {
         List<MessageItemVO> messages = messageService.getUserRecentMessages(userId, limit);
+        return convert(messages, userId);
+    }
+
+    @Override
+    public List<MessageItem> getRecentContextMessages(String conversationPublicId, int limit) {
+        List<MessageItemVO> messages = messageService.getRecentContextMessages(conversationPublicId, limit);
+        return convert(messages, null);
+    }
+
+    @Override
+    public List<MessageItem> getMessagesByIds(List<Long> messageIds) {
+        List<MessageItemVO> messages = messageService.getMessagesByIds(messageIds);
+        return convert(messages, null);
+    }
+
+    @Override
+    public List<MessageItem> getUserMessagesInConversation(String conversationPublicId, Long userId, int limit) {
+        List<MessageItemVO> messages = messageService.getUserMessagesInConversation(conversationPublicId, userId, limit);
+        return convert(messages, userId);
+    }
+
+    @Override
+    public List<MessageItem> getUserRecentMessagesForAnalysis(Long userId, int limit) {
+        List<MessageItemVO> messages = messageService.getUserRecentMessagesForAnalysis(userId, limit);
+        return convert(messages, userId);
+    }
+
+    private List<MessageItem> convert(List<MessageItemVO> messages, Long fallbackUserId) {
         return messages.stream().map(m -> {
             MessageItem item = new MessageItem();
-            item.setSender(userId.toString());
+            String sender = null;
+            if (m.getSender() != null && m.getSender().getNickname() != null) {
+                sender = m.getSender().getNickname();
+            } else if (fallbackUserId != null) {
+                sender = fallbackUserId.toString();
+            }
+            item.setSender(sender);
             item.setContent(m.getContent());
             item.setTimestamp(m.getCreatedAt() != null ? m.getCreatedAt().toString() : null);
             return item;

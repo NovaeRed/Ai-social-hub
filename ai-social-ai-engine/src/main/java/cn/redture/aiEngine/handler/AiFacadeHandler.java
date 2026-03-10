@@ -30,8 +30,7 @@ public class AiFacadeHandler {
         this.qwenClient = qwenClient;
     }
 
-    public Flux<String> executeTaskStream(Long userId, AiTaskType taskType, Map<String, Object> params,
-                                          AiProvider provider) {
+    public Flux<String> executeTaskStream(Long userId, AiTaskType taskType, Map<String, Object> params, AiProvider provider) {
         log.debug("Execute stream task: userId={}, taskType={}, provider={}", userId, taskType, provider);
 
         String prompt = buildPrompt(taskType, params);

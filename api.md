@@ -4,7 +4,7 @@
 
 **Base URL:** `https://api.ai-social.com/`
 
-**Last Updated:** 2025-11-23
+**Last Updated:** 2026-03-09
 
 **Architecture Overview:**
 
@@ -955,10 +955,14 @@ es.onmessage = (event) => {
 
 ### 5.5 `POST /api/v1/ai/tasks/personality-analysis`
 
-**Request Body (性格分析):**
+**Request Body (性格分析，支持两种模式):**
+
+- 两步模式（隐私优先）：前端先调用 `GET /api/v1/ai/tasks/message-candidates` 获取候选消息，再传 `messages` 或 `selected_message_ids`。
+- 一体化模式（易用优先）：不传 `messages` 与 `selected_message_ids`，后端自动取当前用户最近 50 条消息。
 
 ```json5
 {
+  // 模式1: 直接传消息对象（两步模式）
   "messages": [
     {
       "sender": "user1",
@@ -976,6 +980,14 @@ es.onmessage = (event) => {
       "timestamp": "2025-12-01T09:10:00Z"
     }
   ],
+
+  // 模式2: 仅传消息ID（推荐，后端按ID查询）
+  "selected_message_ids": [
+    101,
+    102,
+    103
+  ],
+
   "target_user_id": "user1",
   "analysis_config": {
     "dimensions": [
@@ -1003,13 +1015,47 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.6 `POST /api/v1/ai/tasks/smart-reply`
+---
 
-**Request Body (智能回复建议):**
+### 5.6 `GET /api/v1/ai/tasks/message-candidates`
+
+**获取可供用户显式选择的消息样本（用于 Persona Analysis / Custom Summary）**
+
+**Query Parameters:**
+
+- `conversation_public_id` (string, optional): 指定会话时，仅返回当前用户在该会话内的消息样本。
+- `limit` (int, optional, default: 100): 候选消息条数上限。
+
+**Response 200 (Success):**
+
+```json
+{
+  "items": [
+    {
+      "sender": "张三",
+      "content": "我建议先做灰度发布。",
+      "timestamp": "2025-12-01T09:00:00Z"
+    },
+    {
+      "sender": "张三",
+      "content": "上线前要补充监控告警。",
+      "timestamp": "2025-12-01T09:05:00Z"
+    }
+  ]
+}
+```
+
+### 5.7 `POST /api/v1/ai/tasks/smart-reply`
+
+**Request Body (智能回复建议，支持两种模式):**
+
+- 一体化模式：传 `message + conversation_public_id`，后端自动拉取最近 10 条上下文。
+- 两步模式：前端自行准备 `conversation_history` 并传入。
 
 ```json
 {
   "message": "明天的会议你参加吗？",
+  "conversation_public_id": "conv_a1b2c3d4",
   "conversation_history": [
     {
       "sender": "user1",
@@ -1029,25 +1075,36 @@ es.onmessage = (event) => {
 }
 ```
 
-**Response 200 (Success):**
+**Response 200 (Success, SSE流):**
 
-```json
-{
-  "output": [
-    "我会参加的，需要准备什么材料吗？",
-    "好的，会议几点开始？",
-    "我可能需要请假，有其他安排。"
-  ]
-}
+`Content-Type: text/event-stream`
+
+```text
+data: {"type":"STREAM","content":"我会参加的"}
+data: {"type":"STREAM","content":"，需要准备什么材料吗？"}
+data: {"type":"COMPLETE"}
 ```
 
-### 5.7 `POST /api/v1/ai/tasks/summarize`
+### 5.8 `POST /api/v1/ai/tasks/summarize`
 
-**Request Body (内容总结):**
+**Request Body (内容总结，支持两种模式):**
+
+- 一体化模式：
+- 传 `conversation_public_id`（后端自动取最近 50 条）
+- 或传 `selected_message_ids`（后端按ID取消息并拼接内容）
+- 两步模式：前端直接传 `content`
 
 ```json5
 {
+  // 模式1: 直接传 content（两步模式）
   "content": "今天的会议主要讨论了项目进展和下一步计划。有人认为需要加快开发进度，同时也要注意质量控制。最后决定在下周召开一次全体会议，确保所有成员都了解最新情况。",
+
+  // 模式2: 仅传会话ID（后端自动取最近50条消息）
+  "conversation_public_id": "conv_a1b2c3d4",
+
+  // 模式3: 仅传消息ID（后端按ID查询）
+  "selected_message_ids": [101, 102, 103],
+
   "summary_type": "meeting",
   // meeting, chat, article, email
   "target_length": "short",
@@ -1064,24 +1121,17 @@ es.onmessage = (event) => {
 }
 ```
 
-**Response 200 (Success):**
+**Response 200 (Success, SSE流):**
 
-```json
-{
-  "summary": "会议主要内容总结...",
-  "key_points": [
-    "要点1",
-    "要点2",
-    "要点3"
-  ],
-  "action_items": [
-    "行动项1",
-    "行动项2"
-  ]
-}
+`Content-Type: text/event-stream`
+
+```text
+data: {"type":"STREAM","content":"会议主要内容总结..."}
+data: {"type":"STREAM","content":"要点1: ..."}
+data: {"type":"COMPLETE"}
 ```
 
-### 5.8 `POST /api/v1/ai/tasks/translate`
+### 5.9 `POST /api/v1/ai/tasks/translate`
 
 **Request Body (智能翻译):**
 
@@ -1107,7 +1157,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.9 `GET /api/v1/ai/models`
+### 5.10 `GET /api/v1/ai/models`
 
 **获取可用AI模型列表**
 
@@ -1149,7 +1199,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.10 `POST /api/v1/ai/config`
+### 5.11 `POST /api/v1/ai/config`
 
 **设置用户AI配置**
 
@@ -1178,7 +1228,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.11 `GET /api/v1/ai/config`
+### 5.12 `GET /api/v1/ai/config`
 
 **获取用户AI配置**
 
@@ -1196,7 +1246,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.12 `GET /api/v1/ai/profiles`
+### 5.13 `GET /api/v1/ai/profiles`
 
 **获取用户AI画像**
 
@@ -1224,7 +1274,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.13 `POST /api/v1/ai/profiles/init`
+### 5.14 `POST /api/v1/ai/profiles/init`
 
 **手动触发 AI 画像初始化**
 
@@ -1238,7 +1288,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.14 `GET /api/v1/ai/usage`
+### 5.15 `GET /api/v1/ai/usage`
 
 **获取AI使用统计**
 
@@ -1273,7 +1323,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.10 `GET /ai/config`
+### 5.16 `GET /ai/config`
 
 **获取用户AI配置**
 
@@ -1300,7 +1350,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.11 `GET /ai/profiles`
+### 5.17 `GET /ai/profiles`
 
 **获取用户AI画像**
 
@@ -1339,7 +1389,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.12 `GET /ai/usage`
+### 5.18 `GET /ai/usage`
 
 **获取AI使用统计**
 

@@ -2,12 +2,14 @@ package cn.redture.aiEngine.controller;
 
 import cn.redture.aiEngine.pojo.dto.*;
 import cn.redture.aiEngine.pojo.vo.*;
+import cn.redture.aiEngine.service.AiExternalService;
 import cn.redture.aiEngine.service.AiInteractionService;
 import cn.redture.aiEngine.service.AiTaskService;
 import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.pojo.model.RestResult;
 import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
+import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -16,6 +18,10 @@ import reactor.core.publisher.Flux;
 
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
 import cn.redture.aiEngine.pojo.enums.AiTaskStatus;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
 
 /**
  * AI任务控制器
@@ -28,6 +34,7 @@ public class AiTaskController {
 
     private final AiInteractionService aiInteractionService;
     private final AiTaskService aiTaskService;
+    private final AiExternalService aiExternalService;
 
     /**
      * 文本润色（流式）
@@ -62,6 +69,14 @@ public class AiTaskController {
     @PostMapping(value = "/smart-reply", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<StreamOutputVO> smartReply(@RequestBody SmartReplyRequest request) {
         Long userId = SecurityContextHolderUtil.getUserId();
+
+        if ((request.getConversationHistory() == null || request.getConversationHistory().isEmpty())
+                && request.getConversationPublicId() != null
+                && !request.getConversationPublicId().isBlank()) {
+            List<MessageItem> contextMessages = aiExternalService.getRecentContextMessages(request.getConversationPublicId(), 10);
+            request.setConversationHistory(toHistoryMessages(contextMessages));
+        }
+
         return aiInteractionService.smartReplyStream(userId, request);
     }
 
@@ -71,7 +86,41 @@ public class AiTaskController {
     @PostMapping(value = "/summarize", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<StreamOutputVO> summarize(@RequestBody SummarizeRequest request) {
         Long userId = SecurityContextHolderUtil.getUserId();
+
+        if (request.getContent() == null || request.getContent().isBlank()) {
+            List<MessageItem> sourceMessages;
+
+            if (request.getSelectedMessageIds() != null && !request.getSelectedMessageIds().isEmpty()) {
+                sourceMessages = aiExternalService.getMessagesByIds(request.getSelectedMessageIds());
+            } else if (request.getConversationPublicId() != null && !request.getConversationPublicId().isBlank()) {
+                sourceMessages = aiExternalService.getRecentContextMessages(request.getConversationPublicId(), 50);
+            } else {
+                throw new InvalidInputException("缺少可总结内容: content 或 conversation_public_id 或 selected_message_ids 至少提供一个");
+            }
+
+            request.setContent(formatMessagesToText(sourceMessages));
+        }
+
         return aiInteractionService.summarizeStream(userId, request);
+    }
+
+    /**
+     * 获取可供用户显式选择的消息样本（用于 Persona Analysis / Custom Summary）
+     */
+    @GetMapping("/message-candidates")
+    public RestResult<Map<String, List<MessageItem>>> getMessageCandidates(
+            @RequestParam(value = "conversation_public_id", required = false) String conversationPublicId,
+            @RequestParam(value = "limit", defaultValue = "100") Integer limit) {
+        Long userId = SecurityContextHolderUtil.getUserId();
+        List<MessageItem> items;
+
+        if (conversationPublicId != null && !conversationPublicId.isBlank()) {
+            items = aiExternalService.getUserMessagesInConversation(conversationPublicId, userId, limit);
+        } else {
+            items = aiExternalService.getUserRecentMessagesForAnalysis(userId, limit);
+        }
+
+        return RestResult.success(Map.of("items", items));
     }
 
     /**
@@ -122,5 +171,36 @@ public class AiTaskController {
     public RestResult<PersonaAnalysisVO> analyzePersona(@RequestBody PersonaAnalysisRequest request) {
         Long userId = SecurityContextHolderUtil.getUserId();
         return RestResult.accepted(aiInteractionService.analyzePersonaAsync(userId, request));
+    }
+
+    private List<SmartReplyRequest.HistoryMessage> toHistoryMessages(List<MessageItem> messages) {
+        return messages.stream().map(m -> {
+            SmartReplyRequest.HistoryMessage h = new SmartReplyRequest.HistoryMessage();
+            h.setSender(m.getSender());
+            h.setContent(m.getContent());
+            h.setTimestamp(parseTimestamp(m.getTimestamp()));
+            return h;
+        }).toList();
+    }
+
+    private String formatMessagesToText(List<MessageItem> messages) {
+        StringBuilder sb = new StringBuilder();
+        for (MessageItem msg : messages) {
+            String sender = msg.getSender() == null || msg.getSender().isBlank() ? "未知用户" : msg.getSender();
+            String content = msg.getContent() == null ? "" : msg.getContent();
+            sb.append(sender).append(": ").append(content).append("\n");
+        }
+        return sb.toString();
+    }
+
+    private OffsetDateTime parseTimestamp(String timestamp) {
+        if (timestamp == null || timestamp.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(timestamp);
+        } catch (Exception ignore) {
+            return null;
+        }
     }
 }

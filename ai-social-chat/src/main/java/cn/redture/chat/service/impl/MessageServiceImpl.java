@@ -147,4 +147,150 @@ public class MessageServiceImpl implements MessageService {
                 .map(MessageConverter.INSTANCE::toMessageItemVO)
                 .toList();
     }
+
+    /**
+     * 获取会话最近的上文消息 (用于 Smart Reply)
+     * 用于生成 AI 响应建议时的上下文
+     *
+     * @param conversationId 会话ID
+     * @param limit          消息数量
+     * @return 消息VO列表（按时间逆序）
+     */
+    @Override
+    public List<MessageItemVO> getRecentContextMessages(Long conversationId, int limit) {
+        try {
+            // 查询最近的消息（按时间倒序）
+            List<Message> messages = messageMapper.selectRecentMessages(conversationId, limit);
+            
+            log.info("获取会话 {} 的最近 {} 条上下文消息，实际获取 {} 条", conversationId, limit, messages.size());
+            
+            if (messages.isEmpty()) {
+                log.warn("会话 {} 没有消息上下文", conversationId);
+                return List.of();
+            }
+            
+            return messages.stream()
+                    .map(MessageConverter.INSTANCE::toMessageItemVO)
+                    .toList();
+        } catch (Exception e) {
+            log.error("获取上下文消息时出错，会话ID: {}", conversationId, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * 获取会话最近的上文消息 (用于 Smart Reply) - 按公开ID
+     * 用于生成 AI 响应建议时的上下文
+     *
+     * @param conversationPublicId 会话公开ID
+     * @param limit                消息数量
+     * @return 消息VO列表（按时间逆序）
+     */
+    @Override
+    public List<MessageItemVO> getRecentContextMessages(String conversationPublicId, int limit) {
+        try {
+            // 1. 按 publicId 查询会话
+            Conversation conv = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
+                    .eq(Conversation::getPublicId, conversationPublicId));
+            
+            if (conv == null) {
+                log.warn("会话不存在：{}", conversationPublicId);
+                return List.of();
+            }
+            
+            // 2. 按会话ID查询消息
+            return getRecentContextMessages(conv.getId(), limit);
+        } catch (Exception e) {
+            log.error("获取会话 {} 的上下文消息时出错", conversationPublicId, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * 按消息ID列表查询消息 (用于 Persona Analysis)
+     * 获取用户明确选择的消息
+     *
+     * @param messageIds 消息ID列表
+     * @return 消息VO列表
+     */
+    @Override
+    public List<MessageItemVO> getMessagesByIds(List<Long> messageIds) {
+        try {
+            if (messageIds == null || messageIds.isEmpty()) {
+                log.warn("消息ID列表为空");
+                return List.of();
+            }
+            
+            // 将 List<Long> 转换为逗号分隔的字符串用于 SQL IN 子句
+            String ids = messageIds.stream()
+                    .map(String::valueOf)
+                    .reduce((a, b) -> a + "," + b)
+                    .orElse("");
+            
+            List<Message> messages = messageMapper.selectByIds(ids);
+            log.info("查询 {} 条指定消息，实际获取 {} 条", messageIds.size(), messages.size());
+            
+            return messages.stream()
+                    .map(MessageConverter.INSTANCE::toMessageItemVO)
+                    .toList();
+        } catch (Exception e) {
+            log.error("查询指定消息时出错，消息IDs: {}", messageIds, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * 获取用户在特定会话中的消息 (用于 Persona Analysis 展示列表)
+     * 用于让用户选择要分析的消息
+     *
+     * @param conversationPublicId 会话公开ID
+     * @param userId               用户ID
+     * @param limit                消息数量
+     * @return 消息VO列表（按时间倒序，最新的在前）
+     */
+    @Override
+    public List<MessageItemVO> getUserMessagesInConversation(String conversationPublicId, Long userId, int limit) {
+        try {
+            Conversation conv = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
+                    .eq(Conversation::getPublicId, conversationPublicId));
+
+            if (conv == null) {
+                log.error("会话不存在：{}", conversationPublicId);
+                return List.of();
+            }
+
+            List<Message> messages = messageMapper.selectByConversationAndUser(conv.getId(), userId, limit);
+            log.info("获取用户 {} 在会话 {} 中的 {} 条消息，实际获取 {} 条", userId, conv.getId(), limit, messages.size());
+
+            return messages.stream()
+                    .map(MessageConverter.INSTANCE::toMessageItemVO)
+                    .toList();
+        } catch (Exception e) {
+            log.error("获取用户消息时出错，用户ID: {}，会话公开ID: {}", userId, conversationPublicId, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * 获取用户最近的消息（跨会话）(用于 Persona Analysis 隐私模式)
+     * 从用户的最近消息中进行采样分析
+     *
+     * @param userId 用户ID
+     * @param limit  消息数量
+     * @return 消息VO列表
+     */
+    @Override
+    public List<MessageItemVO> getUserRecentMessagesForAnalysis(Long userId, int limit) {
+        try {
+            List<Message> messages = messageMapper.selectByUserId(userId, limit);
+            log.info("获取用户 {} 的最近 {} 条消息用于分析，实际获取 {} 条", userId, limit, messages.size());
+            
+            return messages.stream()
+                    .map(MessageConverter.INSTANCE::toMessageItemVO)
+                    .toList();
+        } catch (Exception e) {
+            log.error("获取用户最近消息时出错，用户ID: {}", userId, e);
+            return List.of();
+        }
+    }
 }

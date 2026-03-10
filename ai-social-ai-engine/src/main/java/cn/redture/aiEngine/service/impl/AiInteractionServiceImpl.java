@@ -15,6 +15,7 @@ import cn.redture.aiEngine.pojo.vo.StreamOutputVO;
 import cn.redture.aiEngine.service.AiExternalService;
 import cn.redture.aiEngine.service.AiInteractionService;
 import cn.redture.aiEngine.service.AiTaskService;
+import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.exception.JsonException;
 import cn.redture.common.util.JsonUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -73,16 +74,32 @@ public class AiInteractionServiceImpl implements AiInteractionService {
 
     @Override
     public Flux<StreamOutputVO> smartReplyStream(Long userId, SmartReplyRequest request) {
-        log.info("Smart reply request from user: {}", userId);
+
+        log.info("Smart reply request from user: {}, conversation: {}", userId, request.getConversationPublicId());
+
         Map<String, Object> params = new HashMap<>();
         params.put("message", request.getMessage());
-        params.put("conversation_history", request.getConversationHistory());
+
+        // 获取对话历史作为上下文
+        // 优先使用请求中提供的历史（如果已经提供）
+        // 否则后端会在AiFacadeHandler中从数据库自动选取
+        if (request.getConversationHistory() != null && !request.getConversationHistory().isEmpty()) {
+            params.put("conversation_history", request.getConversationHistory());
+            log.debug("Using provided conversation history with {} messages", request.getConversationHistory().size());
+        } else if (request.getConversationPublicId() != null) {
+            // 标记需要从数据库自动选择上下文
+            // Controller 或其他调用者应该在此之前已经设置了上下文
+            log.debug("Conversation context will be handled by Controller auto-selection");
+            params.put("conversation_public_id", request.getConversationPublicId());
+        }
+
         if (request.getUserProfile() != null) {
             params.put("user_profile", request.getUserProfile());
         }
         if (request.getOverrideConfig() != null) {
             params.put("override_config", request.getOverrideConfig());
         }
+
         return executeStreamTask(userId, AiTaskType.SMART_REPLY, params, "reply");
     }
 
@@ -91,14 +108,20 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         log.info("Summarize request from user: {}", userId);
         Map<String, Object> params = new HashMap<>();
         params.put("content", request.getContent());
-        params.put("summary_type", request.getSummaryType());
-        params.put("target_length", request.getTargetLength());
-        if (request.getKeywords() != null) {
+        params.put("summary_type", request.getSummaryType() != null ? request.getSummaryType() : "general");
+        params.put("target_length", request.getTargetLength() != null ? request.getTargetLength() : "medium");
+
+        if (request.getKeywords() != null && !request.getKeywords().isEmpty()) {
             params.put("keywords", request.getKeywords());
         }
         if (request.getOverrideConfig() != null) {
             params.put("override_config", request.getOverrideConfig());
         }
+
+        log.debug("Summarize content length: {}, type: {}",
+                request.getContent() != null ? request.getContent().length() : 0,
+                request.getSummaryType());
+
         return executeStreamTask(userId, AiTaskType.CHAT_SUMMARY, params, "summary");
     }
 
@@ -152,8 +175,28 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         }
 
         Map<String, Object> params = new HashMap<>();
-        params.put("messages", request.getMessages());
-        params.put("target_user_id", request.getTargetUserId());
+
+        // 支持两种方式提供消息：
+        // 1. 显式传 messages（两步式）
+        // 2. 传 selected_message_ids 或走后端自动兜底（一体化）
+        List<MessageItem> messages = request.getMessages();
+        if (messages == null || messages.isEmpty()) {
+            if (request.getSelectedMessageIds() != null && !request.getSelectedMessageIds().isEmpty()) {
+                messages = aiExternalService.getMessagesByIds(request.getSelectedMessageIds());
+                log.debug("Resolved {} messages from selected_message_ids", messages.size());
+            } else {
+                messages = aiExternalService.getUserRecentMessagesForAnalysis(userId, 50);
+                log.debug("Resolved {} recent messages for persona analysis", messages.size());
+            }
+        }
+
+        if (messages == null || messages.isEmpty()) {
+            throw new InvalidInputException("缺少可分析的消息内容");
+        }
+
+        params.put("messages", messages);
+        params.put("target_user_id", request.getTargetUserId() != null ? request.getTargetUserId() : userId.toString());
+
         if (request.getAnalysisConfig() != null) {
             params.put("analysis_config", request.getAnalysisConfig());
         }
@@ -182,6 +225,8 @@ public class AiInteractionServiceImpl implements AiInteractionService {
 
                                 // 保存性格分析结果到用户画像
                                 savePersonaAnalysis(userId, result);
+
+                                log.info("Persona analysis completed for user: {}, task: {}", userId, task.getPublicId());
                             } catch (Exception e) {
                                 log.error("Failed to update task result", e);
                             }
@@ -196,9 +241,9 @@ public class AiInteractionServiceImpl implements AiInteractionService {
                         }
                 );
 
-        return PersonaAnalysisVO.builder()
-                .taskPublicId(task.getPublicId())
-                .build();
+        PersonaAnalysisVO vo = new PersonaAnalysisVO();
+        vo.setTaskPublicId(task.getPublicId());
+        return vo;
     }
 
     @Override

@@ -34,4 +34,16 @@ public class SummarizeRequest extends BaseAiTaskRequest {
      * 关键词列表
      */
     private List<String> keywords;
+
+    /**
+     * 会话公开ID（未直接提供 content 时可用于自动选取最近消息）
+     */
+    @JsonProperty("conversation_public_id")
+    private String conversationPublicId;
+
+    /**
+     * 用户显式选择的消息ID列表（优先于 conversation_public_id）
+     */
+    @JsonProperty("selected_message_ids")
+    private List<Long> selectedMessageIds;
 }

@@ -135,8 +135,8 @@ public class AiConfigServiceImpl implements AiConfigService {
 
     @Override
     public AiUsageVO getUsageStats(Long userId, String dateFrom, String dateTo, String provider) {
-        java.time.LocalDate from = dateFrom != null ? java.time.LocalDate.parse(dateFrom) : java.time.LocalDate.now().minusDays(30);
-        java.time.LocalDate to = dateTo != null ? java.time.LocalDate.parse(dateTo) : java.time.LocalDate.now();
+        LocalDate from = dateFrom != null ? LocalDate.parse(dateFrom) : LocalDate.now().minusDays(30);
+        LocalDate to = dateTo != null ? LocalDate.parse(dateTo) : LocalDate.now();
 
         UsageSummaryVO summary = aiUsageStatsMapper.getUsageSummary(userId, from);
         if (summary != null) {
