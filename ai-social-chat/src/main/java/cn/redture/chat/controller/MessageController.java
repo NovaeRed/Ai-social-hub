@@ -3,6 +3,7 @@ package cn.redture.chat.controller;
 import cn.redture.chat.pojo.dto.CreateMessageDTO;
 import cn.redture.chat.pojo.vo.MessageItemVO;
 import cn.redture.chat.service.MessageService;
+import cn.redture.chat.service.MessageWriteGuardService;
 import cn.redture.common.pojo.model.RestResult;
 import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
@@ -16,6 +17,9 @@ public class MessageController {
     @Resource
     private MessageService messageService;
 
+    @Resource
+    private MessageWriteGuardService messageWriteGuardService;
+
     @GetMapping
     public RestResult<CursorPageResult<MessageItemVO>> listMessages(@PathVariable("conversation_public_id") String conversationPublicId,
                                                                     @RequestParam(value = "before_message_id", required = false) Long beforeMessageId,
@@ -28,7 +32,7 @@ public class MessageController {
     public RestResult<MessageItemVO> createMessage(@PathVariable("conversation_public_id") String conversationPublicId,
                                                    @RequestBody CreateMessageDTO dto) {
         Long currentUserId = SecurityContextHolderUtil.getUserId();
-        MessageItemVO vo = messageService.createMessage(conversationPublicId, currentUserId, dto);
+        MessageItemVO vo = messageWriteGuardService.createMessage(conversationPublicId, currentUserId, dto);
         return RestResult.created(vo);
     }
 }

@@ -52,6 +52,8 @@
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <!-- Lombok-mapstruct-binding -->
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
+        <!-- Sentinel -->
+        <sentinel.version>1.8.8</sentinel.version>
     </properties>
 
     <dependencyManagement>
@@ -140,6 +142,12 @@
                 <groupId>org.mapstruct</groupId>
                 <artifactId>mapstruct</artifactId>
                 <version>${mapstruct.version}</version>
+            </dependency>
+            <!-- Sentinel -->
+            <dependency>
+                <groupId>com.alibaba.csp</groupId>
+                <artifactId>sentinel-core</artifactId>
+                <version>${sentinel.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.mapstruct</groupId>

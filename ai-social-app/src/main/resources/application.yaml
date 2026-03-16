@@ -20,6 +20,7 @@ spring:
           time-between-eviction-runs: 10s
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
+      
   # Spring AI Alibaba (Qwen)
   ai:
     dashscope:
@@ -38,11 +39,8 @@ logging:
 
 ai:
   persona:
-    executor:
-      threadNamePrefix: ai-persona-
-      corePoolSize: 4
-      maxPoolSize: 8
-      queueCapacity: 100
+    consumer:
+      enabled: true
 
   # Qwen配置
   qwen:
@@ -55,3 +53,54 @@ jwt:
   secret: ai-social-project-secret-key-for-jwt-authentication-hs256-20240520
   access_token_expiration: 900 # 15 minutes in seconds
   refresh_token_expiration_seconds: 604800 # 7 days in seconds
+
+app:
+  security:
+    entry-rate-limit:
+      enabled: true
+      exclude-patterns:
+        - /error
+      default-rule:
+        name: global-baseline
+        pattern: /**
+        max-requests: 300
+        window-seconds: 60
+        strategy: IP
+      rules:
+        - name: auth-login
+          pattern: /auth/login
+          max-requests: 10
+          window-seconds: 60
+          strategy: IP
+        - name: auth-register
+          pattern: /auth/register
+          max-requests: 10
+          window-seconds: 60
+          strategy: IP
+        - name: chat-create-message
+          pattern: /conversations/*/messages
+          max-requests: 60
+          window-seconds: 60
+          strategy: USER_OR_IP
+        - name: ai-task-write
+          pattern: /api/v1/ai/tasks/*
+          max-requests: 10
+          window-seconds: 60
+          strategy: USER_OR_IP
+  resilience:
+    sentinel:
+      enabled: true
+      flow-rules:
+        # 全局轻限流，作为系统保护阈值
+        - resource: chat:message:create
+          grade: 1
+          count: 20
+          control-behavior: 0
+      degrade-rules:
+        # 核心接口熔断，先采用异常比例策略
+        - resource: chat:message:create
+          grade: 1
+          count: 0.5
+          time-window: 10
+          min-request-amount: 20
+          stat-interval-ms: 60000

@@ -1,8 +1,7 @@
 package cn.redture.gateway.config;
 
-import cn.redture.common.util.JwtUtil;
 import cn.redture.gateway.security.JwtAuthenticationFilter;
-import jakarta.annotation.Resource;
+import cn.redture.gateway.security.ratelimit.EntryRateLimitFilter;
 import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,12 +23,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Bean
-    public JwtAuthenticationFilter jwtAuthenticationFilter() {
-        return new JwtAuthenticationFilter();
-    }
-
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           EntryRateLimitFilter entryRateLimitFilter,
+                                           JwtAuthenticationFilter jwtFilter) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable) // 前后端分离，关闭 CSRF
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -43,7 +39,8 @@ public class SecurityConfig {
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                    .addFilterBefore(entryRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
+                    .addFilterAfter(jwtFilter, EntryRateLimitFilter.class)
                 .httpBasic(AbstractHttpConfigurer::disable) // 禁用 Basic Auth
                 .formLogin(AbstractHttpConfigurer::disable); // 禁用表单登录
 

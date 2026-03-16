@@ -5,6 +5,7 @@ package cn.redture.aiEngine.pojo.enums;
  */
 public enum AiPersonaTaskType {
     AI_PERSONA_INIT,
-    AI_PERSONA_AUTH_DISABLED
+    AI_PERSONA_AUTH_DISABLED,
+    AI_PERSONA_CLEAR
 }
 

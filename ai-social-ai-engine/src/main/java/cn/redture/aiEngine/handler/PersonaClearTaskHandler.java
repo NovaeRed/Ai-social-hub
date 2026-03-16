@@ -7,12 +7,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 处理关闭 AI 画像授权任务（AI_PERSONA_AUTH_DISABLED）。
+ * 处理手动清除 AI 画像任务（AI_PERSONA_CLEAR）。
  */
 @Slf4j
-@Component("AI_PERSONA_AUTH_DISABLED")
+@Component("AI_PERSONA_CLEAR")
 @RequiredArgsConstructor
-public class AuthDisabledTaskHandler implements AiPersonaTaskHandler {
+public class PersonaClearTaskHandler implements AiPersonaTaskHandler {
 
     private final AiConfigService aiConfigService;
 
@@ -21,11 +21,11 @@ public class AuthDisabledTaskHandler implements AiPersonaTaskHandler {
         if (task == null || task.getUserId() == null) {
             return;
         }
-        log.info("[AI_PERSONA_AUTH_DISABLED] 用户 {} 关闭 AI 画像授权", task.getUserId());
+        log.info("[AI_PERSONA_CLEAR] 用户 {} 手动清除 AI 画像", task.getUserId());
         try {
             aiConfigService.clearPersonaByUserId(task.getUserId());
         } catch (Exception e) {
-            log.error("[AI_PERSONA_AUTH_DISABLED] 用户 {} 画像禁用失败", task.getUserId(), e);
+            log.error("[AI_PERSONA_CLEAR] 用户 {} 清除画像失败", task.getUserId(), e);
         }
     }
 }

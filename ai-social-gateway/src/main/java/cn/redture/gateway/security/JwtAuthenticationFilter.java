@@ -10,6 +10,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.core.annotation.Order;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -38,9 +39,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private HandlerExceptionResolver handlerExceptionResolver;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain chain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String path = request.getRequestURI();
         String token = resolveToken(request);
 
@@ -80,6 +79,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     /**
      * 验证令牌，如果无效则抛出相应的异常
+     *
      * @param token 令牌
      */
     private void validateToken(String token) {

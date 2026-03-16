@@ -101,6 +101,12 @@
             <version>3.5.17</version>
             <scope>compile</scope>
         </dependency>
+
+        <!-- Sentinel -->
+        <dependency>
+            <groupId>com.alibaba.csp</groupId>
+            <artifactId>sentinel-core</artifactId>
+        </dependency>
     </dependencies>
 
 

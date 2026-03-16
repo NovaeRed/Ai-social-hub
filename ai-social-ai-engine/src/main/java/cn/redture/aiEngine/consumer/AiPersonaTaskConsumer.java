@@ -9,7 +9,6 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -26,9 +25,6 @@ public class AiPersonaTaskConsumer {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
-
-    @Resource
-    private ThreadPoolTaskExecutor aiPersonaTaskExecutor;
 
     @Resource
     private AiPersonaTaskHandlerRegistry handlerRegistry;
@@ -67,7 +63,8 @@ public class AiPersonaTaskConsumer {
                 }
 
                 AiPersonaTaskDTO task = JsonUtil.fromJson(taskJson, AiPersonaTaskDTO.class);
-                aiPersonaTaskExecutor.submit(() -> handlerRegistry.dispatch(task));
+                // 串行执行，避免为低频开关类任务引入额外线程池复杂度。
+                handlerRegistry.dispatch(task);
             } catch (Exception e) {
                 log.error("消费 AI 画像任务时发生异常", e);
             }

@@ -157,28 +157,36 @@ public class AiConfigServiceImpl implements AiConfigService {
     @Override
     public void onAiAnalysisToggled(Long userId, boolean enabled) {
         if (!enabled) {
-            // 仅在关闭时投递清理任务，开启时不自动初始化，改为由用户手动触发
-            AiPersonaTaskDTO task = new AiPersonaTaskDTO();
-            task.setUserId(userId);
-            task.setType(AiPersonaTaskType.AI_PERSONA_AUTH_DISABLED);
-
-            String taskJson = JsonUtil.toJson(task);
-            stringRedisTemplate.opsForList().leftPush(PERSONA_TASK_QUEUE_KEY, taskJson);
-            log.info("用户 {} 关闭了 AI 画像分析，已投递清理任务", userId);
-        } else {
-            log.info("用户 {} 开启了 AI 画像分析，等待用户手动触发初始化", userId);
+            enqueuePersonaTask(userId, AiPersonaTaskType.AI_PERSONA_AUTH_DISABLED);
+            log.info("用户 {} 关闭 AI 画像授权，已投递异步清理任务", userId);
+            return;
         }
+        log.info("用户 {} 开启 AI 画像授权，等待后续时间线触发分析", userId);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void clearPersonaByUserId(Long userId) {
-        int vectors = userAiContextMapper.deleteVectorsByUserId(userId);
-        int contexts = userAiContextMapper.deleteContextsByUserId(userId);
+        int embeddings = userAiContextMapper.clearEmbeddingByUserId(userId);
+        int profiles = userAiContextMapper.deleteProfilesByUserId(userId);
 
         String personaCacheKey = "ai:persona:" + userId;
         stringRedisTemplate.delete(personaCacheKey);
 
-        log.debug("清除用户 {} 的 AI 画像数据完成，contexts={}, vectors={}", userId, contexts, vectors);
+        log.debug("清除用户 {} 的 AI 画像数据完成，profiles={}, embeddings={}", userId, profiles, embeddings);
+    }
+
+    @Override
+    public void clearPersonaByUserIdAsync(Long userId) {
+        enqueuePersonaTask(userId, AiPersonaTaskType.AI_PERSONA_CLEAR);
+        log.info("用户 {} 发起手动清除画像，已投递异步任务", userId);
+    }
+
+    private void enqueuePersonaTask(Long userId, AiPersonaTaskType taskType) {
+        AiPersonaTaskDTO task = new AiPersonaTaskDTO();
+        task.setUserId(userId);
+        task.setType(taskType);
+        String taskJson = JsonUtil.toJson(task);
+        stringRedisTemplate.opsForList().leftPush(PERSONA_TASK_QUEUE_KEY, taskJson);
     }
 }

@@ -176,6 +176,16 @@ public class RestResult<T> {
     }
 
     /**
+     * 限流 (429 Too Many Requests)
+     *
+     * @param message 错误信息
+     * @return RestResult 实例
+     */
+    public static <T> RestResult<T> tooManyRequests(String message) {
+        return error(HttpStatus.TOO_MANY_REQUESTS, message);
+    }
+
+    /**
      * 服务器内部错误 (500 Internal Server Error)
      *
      * @param message 错误信息
@@ -183,5 +193,15 @@ public class RestResult<T> {
      */
     public static <T> RestResult<T> internalError(String message) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, message);
+    }
+
+    /**
+     * 熔断器触发 (503 Service Unavailable)
+     *
+     * @param message 错误信息
+     * @return RestResult 实例
+     */
+    public static <T> RestResult<T> serviceUnavailable(String message) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, message);
     }
 }

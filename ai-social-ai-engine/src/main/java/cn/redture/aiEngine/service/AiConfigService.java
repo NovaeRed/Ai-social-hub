@@ -66,9 +66,16 @@ public interface AiConfigService {
     void onAiAnalysisToggled(Long userId, boolean enabled);
 
     /**
-     * 清除指定用户的 AI 画像（user_ai_contexts & user_ai_vectors 等）及相关缓存。
+     * 清除指定用户的 AI 画像（user_ai_profiles）及相关缓存。
      *
      * @param userId 内部用户ID
      */
     void clearPersonaByUserId(Long userId);
+
+    /**
+     * 异步清除指定用户的 AI 画像，调用方只负责投递任务。
+     *
+     * @param userId 内部用户ID
+     */
+    void clearPersonaByUserIdAsync(Long userId);
 }

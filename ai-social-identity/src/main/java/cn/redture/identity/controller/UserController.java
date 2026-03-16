@@ -35,8 +35,8 @@ public class UserController {
     @DeleteMapping("/me/ai-persona")
     public RestResult<Void> clearAiPersona() {
         Long userId = SecurityContextHolderUtil.getUserId();
-        aiConfigService.clearPersonaByUserId(userId);
-        return RestResult.noContent();
+        aiConfigService.clearPersonaByUserIdAsync(userId);
+        return RestResult.accepted(null);
     }
 
     @PostMapping("/me/password")
