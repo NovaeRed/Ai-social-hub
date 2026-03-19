@@ -29,6 +29,14 @@ public class AiTaskServiceImpl implements AiTaskService {
 
     private final AiTaskMapper aiTaskMapper;
 
+    /**
+     * 创建一条 AI 任务记录并初始化为待处理状态。
+     *
+     * @param userId 调用方用户 ID
+     * @param taskType 任务类型
+     * @param inputData 任务输入参数
+     * @return 持久化后的任务实体
+     */
     @Override
     public AiTask createTask(Long userId, AiTaskType taskType, Map<String, Object> inputData) {
         AiTask task = new AiTask();
@@ -45,6 +53,12 @@ public class AiTaskServiceImpl implements AiTaskService {
         return task;
     }
 
+    /**
+     * 更新任务状态，并根据状态自动记录开始或结束时间。
+     *
+     * @param taskId 任务主键 ID
+     * @param status 新状态
+     */
     @Override
     public void updateTaskStatus(Long taskId, AiTaskStatus status) {
         AiTask task = new AiTask();
@@ -61,6 +75,14 @@ public class AiTaskServiceImpl implements AiTaskService {
         log.info("Updated task status: id={}, status={}", taskId, status);
     }
 
+    /**
+     * 更新任务执行结果与错误信息。
+     *
+     * @param taskId 任务主键 ID
+     * @param status 新状态
+     * @param result 输出结果
+     * @param errorMessage 错误信息
+     */
     @Override
     public void updateTaskResult(Long taskId, AiTaskStatus status, Map<String, Object> result, String errorMessage) {
         AiTask task = new AiTask();
@@ -74,11 +96,27 @@ public class AiTaskServiceImpl implements AiTaskService {
         log.info("Updated task result: id={}, status={}", taskId, status);
     }
 
+    /**
+     * 通过任务公开 ID 查询任务。
+     *
+     * @param publicId 任务公开 ID
+     * @return 任务实体，不存在时返回 null
+     */
     @Override
     public AiTask getTaskByPublicId(String publicId) {
         return aiTaskMapper.selectOne(new LambdaQueryWrapper<AiTask>().eq(AiTask::getPublicId, publicId));
     }
 
+    /**
+     * 分页查询用户任务列表（游标模式）。
+     *
+     * @param userId 用户 ID
+     * @param taskType 任务类型过滤条件
+     * @param status 任务状态过滤条件
+     * @param cursor 游标（上一页最后一条任务 ID）
+     * @param limit 分页大小
+     * @return 游标分页结果
+     */
     @Override
     public CursorPageResult<AiTaskItemVO> getUserTasks(Long userId, AiTaskType taskType, AiTaskStatus status, Long cursor, Integer limit) {
         LambdaQueryWrapper<AiTask> wrapper = new LambdaQueryWrapper<AiTask>()
@@ -117,6 +155,12 @@ public class AiTaskServiceImpl implements AiTaskService {
         return result;
     }
 
+    /**
+     * 查询任务详情并转换为前端展示对象。
+     *
+     * @param publicId 任务公开 ID
+     * @return 任务详情，不存在时返回 null
+     */
     @Override
     public AiTaskDetailVO getTaskDetail(String publicId) {
         AiTask task = getTaskByPublicId(publicId);
@@ -138,6 +182,12 @@ public class AiTaskServiceImpl implements AiTaskService {
         return vo;
     }
 
+    /**
+     * 将任务实体转换为列表项视图对象。
+     *
+     * @param task 任务实体
+     * @return 列表项视图对象
+     */
     private AiTaskItemVO convertToVO(AiTask task) {
         AiTaskItemVO vo = new AiTaskItemVO();
         vo.setPublicId(task.getPublicId());

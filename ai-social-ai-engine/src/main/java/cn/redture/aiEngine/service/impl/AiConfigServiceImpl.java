@@ -44,12 +44,19 @@ public class AiConfigServiceImpl implements AiConfigService {
     private final StringRedisTemplate stringRedisTemplate;
     private final AiExternalService aiExternalService;
 
+    // 批量分析触发的消息数阈值
     @Value("${ai.persona.timeline.message-threshold:20}")
     private int timelineMessageThreshold;
 
+    // 批量分析的时间冷却，单位秒，默认6小时（21600秒）
     @Value("${ai.persona.timeline.cooldown-seconds:21600}")
     private long timelineCooldownSeconds;
 
+    /**
+     * 获取当前启用的模型能力列表，并聚合为前端可消费的模型选项。
+     *
+     * @return 模型选项列表
+     */
     @Override
     public List<AiModelVO> getAvailableModels() {
         List<AiModelCapability> capabilities = aiModelCapabilityMapper.selectList(
@@ -81,6 +88,13 @@ public class AiConfigServiceImpl implements AiConfigService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 保存用户托管 AI 配置（模型选项 + 开关项）。
+     *
+     * @param userId 用户 ID
+     * @param config 用户提交的配置请求
+     * @return 配置记录 ID
+     */
     @Override
     public String setUserConfig(Long userId, AiConfigDTO config) {
         AiUserConfig userConfig = aiUserConfigMapper.selectOne(new LambdaQueryWrapper<AiUserConfig>()
@@ -103,6 +117,12 @@ public class AiConfigServiceImpl implements AiConfigService {
         return userConfig.getId().toString();
     }
 
+    /**
+     * 查询用户 AI 配置，同时附带可选模型列表与当月用量摘要。
+     *
+     * @param userId 用户 ID
+     * @return 用户 AI 配置视图
+     */
     @Override
     public AiConfigVO getUserConfig(Long userId) {
         AiUserConfig userConfig = aiUserConfigMapper.selectOne(new LambdaQueryWrapper<AiUserConfig>()
@@ -131,6 +151,13 @@ public class AiConfigServiceImpl implements AiConfigService {
         return response;
     }
 
+    /**
+     * 查询用户画像信息，可按画像类型过滤。
+     *
+     * @param userId 用户 ID
+     * @param profileType 画像类型过滤条件
+     * @return 用户画像列表
+     */
     @Override
     public List<AiProfileVO> getUserProfiles(Long userId, String profileType) {
         LambdaQueryWrapper<UserAiProfile> queryWrapper = new LambdaQueryWrapper<UserAiProfile>()
@@ -154,6 +181,15 @@ public class AiConfigServiceImpl implements AiConfigService {
         }).collect(Collectors.toList());
     }
 
+    /**
+     * 查询用户 AI 使用统计。
+     *
+     * @param userId 用户 ID
+     * @param dateFrom 起始日期
+     * @param dateTo 结束日期
+     * @param provider 服务商过滤条件
+     * @return 使用统计视图
+     */
     @Override
     public AiUsageVO getUsageStats(Long userId, String dateFrom, String dateTo, String provider) {
         LocalDate from = dateFrom != null ? LocalDate.parse(dateFrom) : LocalDate.now().minusDays(30);
@@ -175,6 +211,12 @@ public class AiConfigServiceImpl implements AiConfigService {
         return usage;
     }
 
+    /**
+     * 处理用户 AI 分析授权变更事件。
+     *
+     * @param userId 用户 ID
+     * @param enabled 是否启用
+     */
     @Override
     public void onAiAnalysisToggled(Long userId, boolean enabled) {
         if (!enabled) {
@@ -188,6 +230,11 @@ public class AiConfigServiceImpl implements AiConfigService {
         log.info("用户 {} 开启 AI 画像授权，等待后续时间线触发分析", userId);
     }
 
+    /**
+     * 同步清理用户画像相关存储数据。
+     *
+     * @param userId 用户 ID
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void clearPersonaByUserId(Long userId) {
@@ -199,12 +246,23 @@ public class AiConfigServiceImpl implements AiConfigService {
         log.debug("清除用户 {} 的 AI 画像数据完成，profiles={}", userId, profiles);
     }
 
+    /**
+     * 异步投递用户画像清理任务。
+     *
+     * @param userId 用户 ID
+     */
     @Override
     public void clearPersonaByUserIdAsync(Long userId) {
         enqueuePersonaTask(userId, AiPersonaTaskType.AI_PERSONA_CLEAR);
         log.info("用户 {} 发起手动清除画像，已投递异步任务", userId);
     }
 
+    /**
+     * 处理用户新消息事件，并按阈值与冷却策略触发画像分析任务。
+     *
+     * @param userId 用户 ID
+     * @param messageTime 消息时间
+     */
     @Override
     public void onUserMessageCreated(Long userId, OffsetDateTime messageTime) {
         if (userId == null) {
@@ -230,11 +288,18 @@ public class AiConfigServiceImpl implements AiConfigService {
             return;
         }
 
-        enqueuePersonaTask(userId, AiPersonaTaskType.AI_PERSONA_INIT);
+        enqueuePersonaTask(userId, AiPersonaTaskType.AI_PERSONA_ANALYSIS);
         stringRedisTemplate.opsForValue().set(counterKey, "0", 30, TimeUnit.DAYS);
         log.info("用户 {} 达到时间线画像阈值，已投递增量分析任务，pending={}", userId, pending);
     }
 
+    /**
+     * 校验是否满足冷却时间，满足时刷新最近触发时间戳。
+     *
+     * @param userId 用户 ID
+     * @param messageTime 当前消息时间
+     * @return true 表示允许触发，false 表示仍在冷却窗口
+     */
     private boolean allowTriggerByCooldown(Long userId, OffsetDateTime messageTime) {
         String key = PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX + userId;
         String lastValue = stringRedisTemplate.opsForValue().get(key);
@@ -247,7 +312,6 @@ public class AiConfigServiceImpl implements AiConfigService {
                     return false;
                 }
             } catch (NumberFormatException ignore) {
-                // 忽略异常值，按可触发处理。
             }
         }
 
@@ -256,6 +320,11 @@ public class AiConfigServiceImpl implements AiConfigService {
         return true;
     }
 
+    /**
+     * 重置用户时间线分析进度计数与触发标记。
+     *
+     * @param userId 用户 ID
+     */
     private void resetTimelineProgress(Long userId) {
         String counterKey = PERSONA_TIMELINE_COUNTER_KEY_PREFIX + userId;
         String triggerKey = PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX + userId;
@@ -263,6 +332,11 @@ public class AiConfigServiceImpl implements AiConfigService {
         stringRedisTemplate.delete(triggerKey);
     }
 
+    /**
+     * 清空用户时间线分析进度计数与触发标记。
+     *
+     * @param userId 用户 ID
+     */
     private void clearTimelineProgress(Long userId) {
         String counterKey = PERSONA_TIMELINE_COUNTER_KEY_PREFIX + userId;
         String triggerKey = PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX + userId;
@@ -270,6 +344,12 @@ public class AiConfigServiceImpl implements AiConfigService {
         stringRedisTemplate.delete(triggerKey);
     }
 
+    /**
+     * 向画像任务队列投递任务。
+     *
+     * @param userId 用户 ID
+     * @param taskType 任务类型
+     */
     private void enqueuePersonaTask(Long userId, AiPersonaTaskType taskType) {
         AiPersonaTaskDTO task = new AiPersonaTaskDTO();
         task.setUserId(userId);
@@ -278,6 +358,12 @@ public class AiConfigServiceImpl implements AiConfigService {
         stringRedisTemplate.opsForList().leftPush(PERSONA_TASK_QUEUE_KEY, taskJson);
     }
 
+    /**
+     * 解析用户选择的模型选项编码；若未提供则回退到可用模型中的第一个。
+     *
+     * @param config 配置请求
+     * @return 模型选项编码
+     */
     private String resolveSelectedOptionCode(AiConfigDTO config) {
         if (config != null && config.getModelOptionCode() != null && !config.getModelOptionCode().isBlank()) {
             return config.getModelOptionCode().trim();
@@ -291,6 +377,12 @@ public class AiConfigServiceImpl implements AiConfigService {
         return "managed-default";
     }
 
+    /**
+     * 规范化开关类配置，保证关键开关具备默认值。
+     *
+     * @param raw 原始开关配置
+     * @return 规范化后的开关配置
+     */
     private AiConfigParams sanitizeSwitches(AiConfigParams raw) {
         AiConfigParams params = new AiConfigParams();
         if (raw == null) {
@@ -304,6 +396,13 @@ public class AiConfigServiceImpl implements AiConfigService {
         return params;
     }
 
+    /**
+     * 生成模型选项编码。
+     *
+     * @param provider 服务商标识
+     * @param modelName 模型名称
+     * @return 形如 provider:model 的模型选项编码
+     */
     private String buildOptionCode(String provider, String modelName) {
         String safeProvider = provider == null ? "unknown" : provider.trim().toLowerCase();
         String safeModel = modelName == null ? "default" : modelName.trim().toLowerCase();

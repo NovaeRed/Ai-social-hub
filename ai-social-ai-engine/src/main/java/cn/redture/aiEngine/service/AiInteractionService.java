@@ -45,11 +45,6 @@ public interface AiInteractionService {
     PersonaAnalysisVO analyzePersonaAsync(Long userId, PersonaAnalysisRequest request);
 
     /**
-     * 初始化用户画像(基于历史消息)
-     */
-    void initPersona(Long userId);
-
-    /**
      * 禁用用户画像 (清理或标记)
      */
     void disablePersona(Long userId);

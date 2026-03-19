@@ -11,8 +11,6 @@ public interface AiExternalService {
 
     boolean isAiAnalysisEnabled(Long userId);
 
-    List<AiExternalMessageItem> getUserRecentMessages(Long userId, int limit);
-
     List<AiExternalMessageItem> getRecentContextMessages(String conversationPublicId, int limit);
 
     List<AiExternalMessageItem> getMessagesByIds(List<Long> messageIds);

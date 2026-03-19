@@ -48,6 +48,13 @@ public class AiInteractionServiceImpl implements AiInteractionService {
     private final UserAiProfileMapper userAiProfileMapper;
     private final AiExternalService aiExternalService;
 
+    /**
+     * 执行文本润色任务（流式返回）。
+     *
+     * @param userId 用户 ID
+     * @param request 润色请求
+     * @return 流式输出结果
+     */
     @Override
     public Flux<StreamOutputVO> polishStream(Long userId, PolishRequest request) {
         log.info("Polish request from user: {}", userId);
@@ -59,6 +66,13 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         return executeStreamTask(userId, AiTaskType.POLISH, params, "polished_message");
     }
 
+    /**
+     * 执行翻译任务（流式返回）。
+     *
+     * @param userId 用户 ID
+     * @param request 翻译请求
+     * @return 流式输出结果
+     */
     @Override
     public Flux<StreamOutputVO> translateStream(Long userId, TranslationRequest request) {
         log.info("Translation request from user: {}", userId);
@@ -74,6 +88,13 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         return executeStreamTask(userId, AiTaskType.TRANSLATION, params, "translation");
     }
 
+    /**
+     * 执行智能回复建议任务（流式返回）。
+     *
+     * @param userId 用户 ID
+     * @param request 智能回复请求
+     * @return 流式输出结果
+     */
     @Override
     public Flux<StreamOutputVO> smartReplyStream(Long userId, SmartReplyRequest request) {
 
@@ -105,6 +126,13 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         return executeStreamTask(userId, AiTaskType.SMART_REPLY, params, "reply");
     }
 
+    /**
+     * 执行内容总结任务（流式返回）。
+     *
+     * @param userId 用户 ID
+     * @param request 总结请求
+     * @return 流式输出结果
+     */
     @Override
     public Flux<StreamOutputVO> summarizeStream(Long userId, SummarizeRequest request) {
         log.info("Summarize request from user: {}", userId);
@@ -127,6 +155,13 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         return executeStreamTask(userId, AiTaskType.CHAT_SUMMARY, params, "summary");
     }
 
+    /**
+     * 执行日程提取任务（同步返回结构化结果）。
+     *
+     * @param userId 用户 ID
+     * @param request 日程提取请求
+     * @return 日程提取结果
+     */
     @Override
     public ScheduleExtractionVO extractSchedule(Long userId, ScheduleRequest request) {
         log.info("Schedule extraction request from user: {}", userId);
@@ -168,6 +203,13 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         }
     }
 
+    /**
+     * 发起异步人格分析任务并返回任务 ID。
+     *
+     * @param userId 用户 ID
+     * @param request 人格分析请求
+     * @return 异步任务信息
+     */
     @Override
     public PersonaAnalysisVO analyzePersonaAsync(Long userId, PersonaAnalysisRequest request) {
         // 检查用户是否开启了 AI 画像分析
@@ -249,33 +291,11 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         return vo;
     }
 
-    @Override
-    public void initPersona(Long userId) {
-        log.info("Initializing persona for user: {}", userId);
-
-        // 1. 获取用户最近的聊天记录 (最近 50 条)
-        List<MessageItem> messageItems = toInternalMessages(aiExternalService.getUserRecentMessages(userId, 50));
-
-        if (messageItems.isEmpty()) {
-            log.warn("No messages found for user {}, skipping persona initialization", userId);
-            return;
-        }
-
-        // 2. 构建分析参数
-        Map<String, Object> params = new HashMap<>();
-        params.put("messages", messageItems);
-        params.put("target_user_id", userId.toString());
-
-        // 3. 执行同步分析
-        try {
-            String result = aiFacadeHandler.executeTask(userId, AiTaskType.PERSONA_ANALYSIS, params, AiProvider.QWEN);
-            savePersonaAnalysis(userId, result, messageItems);
-            log.info("Successfully initialized persona for user: {}", userId);
-        } catch (Exception e) {
-            log.error("Failed to initialize persona for user: {}", userId, e);
-        }
-    }
-
+    /**
+     * 禁用用户画像（删除 PERSONA 画像记录）。
+     *
+     * @param userId 用户 ID
+     */
     @Override
     public void disablePersona(Long userId) {
         log.info("Disabling persona for user: {}", userId);
@@ -285,6 +305,13 @@ public class AiInteractionServiceImpl implements AiInteractionService {
                 .eq(UserAiProfile::getProfileType, "PERSONA"));
     }
 
+    /**
+     * 保存人格分析结果到用户画像表。
+     *
+     * @param userId 用户 ID
+     * @param analysisResult 原始分析结果文本
+     * @param sourceMessages 样本消息集合
+     */
     private void savePersonaAnalysis(Long userId, String analysisResult, List<MessageItem> sourceMessages) {
         PersonaAnalysisResultVO parsedResult;
         try {
@@ -330,6 +357,12 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         log.info("Saved persona analysis for user: {}", userId);
     }
 
+    /**
+     * 规范化置信度到 [0, 1] 区间。
+     *
+     * @param result 人格分析结果对象
+     * @return 归一化后的置信度
+     */
     private BigDecimal resolveConfidence(PersonaAnalysisResultVO result) {
         if (result == null || result.getConfidence() == null) {
             return null;
@@ -344,6 +377,13 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         return value;
     }
 
+    /**
+     * 解析样本消息时间边界。
+     *
+     * @param sourceMessages 样本消息列表
+     * @param isMin true 取最小时间，false 取最大时间
+     * @return 时间边界，无法解析时返回 null
+     */
     private OffsetDateTime resolveSourceTimeBoundary(List<MessageItem> sourceMessages, boolean isMin) {
         if (sourceMessages == null || sourceMessages.isEmpty()) {
             return null;
@@ -371,6 +411,12 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         return boundary;
     }
 
+    /**
+     * 将外部消息对象转换为内部消息结构。
+     *
+     * @param externalItems 外部消息列表
+     * @return 内部消息列表
+     */
     private List<MessageItem> toInternalMessages(List<AiExternalMessageItem> externalItems) {
         if (externalItems == null || externalItems.isEmpty()) {
             return List.of();
@@ -386,7 +432,10 @@ public class AiInteractionServiceImpl implements AiInteractionService {
     }
 
     /**
-     * 从文本中提取JSON部分
+     * 从文本中提取 JSON 主体内容。
+     *
+     * @param text 原始文本
+     * @return 提取后的 JSON 字符串
      */
     private String extractJson(String text) {
         if (text == null || text.isEmpty()) {
@@ -407,7 +456,13 @@ public class AiInteractionServiceImpl implements AiInteractionService {
     }
 
     /**
-     * 通用流式任务执行方法
+        * 通用流式任务执行模板：创建任务、执行流式输出、写入任务结果。
+        *
+        * @param userId 用户 ID
+        * @param taskType 任务类型
+        * @param params 输入参数
+        * @param resultKey 结果写入键
+        * @return 流式输出
      */
     private Flux<StreamOutputVO> executeStreamTask(Long userId, AiTaskType taskType, Map<String, Object> params, String resultKey) {
         return Flux.defer(() -> {

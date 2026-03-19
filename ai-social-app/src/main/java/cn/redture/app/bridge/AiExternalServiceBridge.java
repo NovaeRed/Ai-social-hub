@@ -27,12 +27,6 @@ public class AiExternalServiceBridge implements AiExternalService {
     }
 
     @Override
-    public List<AiExternalMessageItem> getUserRecentMessages(Long userId, int limit) {
-        List<MessageItemVO> messages = messageService.getUserRecentMessages(userId, limit);
-        return convert(messages, userId);
-    }
-
-    @Override
     public List<AiExternalMessageItem> getRecentContextMessages(String conversationPublicId, int limit) {
         List<MessageItemVO> messages = messageService.getRecentContextMessages(conversationPublicId, limit);
         return convert(messages, null);

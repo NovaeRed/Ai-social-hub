@@ -1197,8 +1197,6 @@ data: {"type":"COMPLETE"}
 
 托管模式下，用户只可选择模型选项编码与开关项，底层参数（temperature/top_p/max_tokens）由服务端管理。
 
-开启 AI 画像分析功能后，系统不会自动读取历史消息。用户需要通过 `/api/v1/ai/profiles/init` 接口手动触发首次画像生成。
-
 **Request Body:**
 
 ```json
@@ -1286,21 +1284,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.14 `POST /api/v1/ai/profiles/init`
-
-**手动触发 AI 画像初始化**
-
-基于用户最近的聊天记录生成性格画像。此操作需要用户在设置中已开启 AI 画像分析功能。
-
-**Response 200 (Success):**
-
-```json
-{
-  "message": "画像初始化任务已启动"
-}
-```
-
-### 5.15 `GET /api/v1/ai/usage`
+### 5.14 `GET /api/v1/ai/usage`
 
 **获取AI使用统计**
 
@@ -1335,7 +1319,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.16 `GET /ai/config`
+### 5.15 `GET /ai/config`
 
 **获取用户托管AI配置**
 
@@ -1373,7 +1357,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.17 `GET /ai/profiles`
+### 5.16 `GET /ai/profiles`
 
 **获取用户AI画像**
 
@@ -1412,7 +1396,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.18 `GET /ai/usage`
+### 5.17 `GET /ai/usage`
 
 **获取AI使用统计**
 
