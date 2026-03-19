@@ -6,6 +6,7 @@ import cn.redture.aiEngine.pojo.vo.AiModelVO;
 import cn.redture.aiEngine.pojo.vo.AiProfileVO;
 import cn.redture.aiEngine.pojo.vo.AiUsageVO;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -78,4 +79,12 @@ public interface AiConfigService {
      * @param userId 内部用户ID
      */
     void clearPersonaByUserIdAsync(Long userId);
+
+    /**
+     * 记录用户新增消息事件，用于时间线增量触发画像分析。
+     *
+     * @param userId 用户ID
+     * @param messageTime 消息时间
+     */
+    void onUserMessageCreated(Long userId, OffsetDateTime messageTime);
 }

@@ -9,17 +9,21 @@ import cn.redture.aiEngine.pojo.enums.ProfileType;
 import cn.redture.aiEngine.pojo.model.AiConfigParams;
 import cn.redture.aiEngine.pojo.vo.*;
 import cn.redture.aiEngine.service.AiConfigService;
+import cn.redture.common.integration.ai.AiExternalService;
 import cn.redture.common.util.JsonUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static cn.redture.common.constants.RedisConstants.PERSONA_TASK_QUEUE_KEY;
@@ -29,6 +33,9 @@ import static cn.redture.common.constants.RedisConstants.PERSONA_TASK_QUEUE_KEY;
 @RequiredArgsConstructor
 public class AiConfigServiceImpl implements AiConfigService {
 
+    private static final String PERSONA_TIMELINE_COUNTER_KEY_PREFIX = "ai:persona:timeline:pending:";
+    private static final String PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX = "ai:persona:timeline:last-trigger:";
+
     private final AiUserConfigMapper aiUserConfigMapper;
     private final UserAiProfileMapper userAiProfileMapper;
     private final UserAiContextMapper userAiContextMapper;
@@ -36,6 +43,13 @@ public class AiConfigServiceImpl implements AiConfigService {
     private final AiModelCapabilityMapper aiModelCapabilityMapper;
     private final AiUsageStatsMapper aiUsageStatsMapper;
     private final StringRedisTemplate stringRedisTemplate;
+    private final AiExternalService aiExternalService;
+
+    @Value("${ai.persona.timeline.message-threshold:20}")
+    private int timelineMessageThreshold;
+
+    @Value("${ai.persona.timeline.cooldown-seconds:21600}")
+    private long timelineCooldownSeconds;
 
     @Override
     public List<AiModelVO> getAvailableModels() {
@@ -157,29 +171,96 @@ public class AiConfigServiceImpl implements AiConfigService {
     @Override
     public void onAiAnalysisToggled(Long userId, boolean enabled) {
         if (!enabled) {
+            clearTimelineProgress(userId);
             enqueuePersonaTask(userId, AiPersonaTaskType.AI_PERSONA_AUTH_DISABLED);
             log.info("用户 {} 关闭 AI 画像授权，已投递异步清理任务", userId);
             return;
         }
+
+        resetTimelineProgress(userId);
         log.info("用户 {} 开启 AI 画像授权，等待后续时间线触发分析", userId);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void clearPersonaByUserId(Long userId) {
-        int embeddings = userAiContextMapper.clearEmbeddingByUserId(userId);
         int profiles = userAiContextMapper.deleteProfilesByUserId(userId);
 
         String personaCacheKey = "ai:persona:" + userId;
         stringRedisTemplate.delete(personaCacheKey);
 
-        log.debug("清除用户 {} 的 AI 画像数据完成，profiles={}, embeddings={}", userId, profiles, embeddings);
+        log.debug("清除用户 {} 的 AI 画像数据完成，profiles={}", userId, profiles);
     }
 
     @Override
     public void clearPersonaByUserIdAsync(Long userId) {
         enqueuePersonaTask(userId, AiPersonaTaskType.AI_PERSONA_CLEAR);
         log.info("用户 {} 发起手动清除画像，已投递异步任务", userId);
+    }
+
+    @Override
+    public void onUserMessageCreated(Long userId, OffsetDateTime messageTime) {
+        if (userId == null) {
+            return;
+        }
+
+        if (!aiExternalService.isAiAnalysisEnabled(userId)) {
+            return;
+        }
+
+        String counterKey = PERSONA_TIMELINE_COUNTER_KEY_PREFIX + userId;
+        Long pending = stringRedisTemplate.opsForValue().increment(counterKey);
+        if (pending != null && pending == 1L) {
+            stringRedisTemplate.expire(counterKey, 30, TimeUnit.DAYS);
+        }
+
+        int threshold = Math.max(timelineMessageThreshold, 1);
+        if (pending == null || pending < threshold) {
+            return;
+        }
+
+        if (!allowTriggerByCooldown(userId, messageTime)) {
+            return;
+        }
+
+        enqueuePersonaTask(userId, AiPersonaTaskType.AI_PERSONA_INIT);
+        stringRedisTemplate.opsForValue().set(counterKey, "0", 30, TimeUnit.DAYS);
+        log.info("用户 {} 达到时间线画像阈值，已投递增量分析任务，pending={}", userId, pending);
+    }
+
+    private boolean allowTriggerByCooldown(Long userId, OffsetDateTime messageTime) {
+        String key = PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX + userId;
+        String lastValue = stringRedisTemplate.opsForValue().get(key);
+        long nowEpoch = (messageTime != null ? messageTime : OffsetDateTime.now()).toEpochSecond();
+
+        if (lastValue != null) {
+            try {
+                long lastEpoch = Long.parseLong(lastValue);
+                if (nowEpoch - lastEpoch < Math.max(timelineCooldownSeconds, 0)) {
+                    return false;
+                }
+            } catch (NumberFormatException ignore) {
+                // 忽略异常值，按可触发处理。
+            }
+        }
+
+        long ttl = Math.max(timelineCooldownSeconds * 2, 60L);
+        stringRedisTemplate.opsForValue().set(key, String.valueOf(nowEpoch), ttl, TimeUnit.SECONDS);
+        return true;
+    }
+
+    private void resetTimelineProgress(Long userId) {
+        String counterKey = PERSONA_TIMELINE_COUNTER_KEY_PREFIX + userId;
+        String triggerKey = PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX + userId;
+        stringRedisTemplate.opsForValue().set(counterKey, "0", 30, TimeUnit.DAYS);
+        stringRedisTemplate.delete(triggerKey);
+    }
+
+    private void clearTimelineProgress(Long userId) {
+        String counterKey = PERSONA_TIMELINE_COUNTER_KEY_PREFIX + userId;
+        String triggerKey = PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX + userId;
+        stringRedisTemplate.delete(counterKey);
+        stringRedisTemplate.delete(triggerKey);
     }
 
     private void enqueuePersonaTask(Long userId, AiPersonaTaskType taskType) {

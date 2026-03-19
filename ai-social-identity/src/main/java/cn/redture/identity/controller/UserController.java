@@ -2,12 +2,13 @@ package cn.redture.identity.controller;
 
 import cn.redture.common.pojo.model.RestResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
-import cn.redture.aiEngine.service.AiConfigService;
+import cn.redture.common.event.ai.AiPersonaClearRequestedEvent;
 import cn.redture.identity.pojo.dto.ChangePasswordDTO;
 import cn.redture.identity.pojo.dto.UpdateUserDTO;
 import cn.redture.identity.pojo.vo.UserInformation;
 import cn.redture.identity.service.UserService;
 import jakarta.annotation.Resource;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -17,7 +18,7 @@ public class UserController {
     @Resource
     private UserService userService;
     @Resource
-    private AiConfigService aiConfigService;
+    private ApplicationEventPublisher eventPublisher;
 
     @GetMapping("/me")
     public RestResult<UserInformation> getUserInformation() {
@@ -35,7 +36,7 @@ public class UserController {
     @DeleteMapping("/me/ai-persona")
     public RestResult<Void> clearAiPersona() {
         Long userId = SecurityContextHolderUtil.getUserId();
-        aiConfigService.clearPersonaByUserIdAsync(userId);
+        eventPublisher.publishEvent(new AiPersonaClearRequestedEvent(userId));
         return RestResult.accepted(null);
     }
 

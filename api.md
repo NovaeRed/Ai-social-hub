@@ -194,9 +194,9 @@ Authorization: Bearer <expired_access_token>
 ### 2.4 `DELETE /users/me/ai-persona`
 
 **清除个人AI画像**
-此操作将删除 `user_ai_contexts` 和 `user_ai_vectors` 表中与当前用户相关的所有记录。
+此操作为异步触发：接口返回后会投递画像清理任务，后台再执行真实删除。
 
-**Response 204 (No Content):** 清除成功。
+**Response 202 (Accepted):** 清理任务已受理。
 
 ---
 
@@ -433,8 +433,8 @@ Authorization: Bearer <expired_access_token>
 
 ```json
 {
-  "conversation_public_id": 1234,
-  "target_user_public_id": 1234
+  "conversation_public_id": "conv_a1b2c3d4",
+  "target_user_public_id": "user_u1v2w3e4"
 }
 ```
 
@@ -443,7 +443,7 @@ Authorization: Bearer <expired_access_token>
 **行为说明：**
 
 - 仅当目标会话为**私聊会话**（`type = "PRIVATE"`）时才会生效，群组会话不会产生任何实时事件；
-- 客户端在用户开始输入时，按一定频率（例如每 500ms 以上）调用此接口即可，无需在停止输入时额外上报；
+- 客户端在用户开始输入时，按一定频率（例如每 500ms 以上）调用此接口；停止输入时可调用 `DELETE /conversations/typing` 主动结束状态；
 - 服务端不落库，只在内存或缓存中短暂记录状态，并通过 SSE 向会话内**其他成员**广播 `TYPING` 事件（事件类型为 `TYPING`，详见
   4.6.3），当前上报用户自身不会收到该事件；
 - 前端可以在收到一条 `TYPING` 事件后，显示“对方正在输入...”，并在若干秒内未再收到新的 `TYPING` 事件时自动隐藏提示。
@@ -653,14 +653,24 @@ Authorization: Bearer <expired_access_token>
 
 - 建立一个与当前登录用户绑定的 SSE 长连接，用于接收后台推送的各种通知事件。
 - 需要携带正常的认证 Header（`Authorization: Bearer <access_token>`）。
+- 支持可选查询参数 `client_id`，用于区分同一用户的不同终端连接（如 web / ios / android）。
+
+**Query Parameters:**
+
+- `client_id` (string, optional): 客户端实例标识。建议前端持久化后复用；不传时服务端会自动生成。
 
 **Request:**
 
 ```http
-GET /api/v1/sse/subscribe HTTP/1.1
+GET /api/v1/sse/subscribe?client_id=web-3f9d6d7e HTTP/1.1
 Accept: text/event-stream
 Authorization: Bearer <access_token>
 ```
+
+**多端语义说明：**
+
+- 同一用户可同时建立多个 SSE 连接（按 `client_id` 区分）；
+- 服务端会向该用户全部活跃连接广播事件，避免多端互相覆盖。
 
 **Response 200:**
 
@@ -750,8 +760,7 @@ es.onmessage = (event) => {
 
 **触发时机：**
 
-- 当某个用户在私聊会话中调用 `POST /conversations/typing` 上报输入状态（`is_typing = true/false`
-  ）时；
+- 当某个用户在私聊会话中调用 `POST /conversations/typing` 上报输入状态时；
 - 服务端会向该会话中的**另一方用户**推送 `TYPING` 事件，上报方自己不会收到该事件。
 
 **事件格式：**
@@ -768,7 +777,8 @@ es.onmessage = (event) => {
 
 **前端建议处理逻辑：**
 
-- 在对应会话窗口中，根据 `payload.is_typing` 显示或隐藏对方的“正在输入...”指示；
+- 在对应会话窗口中收到 `TYPING` 后显示“正在输入...”提示；
+- 在收到 `STOP_TYPING` 事件（见 4.6.4）后，或本地超时后，隐藏“正在输入...”提示；
 - 可以对同一用户、同一会话的 `TYPING` 事件做简单节流/去抖，避免频繁刷新 UI。
 
 ---

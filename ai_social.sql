@@ -202,17 +202,22 @@ CREATE INDEX idx_ai_tasks_type_status ON ai_tasks (task_type, task_status);
 -- 10. 用户画像配置表 (user_ai_profiles)
 CREATE TABLE user_ai_profiles
 (
-    id            BIGSERIAL PRIMARY KEY,
-    user_id       BIGINT      NOT NULL REFERENCES users (id),
-    profile_type  VARCHAR(50) NOT NULL, -- PERSONA, PREFERENCES, BEHAVIOR, etc.
-    model_name    VARCHAR(100),         -- 生成此配置的模型名称
-    model_version VARCHAR(100),         -- 生成此配置的具体模型版本
-    provider      VARCHAR(50),          -- 生成此配置的AI服务提供商
-    content       JSONB       NOT NULL, -- 结构化配置内容
-    embedding     VECTOR(1536),         -- 向量表示，用于相似度搜索
-    version       INT         NOT NULL DEFAULT 1,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                      BIGSERIAL PRIMARY KEY,
+    user_id                 BIGINT      NOT NULL REFERENCES users (id),
+    profile_type            VARCHAR(50) NOT NULL, -- PERSONA, PREFERENCES, BEHAVIOR, etc.
+    model_name              VARCHAR(100),         -- 生成此配置的模型名称
+    model_version           VARCHAR(100),         -- 生成此配置的具体模型版本
+    provider                VARCHAR(50),          -- 生成此配置的AI服务提供商
+    content                 JSONB       NOT NULL, -- 可扩展画像内容
+    confidence              DECIMAL(5, 4),        -- 画像可信度（0~1）
+    source_message_count    INTEGER     NOT NULL DEFAULT 0, -- 本次分析使用的消息数
+    source_time_from        TIMESTAMPTZ,          -- 样本时间窗口起点
+    source_time_to          TIMESTAMPTZ,          -- 样本时间窗口终点
+    last_analyzed_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    embedding               VECTOR(1536),         -- 向量表示，用于相似度搜索
+    version                 INT         NOT NULL DEFAULT 1,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 COMMENT
     ON TABLE user_ai_profiles IS '用户AI配置表，统一存储用户AI相关配置、画像和向量';
@@ -225,8 +230,19 @@ COMMENT
 COMMENT
     ON COLUMN user_ai_profiles.provider IS '生成此配置的AI服务提供商';
 COMMENT
+    ON COLUMN user_ai_profiles.confidence IS '画像可信度（0~1）';
+COMMENT
+    ON COLUMN user_ai_profiles.source_message_count IS '本次分析使用的消息条数';
+COMMENT
+    ON COLUMN user_ai_profiles.source_time_from IS '本次分析样本时间窗口起点';
+COMMENT
+    ON COLUMN user_ai_profiles.source_time_to IS '本次分析样本时间窗口终点';
+COMMENT
+    ON COLUMN user_ai_profiles.last_analyzed_at IS '最后一次画像分析完成时间';
+COMMENT
     ON COLUMN user_ai_profiles.embedding IS '向量表示，用于相似度搜索、推荐等RAG功能';
 CREATE UNIQUE INDEX idx_ai_profile_user_type ON user_ai_profiles (user_id, profile_type);
+CREATE INDEX idx_ai_profile_analyzed_at ON user_ai_profiles (user_id, last_analyzed_at DESC);
 CREATE INDEX idx_ai_profile_embedding ON user_ai_profiles USING hnsw (embedding vector_l2_ops) WHERE embedding IS NOT NULL;
 
 

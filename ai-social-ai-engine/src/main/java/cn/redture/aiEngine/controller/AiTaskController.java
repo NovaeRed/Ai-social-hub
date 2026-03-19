@@ -2,14 +2,14 @@ package cn.redture.aiEngine.controller;
 
 import cn.redture.aiEngine.pojo.dto.*;
 import cn.redture.aiEngine.pojo.vo.*;
-import cn.redture.aiEngine.service.AiExternalService;
 import cn.redture.aiEngine.service.AiInteractionService;
 import cn.redture.aiEngine.service.AiTaskService;
 import cn.redture.common.exception.businessException.InvalidInputException;
+import cn.redture.common.integration.ai.AiExternalService;
+import cn.redture.common.integration.ai.dto.AiExternalMessageItem;
 import cn.redture.common.pojo.model.RestResult;
 import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
-import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -73,7 +73,7 @@ public class AiTaskController {
         if ((request.getConversationHistory() == null || request.getConversationHistory().isEmpty())
                 && request.getConversationPublicId() != null
                 && !request.getConversationPublicId().isBlank()) {
-            List<MessageItem> contextMessages = aiExternalService.getRecentContextMessages(request.getConversationPublicId(), 10);
+            List<AiExternalMessageItem> contextMessages = aiExternalService.getRecentContextMessages(request.getConversationPublicId(), 10);
             request.setConversationHistory(toHistoryMessages(contextMessages));
         }
 
@@ -88,7 +88,7 @@ public class AiTaskController {
         Long userId = SecurityContextHolderUtil.getUserId();
 
         if (request.getContent() == null || request.getContent().isBlank()) {
-            List<MessageItem> sourceMessages;
+            List<AiExternalMessageItem> sourceMessages;
 
             if (request.getSelectedMessageIds() != null && !request.getSelectedMessageIds().isEmpty()) {
                 sourceMessages = aiExternalService.getMessagesByIds(request.getSelectedMessageIds());
@@ -108,11 +108,11 @@ public class AiTaskController {
      * 获取可供用户显式选择的消息样本（用于 Persona Analysis / Custom Summary）
      */
     @GetMapping("/message-candidates")
-    public RestResult<Map<String, List<MessageItem>>> getMessageCandidates(
+    public RestResult<Map<String, List<AiExternalMessageItem>>> getMessageCandidates(
             @RequestParam(value = "conversation_public_id", required = false) String conversationPublicId,
             @RequestParam(value = "limit", defaultValue = "100") Integer limit) {
         Long userId = SecurityContextHolderUtil.getUserId();
-        List<MessageItem> items;
+        List<AiExternalMessageItem> items;
 
         if (conversationPublicId != null && !conversationPublicId.isBlank()) {
             items = aiExternalService.getUserMessagesInConversation(conversationPublicId, userId, limit);
@@ -173,7 +173,7 @@ public class AiTaskController {
         return RestResult.accepted(aiInteractionService.analyzePersonaAsync(userId, request));
     }
 
-    private List<SmartReplyRequest.HistoryMessage> toHistoryMessages(List<MessageItem> messages) {
+    private List<SmartReplyRequest.HistoryMessage> toHistoryMessages(List<AiExternalMessageItem> messages) {
         return messages.stream().map(m -> {
             SmartReplyRequest.HistoryMessage h = new SmartReplyRequest.HistoryMessage();
             h.setSender(m.getSender());
@@ -183,9 +183,9 @@ public class AiTaskController {
         }).toList();
     }
 
-    private String formatMessagesToText(List<MessageItem> messages) {
+    private String formatMessagesToText(List<AiExternalMessageItem> messages) {
         StringBuilder sb = new StringBuilder();
-        for (MessageItem msg : messages) {
+        for (AiExternalMessageItem msg : messages) {
             String sender = msg.getSender() == null || msg.getSender().isBlank() ? "未知用户" : msg.getSender();
             String content = msg.getContent() == null ? "" : msg.getContent();
             sb.append(sender).append(": ").append(content).append("\n");

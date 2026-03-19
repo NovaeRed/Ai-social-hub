@@ -2,6 +2,8 @@ package cn.redture.aiEngine.pojo.vo;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
+
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -29,4 +31,9 @@ public class PersonaAnalysisResultVO {
      * 兴趣爱好列表
      */
     private List<String> interests;
+
+    /**
+     * 分析置信度（0~1）
+     */
+    private BigDecimal confidence;
 }

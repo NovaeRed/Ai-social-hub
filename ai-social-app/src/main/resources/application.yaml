@@ -4,9 +4,9 @@ spring:
   application:
     name: ai-social-app
   datasource:
-    url: jdbc:postgresql://localhost/ai_social_hub
+    url: jdbc:postgresql://192.168.80.128/ai_social_hub
     username: postgres
-    password: 1234
+    password: 123456
     driver-class-name: org.postgresql.Driver
   data:
     redis:
@@ -41,6 +41,9 @@ ai:
   persona:
     consumer:
       enabled: true
+    timeline:
+      message-threshold: 20
+      cooldown-seconds: 21600
 
   # Qwen配置
   qwen:
@@ -60,32 +63,59 @@ app:
       enabled: true
       exclude-patterns:
         - /error
+      # 受信代理网段：仅当 remoteAddr 命中此列表时，才信任 Forwarded / X-Forwarded-For 中的上游链路
+      trusted-proxies:
+        - 127.0.0.1/32
+        - ::1/128
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
       default-rule:
         name: global-baseline
         pattern: /**
+        algorithm: TOKEN_BUCKET
         max-requests: 300
         window-seconds: 60
+        capacity: 300
+        refill-tokens: 300
+        refill-period-ms: 60000
         strategy: IP
       rules:
         - name: auth-login
           pattern: /auth/login
+          algorithm: TOKEN_BUCKET
           max-requests: 10
           window-seconds: 60
+          capacity: 10
+          refill-tokens: 10
+          refill-period-ms: 60000
           strategy: IP
         - name: auth-register
           pattern: /auth/register
+          algorithm: TOKEN_BUCKET
           max-requests: 10
           window-seconds: 60
+          capacity: 10
+          refill-tokens: 10
+          refill-period-ms: 60000
           strategy: IP
         - name: chat-create-message
           pattern: /conversations/*/messages
-          max-requests: 60
+          algorithm: TOKEN_BUCKET
+          max-requests: 30
           window-seconds: 60
+          capacity: 60
+          refill-tokens: 30
+          refill-period-ms: 60000
           strategy: USER_OR_IP
         - name: ai-task-write
           pattern: /api/v1/ai/tasks/*
+          algorithm: TOKEN_BUCKET
           max-requests: 10
           window-seconds: 60
+          capacity: 10
+          refill-tokens: 10
+          refill-period-ms: 60000
           strategy: USER_OR_IP
   resilience:
     sentinel:

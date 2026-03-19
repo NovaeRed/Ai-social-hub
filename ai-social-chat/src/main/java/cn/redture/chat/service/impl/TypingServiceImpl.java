@@ -60,7 +60,7 @@ public class TypingServiceImpl implements TypingService {
             throw new ResourceNotFoundException("对方用户");
         }
 
-        if (conversation.getType() != ConversationTypeEnum.PRIVATE || isUserTyping(conversation.getId(), userId)) {
+        if (conversation.getType() != ConversationTypeEnum.PRIVATE) {
             return;
         }
 
@@ -71,10 +71,16 @@ public class TypingServiceImpl implements TypingService {
         }
 
         String typingField = buildTypingField(conversation.getId(), userId);
+        String typingKey = TYPING_VALUE_KEY + typingField;
+        boolean wasTyping = Boolean.TRUE.equals(stringRedisTemplate.hasKey(typingKey));
 
-        stringRedisTemplate.opsForValue().set(TYPING_VALUE_KEY + typingField, "1", Duration.ofSeconds(TYPING_EXPIRE_SECONDS));
+        // 每次上报都刷新过期时间，避免持续输入时状态提前失效。
+        stringRedisTemplate.opsForValue().set(typingKey, "1", Duration.ofSeconds(TYPING_EXPIRE_SECONDS));
 
-        pushTypingEvent(conversation, userId, "TYPING", targetUserPublicId);
+        // 仅从非打字状态切换为打字状态时向对端推送一次，后续上报只作为续期心跳。
+        if (!wasTyping) {
+            pushTypingEvent(conversation, userId, "TYPING", targetUserPublicId);
+        }
 
         log.debug("用户 {} 在会话 {} 开始打字", userId, conversationPublicId);
     }

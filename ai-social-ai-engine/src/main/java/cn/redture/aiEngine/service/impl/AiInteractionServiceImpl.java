@@ -12,11 +12,12 @@ import cn.redture.aiEngine.pojo.vo.PersonaAnalysisResultVO;
 import cn.redture.aiEngine.pojo.vo.PersonaAnalysisVO;
 import cn.redture.aiEngine.pojo.vo.ScheduleExtractionVO;
 import cn.redture.aiEngine.pojo.vo.StreamOutputVO;
-import cn.redture.aiEngine.service.AiExternalService;
 import cn.redture.aiEngine.service.AiInteractionService;
 import cn.redture.aiEngine.service.AiTaskService;
 import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.exception.JsonException;
+import cn.redture.common.integration.ai.AiExternalService;
+import cn.redture.common.integration.ai.dto.AiExternalMessageItem;
 import cn.redture.common.util.JsonUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -182,19 +184,20 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         List<MessageItem> messages = request.getMessages();
         if (messages == null || messages.isEmpty()) {
             if (request.getSelectedMessageIds() != null && !request.getSelectedMessageIds().isEmpty()) {
-                messages = aiExternalService.getMessagesByIds(request.getSelectedMessageIds());
+                messages = toInternalMessages(aiExternalService.getMessagesByIds(request.getSelectedMessageIds()));
                 log.debug("Resolved {} messages from selected_message_ids", messages.size());
             } else {
-                messages = aiExternalService.getUserRecentMessagesForAnalysis(userId, 50);
+                messages = toInternalMessages(aiExternalService.getUserRecentMessagesForAnalysis(userId, 50));
                 log.debug("Resolved {} recent messages for persona analysis", messages.size());
             }
         }
 
-        if (messages == null || messages.isEmpty()) {
+        if (messages.isEmpty()) {
             throw new InvalidInputException("缺少可分析的消息内容");
         }
 
-        params.put("messages", messages);
+        final List<MessageItem> finalMessages = messages;
+        params.put("messages", finalMessages);
         params.put("target_user_id", request.getTargetUserId() != null ? request.getTargetUserId() : userId.toString());
 
         if (request.getAnalysisConfig() != null) {
@@ -224,7 +227,7 @@ public class AiInteractionServiceImpl implements AiInteractionService {
                                 aiTaskService.updateTaskResult(task.getId(), AiTaskStatus.COMPLETED, resultData, null);
 
                                 // 保存性格分析结果到用户画像
-                                savePersonaAnalysis(userId, result);
+                                savePersonaAnalysis(userId, result, finalMessages);
 
                                 log.info("Persona analysis completed for user: {}, task: {}", userId, task.getPublicId());
                             } catch (Exception e) {
@@ -251,7 +254,7 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         log.info("Initializing persona for user: {}", userId);
 
         // 1. 获取用户最近的聊天记录 (最近 50 条)
-        List<MessageItem> messageItems = aiExternalService.getUserRecentMessages(userId, 50);
+        List<MessageItem> messageItems = toInternalMessages(aiExternalService.getUserRecentMessages(userId, 50));
 
         if (messageItems.isEmpty()) {
             log.warn("No messages found for user {}, skipping persona initialization", userId);
@@ -266,7 +269,7 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         // 3. 执行同步分析
         try {
             String result = aiFacadeHandler.executeTask(userId, AiTaskType.PERSONA_ANALYSIS, params, AiProvider.QWEN);
-            savePersonaAnalysis(userId, result);
+            savePersonaAnalysis(userId, result, messageItems);
             log.info("Successfully initialized persona for user: {}", userId);
         } catch (Exception e) {
             log.error("Failed to initialize persona for user: {}", userId, e);
@@ -282,7 +285,7 @@ public class AiInteractionServiceImpl implements AiInteractionService {
                 .eq(UserAiProfile::getProfileType, "PERSONA"));
     }
 
-    private void savePersonaAnalysis(Long userId, String analysisResult) {
+    private void savePersonaAnalysis(Long userId, String analysisResult, List<MessageItem> sourceMessages) {
         PersonaAnalysisResultVO parsedResult;
         try {
             String jsonStr = extractJson(analysisResult);
@@ -311,6 +314,11 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         }
 
         profile.setContent(parsedResult);
+        profile.setConfidence(resolveConfidence(parsedResult));
+        profile.setSourceMessageCount(sourceMessages != null ? sourceMessages.size() : 0);
+        profile.setSourceTimeFrom(resolveSourceTimeBoundary(sourceMessages, true));
+        profile.setSourceTimeTo(resolveSourceTimeBoundary(sourceMessages, false));
+        profile.setLastAnalyzedAt(OffsetDateTime.now());
         profile.setUpdatedAt(OffsetDateTime.now());
 
         if (profile.getId() == null) {
@@ -320,6 +328,61 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         }
 
         log.info("Saved persona analysis for user: {}", userId);
+    }
+
+    private BigDecimal resolveConfidence(PersonaAnalysisResultVO result) {
+        if (result == null || result.getConfidence() == null) {
+            return null;
+        }
+        BigDecimal value = result.getConfidence();
+        if (value.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO;
+        }
+        if (value.compareTo(BigDecimal.ONE) > 0) {
+            return BigDecimal.ONE;
+        }
+        return value;
+    }
+
+    private OffsetDateTime resolveSourceTimeBoundary(List<MessageItem> sourceMessages, boolean isMin) {
+        if (sourceMessages == null || sourceMessages.isEmpty()) {
+            return null;
+        }
+
+        OffsetDateTime boundary = null;
+        for (MessageItem item : sourceMessages) {
+            if (item == null || item.getTimestamp() == null || item.getTimestamp().isBlank()) {
+                continue;
+            }
+            try {
+                OffsetDateTime current = OffsetDateTime.parse(item.getTimestamp());
+                if (boundary == null) {
+                    boundary = current;
+                } else if (isMin && current.isBefore(boundary)) {
+                    boundary = current;
+                } else if (!isMin && current.isAfter(boundary)) {
+                    boundary = current;
+                }
+            } catch (Exception ignore) {
+                // 忽略无法解析的时间戳，继续处理其余样本。
+            }
+        }
+
+        return boundary;
+    }
+
+    private List<MessageItem> toInternalMessages(List<AiExternalMessageItem> externalItems) {
+        if (externalItems == null || externalItems.isEmpty()) {
+            return List.of();
+        }
+
+        return externalItems.stream().map(item -> {
+            MessageItem message = new MessageItem();
+            message.setSender(item.getSender());
+            message.setContent(item.getContent());
+            message.setTimestamp(item.getTimestamp());
+            return message;
+        }).collect(Collectors.toList());
     }
 
     /**

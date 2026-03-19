@@ -8,9 +8,20 @@ public interface SseEmitterService {
      * 创建并注册一个 SSE emitter.
      *
      * @param userId 用户ID
+     * @param clientId 客户端标识（同一用户多端在线时用于区分连接）
      * @return SseEmitter 实例
      */
-    SseEmitter createEmitter(Long userId);
+    SseEmitter createEmitter(Long userId, String clientId);
+
+    /**
+     * 创建并注册一个 SSE emitter.
+     *
+     * @param userId 用户ID
+     * @return SseEmitter 实例
+     */
+    default SseEmitter createEmitter(Long userId) {
+        return createEmitter(userId, null);
+    }
 
     /**
      * 向指定用户发送事件.

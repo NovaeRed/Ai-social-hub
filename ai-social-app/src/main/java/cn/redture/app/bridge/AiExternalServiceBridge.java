@@ -1,9 +1,9 @@
 package cn.redture.app.bridge;
 
-import cn.redture.aiEngine.pojo.dto.MessageItem;
-import cn.redture.aiEngine.service.AiExternalService;
 import cn.redture.chat.pojo.vo.MessageItemVO;
 import cn.redture.chat.service.MessageService;
+import cn.redture.common.integration.ai.AiExternalService;
+import cn.redture.common.integration.ai.dto.AiExternalMessageItem;
 import cn.redture.identity.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,38 +27,38 @@ public class AiExternalServiceBridge implements AiExternalService {
     }
 
     @Override
-    public List<MessageItem> getUserRecentMessages(Long userId, int limit) {
+    public List<AiExternalMessageItem> getUserRecentMessages(Long userId, int limit) {
         List<MessageItemVO> messages = messageService.getUserRecentMessages(userId, limit);
         return convert(messages, userId);
     }
 
     @Override
-    public List<MessageItem> getRecentContextMessages(String conversationPublicId, int limit) {
+    public List<AiExternalMessageItem> getRecentContextMessages(String conversationPublicId, int limit) {
         List<MessageItemVO> messages = messageService.getRecentContextMessages(conversationPublicId, limit);
         return convert(messages, null);
     }
 
     @Override
-    public List<MessageItem> getMessagesByIds(List<Long> messageIds) {
+    public List<AiExternalMessageItem> getMessagesByIds(List<Long> messageIds) {
         List<MessageItemVO> messages = messageService.getMessagesByIds(messageIds);
         return convert(messages, null);
     }
 
     @Override
-    public List<MessageItem> getUserMessagesInConversation(String conversationPublicId, Long userId, int limit) {
+    public List<AiExternalMessageItem> getUserMessagesInConversation(String conversationPublicId, Long userId, int limit) {
         List<MessageItemVO> messages = messageService.getUserMessagesInConversation(conversationPublicId, userId, limit);
         return convert(messages, userId);
     }
 
     @Override
-    public List<MessageItem> getUserRecentMessagesForAnalysis(Long userId, int limit) {
+    public List<AiExternalMessageItem> getUserRecentMessagesForAnalysis(Long userId, int limit) {
         List<MessageItemVO> messages = messageService.getUserRecentMessagesForAnalysis(userId, limit);
         return convert(messages, userId);
     }
 
-    private List<MessageItem> convert(List<MessageItemVO> messages, Long fallbackUserId) {
+    private List<AiExternalMessageItem> convert(List<MessageItemVO> messages, Long fallbackUserId) {
         return messages.stream().map(m -> {
-            MessageItem item = new MessageItem();
+            AiExternalMessageItem item = new AiExternalMessageItem();
             String sender = null;
             if (m.getSender() != null && m.getSender().getNickname() != null) {
                 sender = m.getSender().getNickname();

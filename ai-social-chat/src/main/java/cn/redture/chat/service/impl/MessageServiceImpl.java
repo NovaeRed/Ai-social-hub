@@ -13,12 +13,14 @@ import cn.redture.chat.service.MessageService;
 import cn.redture.chat.sse.Notification;
 import cn.redture.chat.sse.SseEmitterService;
 import cn.redture.chat.util.converter.MessageConverter;
+import cn.redture.common.event.ai.UserMessageCreatedEvent;
 import cn.redture.common.exception.businessException.ResourceNotFoundException;
 import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -39,6 +41,9 @@ public class MessageServiceImpl implements MessageService {
 
     @Resource
     private SseEmitterService sseEmitterService;
+
+    @Resource
+    private ApplicationEventPublisher eventPublisher;
 
     @Override
     public CursorPageResult<MessageItemVO> listMessages(String conversationPublicId, Long beforeMessageId, int limit) {
@@ -63,10 +68,8 @@ public class MessageServiceImpl implements MessageService {
         boolean hasMore = messages.size() > limit;
         List<Message> page = hasMore ? messages.subList(0, limit) : messages;
 
-        List<MessageItemVO> items = page.stream().map(msg -> {
-            // sender 信息后续可通过联表/批量查询用户表填充
-            return MessageConverter.INSTANCE.toMessageItemVO(msg);
-        }).toList();
+        // sender 信息后续可通过联表/批量查询用户表填充
+        List<MessageItemVO> items = page.stream().map(MessageConverter.INSTANCE::toMessageItemVO).toList();
 
         CursorPageResult<MessageItemVO> result = new CursorPageResult<>();
         result.setItems(items);
@@ -131,6 +134,13 @@ public class MessageServiceImpl implements MessageService {
             if (!member.getUserId().equals(senderUserId)) {
                 sseEmitterService.sendToUser(member.getUserId(), notification);
             }
+        }
+
+        // 非侵入式时间线触发：仅记录用户新增消息事件，真实分析由异步任务消费完成。
+        try {
+            eventPublisher.publishEvent(new UserMessageCreatedEvent(senderUserId, message.getCreatedAt()));
+        } catch (Exception e) {
+            log.warn("记录用户 {} 画像时间线消息失败，不影响消息主流程", senderUserId, e);
         }
 
         return vo;

@@ -9,9 +9,9 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 用户AI画像实体
@@ -50,6 +50,31 @@ public class UserAiProfile {
      */
     @TableField(typeHandler = JsonbTypeHandler.class)
     private PersonaAnalysisResultVO content;
+
+    /**
+     * 画像可信度（0~1）
+     */
+    private BigDecimal confidence;
+
+    /**
+     * 本次分析使用的消息条数
+     */
+    private Integer sourceMessageCount;
+
+    /**
+     * 样本时间窗口起点
+     */
+    private OffsetDateTime sourceTimeFrom;
+
+    /**
+     * 样本时间窗口终点
+     */
+    private OffsetDateTime sourceTimeTo;
+
+    /**
+     * 最后一次分析时间
+     */
+    private OffsetDateTime lastAnalyzedAt;
     
     /**
      * 向量表示

@@ -1,6 +1,6 @@
 package cn.redture.identity.service.impl;
 
-import cn.redture.aiEngine.service.AiConfigService;
+import cn.redture.common.event.ai.AiAnalysisToggledEvent;
 import cn.redture.common.pojo.dto.UserPrincipal;
 import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.exception.businessException.ResourceNotFoundException;
@@ -16,6 +16,7 @@ import cn.redture.identity.util.converter.UserConverter;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -38,7 +39,7 @@ public class UserServiceImpl implements UserService {
     private TokenManagementUtil tokenManagementUtil;
 
     @Resource
-    private AiConfigService aiConfigService;
+    private ApplicationEventPublisher eventPublisher;
 
     @Override
     public UserInformation getUserById(Long userId) {
@@ -89,7 +90,7 @@ public class UserServiceImpl implements UserService {
             newAiEnabled = Boolean.FALSE;
         }
         if (!oldAiEnabled.equals(newAiEnabled)) {
-            aiConfigService.onAiAnalysisToggled(userId, newAiEnabled);
+            eventPublisher.publishEvent(new AiAnalysisToggledEvent(userId, newAiEnabled));
         }
 
         return UserConverter.INSTANCE.toUserInformation(user);

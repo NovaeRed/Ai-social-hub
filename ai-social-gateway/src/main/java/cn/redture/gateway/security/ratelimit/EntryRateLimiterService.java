@@ -1,7 +1,10 @@
 package cn.redture.gateway.security.ratelimit;
 
 import cn.redture.common.util.JwtUtil;
+import cn.redture.common.util.IpAddressUtil;
 import cn.redture.gateway.security.AuthConstants;
+import cn.redture.gateway.security.ratelimit.core.RateLimitConsumeResult;
+import cn.redture.gateway.security.ratelimit.core.RedisTokenBucketRateLimiter;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -30,24 +33,26 @@ public class EntryRateLimiterService {
 
     private final EntryRateLimitProperties properties;
 
+    private final RedisTokenBucketRateLimiter tokenBucketRateLimiter;
+
     @Resource
     private JwtUtil jwtUtil;
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
-    public Decision check(HttpServletRequest request) {
+    public RateLimitConsumeResult check(HttpServletRequest request) {
         if (!properties.isEnabled()) {
-            return Decision.allow();
+            return RateLimitConsumeResult.allowed(0L);
         }
 
         String path = request.getRequestURI();
         if (isExcluded(path)) {
-            return Decision.allow();
+            return RateLimitConsumeResult.allowed(0L);
         }
 
         List<EntryRateLimitProperties.Rule> activeRules = collectActiveRules(path);
         if (activeRules.isEmpty()) {
-            return Decision.allow();
+            return RateLimitConsumeResult.allowed(0L);
         }
 
         for (EntryRateLimitProperties.Rule rule : activeRules) {
@@ -56,22 +61,52 @@ public class EntryRateLimiterService {
                 identity = "unknown";
             }
 
-            long bucket = Instant.now().getEpochSecond() / Math.max(rule.getWindowSeconds(), 1);
-            String key = KEY_PREFIX + ":" + rule.getName() + ":" + identity + ":" + bucket;
-            Long current = stringRedisTemplate.opsForValue().increment(key);
-            if (current != null && current == 1L) {
-                long ttl = Math.max(rule.getWindowSeconds(), 1) + 2L;
-                stringRedisTemplate.expire(key, ttl, TimeUnit.SECONDS);
-            }
-
-            if (current != null && current > rule.getMaxRequests()) {
+            RateLimitConsumeResult consumeResult = consume(rule, identity);
+            if (!consumeResult.allowed()) {
                 log.warn("Entry rate limit blocked: rule={}, path={}, identity={}, current={}",
-                        rule.getName(), path, identity, current);
-                return Decision.blocked(rule);
+                        rule.getName(), path, identity, consumeResult.remainingTokens());
+                return consumeResult.withRuleName(rule.getName());
             }
         }
 
-        return Decision.allow();
+        return RateLimitConsumeResult.allowed(0L);
+    }
+
+    private RateLimitConsumeResult consume(EntryRateLimitProperties.Rule rule, String identity) {
+        EntryRateLimitProperties.RateLimitAlgorithm algorithm =
+                rule.getAlgorithm() == null ? EntryRateLimitProperties.RateLimitAlgorithm.TOKEN_BUCKET : rule.getAlgorithm();
+
+        if (algorithm == EntryRateLimitProperties.RateLimitAlgorithm.FIXED_WINDOW) {
+            return consumeByFixedWindow(rule, identity);
+        }
+        return tokenBucketRateLimiter.consume(rule, identity);
+    }
+
+    private RateLimitConsumeResult consumeByFixedWindow(EntryRateLimitProperties.Rule rule, String identity) {
+        long bucket = Instant.now().getEpochSecond() / Math.max(rule.getWindowSeconds(), 1);
+        String key = KEY_PREFIX + ":" + rule.getName() + ":" + identity + ":" + bucket;
+        Long current = stringRedisTemplate.opsForValue().increment(key);
+        if (current != null && current == 1L) {
+            long ttl = Math.max(rule.getWindowSeconds(), 1) + 2L;
+            stringRedisTemplate.expire(key, ttl, TimeUnit.SECONDS);
+        }
+
+        int maxRequests = Math.max(rule.getMaxRequests(), 1);
+        long currentCount = current == null ? 0L : current;
+        if (currentCount > maxRequests) {
+            long retryAfter = calculateFixedWindowRetryAfterSeconds(rule);
+            return RateLimitConsumeResult.blocked(retryAfter, 0L);
+        }
+
+        long remaining = Math.max(0L, maxRequests - currentCount);
+        return RateLimitConsumeResult.allowed(remaining);
+    }
+
+    private long calculateFixedWindowRetryAfterSeconds(EntryRateLimitProperties.Rule rule) {
+        long windowSeconds = Math.max(rule.getWindowSeconds(), 1);
+        long current = Instant.now().getEpochSecond();
+        long nextBoundary = ((current / windowSeconds) + 1) * windowSeconds;
+        return Math.max(nextBoundary - current, 1L);
     }
 
     private boolean isExcluded(String path) {
@@ -124,25 +159,6 @@ public class EntryRateLimiterService {
     }
 
     private String resolveClientIp(HttpServletRequest request) {
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        String realIp = request.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp;
-        }
-        return request.getRemoteAddr();
-    }
-
-    public record Decision(boolean blocked, EntryRateLimitProperties.Rule rule) {
-
-        public static Decision allow() {
-            return new Decision(false, null);
-        }
-
-        public static Decision blocked(EntryRateLimitProperties.Rule rule) {
-            return new Decision(true, rule);
-        }
+        return IpAddressUtil.extractClientIp(request, properties.getTrustedProxies());
     }
 }
