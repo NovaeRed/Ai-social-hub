@@ -5,7 +5,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -14,45 +13,59 @@ import java.util.List;
 public final class IpAddressUtil {
 
     private static final String UNKNOWN = "unknown";
+    private static final String LOOPBACK_IPV4 = "127.0.0.1";
+    private static final String LOCALHOST = "localhost";
 
     private IpAddressUtil() {
     }
 
-    public static String extractClientIp(HttpServletRequest request) {
-        return extractClientIp(request, Collections.emptyList());
-    }
-
     public static String extractClientIp(HttpServletRequest request, List<String> trustedProxies) {
         if (request == null) {
-            return "127.0.0.1";
+            return LOOPBACK_IPV4;
         }
 
         String remoteAddr = normalizeIp(request.getRemoteAddr());
-        List<String> trustRules = trustedProxies == null ? List.of() : trustedProxies;
+        if (remoteAddr == null) {
+            return LOOPBACK_IPV4;
+        }
 
+        List<String> trustRules = trustedProxies == null ? List.of() : trustedProxies;
+        if (trustRules.isEmpty()) {
+            return remoteAddr;
+        }
+
+        // 安全边界：直连来源不在受信列表中时，不信任何代理头。
+        if (!isTrustedProxy(remoteAddr, trustRules)) {
+            return remoteAddr;
+        }
+
+        // 只有直连IP在受信列表中时，才处理代理头
         List<String> forwardedChain = ipChainFromForwarded(request.getHeader("Forwarded"));
         if (!forwardedChain.isEmpty()) {
-            return extractByTrustedProxyChain(remoteAddr, forwardedChain, trustRules);
+            return extractClientFromProxyChain(remoteAddr, forwardedChain, trustRules);
         }
 
         List<String> xffChain = ipChainFromXForwardedFor(request.getHeader("X-Forwarded-For"));
         if (!xffChain.isEmpty()) {
-            return extractByTrustedProxyChain(remoteAddr, xffChain, trustRules);
+            return extractClientFromProxyChain(remoteAddr, xffChain, trustRules);
         }
 
         String realIp = request.getHeader("X-Real-IP");
-        if (isUsable(realIp)) {
-            return normalizeIp(realIp);
+        String normalizedRealIp = normalizeIp(realIp);
+        if (normalizedRealIp != null) {
+            return normalizedRealIp;
         }
 
         String proxyClientIp = request.getHeader("Proxy-Client-IP");
-        if (isUsable(proxyClientIp)) {
-            return normalizeIp(proxyClientIp);
+        String normalizedProxyClientIp = normalizeIp(proxyClientIp);
+        if (normalizedProxyClientIp != null) {
+            return normalizedProxyClientIp;
         }
 
         String wlProxyClientIp = request.getHeader("WL-Proxy-Client-IP");
-        if (isUsable(wlProxyClientIp)) {
-            return normalizeIp(wlProxyClientIp);
+        String normalizedWlProxyClientIp = normalizeIp(wlProxyClientIp);
+        if (normalizedWlProxyClientIp != null) {
+            return normalizedWlProxyClientIp;
         }
 
         return remoteAddr;
@@ -60,19 +73,27 @@ public final class IpAddressUtil {
 
     public static String normalizeIp(String rawIp) {
         if (!isUsable(rawIp)) {
-            return "127.0.0.1";
+            return null;
         }
 
         String candidate = stripPortAndBrackets(rawIp.trim());
-        if ("localhost".equalsIgnoreCase(candidate)) {
-            return "127.0.0.1";
+        if (!isUsable(candidate)) {
+            return null;
+        }
+
+        if (LOCALHOST.equalsIgnoreCase(candidate)) {
+            return LOOPBACK_IPV4;
+        }
+
+        if (containsInvalidIpChars(candidate)) {
+            return null;
         }
 
         try {
             InetAddress address = InetAddress.getByName(candidate);
 
             if (address.isLoopbackAddress()) {
-                return "127.0.0.1";
+                return LOOPBACK_IPV4;
             }
 
             if (address instanceof Inet6Address inet6Address) {
@@ -84,24 +105,27 @@ public final class IpAddressUtil {
 
             return address.getHostAddress();
         } catch (Exception ex) {
-            return candidate;
+            return null;
         }
     }
 
-    private static String extractByTrustedProxyChain(String remoteAddr, List<String> chain, List<String> trustedProxies) {
-        if (!isTrustedProxy(remoteAddr, trustedProxies)) {
-            return remoteAddr;
+    private static String extractClientFromProxyChain(String remoteAddr, List<String> chain, List<String> trustedProxies) {
+        // 代理链应从右到左回溯，找到第一个非可信代理地址作为真实客户端。
+        String currentHop = remoteAddr;
+        for (int i = chain.size() - 1; i >= 0; i--) {
+            if (!isTrustedProxy(currentHop, trustedProxies)) {
+                return currentHop;
+            }
+
+            String previousHop = chain.get(i);
+            if (previousHop == null) {
+                continue;
+            }
+            currentHop = previousHop;
         }
 
-        String candidate = remoteAddr;
-        for (int i = chain.size() - 1; i >= 0; i--) {
-            String priorHop = chain.get(i);
-            if (!isTrustedProxy(candidate, trustedProxies)) {
-                break;
-            }
-            candidate = priorHop;
-        }
-        return candidate;
+        // 如果整条链都在受信范围，保守返回链首（最原始一跳）。
+        return currentHop;
     }
 
     private static List<String> ipChainFromForwarded(String forwardedHeader) {
@@ -120,8 +144,9 @@ public final class IpAddressUtil {
                     if (value.startsWith("\"") && value.endsWith("\"") && value.length() >= 2) {
                         value = value.substring(1, value.length() - 1);
                     }
-                    if (isUsable(value)) {
-                        chain.add(normalizeIp(value));
+                    String normalizedIp = normalizeIp(value);
+                    if (normalizedIp != null) {
+                        chain.add(normalizedIp);
                     }
                 }
             }
@@ -138,9 +163,9 @@ public final class IpAddressUtil {
         List<String> chain = new ArrayList<>();
         String[] parts = xffHeader.split(",");
         for (String part : parts) {
-            String candidate = part == null ? null : part.trim();
-            if (isUsable(candidate)) {
-                chain.add(normalizeIp(candidate));
+            String normalizedIp = normalizeIp(part);
+            if (normalizedIp != null) {
+                chain.add(normalizedIp);
             }
         }
 
@@ -149,6 +174,10 @@ public final class IpAddressUtil {
 
     private static String stripPortAndBrackets(String value) {
         String candidate = value;
+
+        if (candidate.startsWith("\"") && candidate.endsWith("\"") && candidate.length() >= 2) {
+            candidate = candidate.substring(1, candidate.length() - 1);
+        }
 
         if (candidate.startsWith("[") && candidate.contains("]")) {
             int end = candidate.indexOf(']');
@@ -164,6 +193,22 @@ public final class IpAddressUtil {
         }
 
         return candidate;
+    }
+
+    private static boolean containsInvalidIpChars(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            boolean allowed = (c >= '0' && c <= '9')
+                    || (c >= 'a' && c <= 'f')
+                    || (c >= 'A' && c <= 'F')
+                    || c == '.'
+                    || c == ':'
+                    || c == '%';
+            if (!allowed) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isIpv4MappedIpv6(byte[] bytes) {
@@ -210,6 +255,9 @@ public final class IpAddressUtil {
         }
 
         String normalizedIp = normalizeIp(ip);
+        if (normalizedIp == null) {
+            return false;
+        }
         String trimmedRule = rule.trim();
 
         if (!trimmedRule.contains("/")) {
@@ -246,7 +294,7 @@ public final class IpAddressUtil {
                 return true;
             }
 
-            int mask = (~((1 << (8 - remainingBits)) - 1)) & 0xFF;
+            int mask = (-(1 << (8 - remainingBits))) & 0xFF;
             return (subnetBytes[fullBytes] & mask) == (targetBytes[fullBytes] & mask);
         } catch (Exception ex) {
             return false;
