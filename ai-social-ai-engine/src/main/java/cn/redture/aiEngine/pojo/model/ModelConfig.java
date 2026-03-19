@@ -2,7 +2,6 @@ package cn.redture.aiEngine.pojo.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -10,7 +9,6 @@ import lombok.NoArgsConstructor;
  * AI模型配置参数
  */
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class ModelConfig {

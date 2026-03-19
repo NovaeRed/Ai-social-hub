@@ -56,14 +56,12 @@ public class AiPersonaTaskConsumer {
     private void consumeLoop() {
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                // 阻塞式弹出队列尾部元素（模拟简单队列）, 超时5秒
                 String taskJson = stringRedisTemplate.opsForList().rightPop(PERSONA_TASK_QUEUE_KEY, Duration.ofSeconds(5));
                 if (taskJson == null) {
                     continue;
                 }
 
                 AiPersonaTaskDTO task = JsonUtil.fromJson(taskJson, AiPersonaTaskDTO.class);
-                // 串行执行，避免为低频开关类任务引入额外线程池复杂度。
                 handlerRegistry.dispatch(task);
             } catch (Exception e) {
                 log.error("消费 AI 画像任务时发生异常", e);

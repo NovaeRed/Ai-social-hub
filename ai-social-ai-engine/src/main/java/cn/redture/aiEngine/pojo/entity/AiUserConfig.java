@@ -9,7 +9,6 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.OffsetDateTime;
-import java.util.Map;
 
 /**
  * AI用户配置实体
@@ -17,40 +16,29 @@ import java.util.Map;
 @Data
 @TableName(value = "ai_user_configs", autoResultMap = true)
 public class AiUserConfig {
-    
+
     @TableId(type = IdType.AUTO)
     private Long id;
-    
+
     private Long userId;
-    
+
     /**
-     * 默认模型
+     * 已选择的托管模型选项编码
      */
     private String defaultModel;
-    
-    /**
-     * 默认提供商
-     */
-    private String defaultProvider;
-    
+
     /**
      * 配置参数（JSON）
      */
     @TableField(typeHandler = JsonbTypeHandler.class)
     private AiConfigParams configParams;
-    
-    /**
-     * 加密存储的API密钥（JSON）
-     */
-    @TableField(typeHandler = JsonbTypeHandler.class)
-    private Map<String, String> apiKeysEncrypted;
-    
+
     /**
      * 是否激活
      */
     private Boolean isActive;
-    
+
     private OffsetDateTime createdAt;
-    
+
     private OffsetDateTime updatedAt;
 }

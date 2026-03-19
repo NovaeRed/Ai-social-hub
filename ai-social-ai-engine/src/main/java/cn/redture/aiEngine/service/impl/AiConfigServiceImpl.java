@@ -39,7 +39,6 @@ public class AiConfigServiceImpl implements AiConfigService {
     private final AiUserConfigMapper aiUserConfigMapper;
     private final UserAiProfileMapper userAiProfileMapper;
     private final UserAiContextMapper userAiContextMapper;
-    private final AiProviderConfigMapper aiProviderConfigMapper;
     private final AiModelCapabilityMapper aiModelCapabilityMapper;
     private final AiUsageStatsMapper aiUsageStatsMapper;
     private final StringRedisTemplate stringRedisTemplate;
@@ -62,16 +61,22 @@ public class AiConfigServiceImpl implements AiConfigService {
                 .values().stream()
                 .map(list -> {
                     AiModelCapability first = list.getFirst();
-                    return AiModelVO.builder()
-                            .name(first.getModelName())
-                            .provider(first.getProvider())
-                            .capabilities(list.stream().map(c -> c.getCapabilityType().name()).collect(Collectors.toList()))
-                            .pricing(ModelPricingVO.builder()
-                                    .inputPricePerMillion(first.getInputPricePerMillion())
-                                    .outputPricePerMillion(first.getOutputPricePerMillion())
-                                    .build())
-                            .maxTokens(first.getMaxTokens())
-                            .build();
+                    String optionCode = buildOptionCode(first.getProvider(), first.getModelName());
+                    List<String> capabilitiesByModel = list.stream().map(c -> c.getCapabilityType().name()).collect(Collectors.toList());
+
+                    ModelPricingVO pricing = new ModelPricingVO();
+                    pricing.setInputPricePerMillion(first.getInputPricePerMillion());
+                    pricing.setOutputPricePerMillion(first.getOutputPricePerMillion());
+
+                    AiModelVO model = new AiModelVO();
+                    model.setOptionCode(optionCode);
+                    model.setDisplayName(first.getModelName());
+                    model.setName(first.getModelName());
+                    model.setProvider(first.getProvider());
+                    model.setCapabilities(capabilitiesByModel);
+                    model.setPricing(pricing);
+                    model.setMaxTokens(first.getMaxTokens());
+                    return model;
                 })
                 .collect(Collectors.toList());
     }
@@ -81,17 +86,18 @@ public class AiConfigServiceImpl implements AiConfigService {
         AiUserConfig userConfig = aiUserConfigMapper.selectOne(new LambdaQueryWrapper<AiUserConfig>()
                 .eq(AiUserConfig::getUserId, userId));
 
+        String selectedOptionCode = resolveSelectedOptionCode(config);
+        AiConfigParams managedSwitches = sanitizeSwitches(config == null ? null : config.getPreferences());
+
         if (userConfig == null) {
             userConfig = new AiUserConfig();
             userConfig.setUserId(userId);
-            userConfig.setDefaultModel(config.getDefaultModel());
-            userConfig.setDefaultProvider(config.getDefaultProvider());
-            userConfig.setConfigParams(config.getPreferences());
+            userConfig.setDefaultModel(selectedOptionCode);
+            userConfig.setConfigParams(managedSwitches);
             aiUserConfigMapper.insert(userConfig);
         } else {
-            userConfig.setDefaultModel(config.getDefaultModel());
-            userConfig.setDefaultProvider(config.getDefaultProvider());
-            userConfig.setConfigParams(config.getPreferences());
+            userConfig.setDefaultModel(selectedOptionCode);
+            userConfig.setConfigParams(managedSwitches);
             aiUserConfigMapper.updateById(userConfig);
         }
         return userConfig.getId().toString();
@@ -102,26 +108,27 @@ public class AiConfigServiceImpl implements AiConfigService {
         AiUserConfig userConfig = aiUserConfigMapper.selectOne(new LambdaQueryWrapper<AiUserConfig>()
                 .eq(AiUserConfig::getUserId, userId));
 
-        List<String> providers = aiProviderConfigMapper.selectList(
-                new LambdaQueryWrapper<AiProviderConfig>().eq(AiProviderConfig::getIsEnabled, true)
-        ).stream().map(AiProviderConfig::getProviderName).collect(Collectors.toList());
-
-        String defaultModel = userConfig != null ? userConfig.getDefaultModel() : "gpt-4o";
-        AiConfigParams preferences = userConfig != null ? userConfig.getConfigParams() : null;
+        List<AiModelVO> modelOptions = getAvailableModels();
+        String selectedModelOptionCode = userConfig != null ? userConfig.getDefaultModel() : null;
+        if (selectedModelOptionCode == null || selectedModelOptionCode.isBlank()) {
+            selectedModelOptionCode = modelOptions.isEmpty() ? "managed-default" : modelOptions.getFirst().getOptionCode();
+        }
+        AiConfigParams switches = sanitizeSwitches(userConfig == null ? null : userConfig.getConfigParams());
 
         // 获取本月用量统计
         LocalDate startOfMonth = LocalDate.now().withDayOfMonth(1);
         UsageSummaryVO usageSummary = aiUsageStatsMapper.getUsageSummary(userId, startOfMonth);
 
-        return AiConfigVO.builder()
-                .defaultModel(defaultModel)
-                .providers(providers)
-                .preferences(preferences)
-                .usage(UserUsageSummaryVO.builder()
-                        .monthlyTokens(usageSummary != null ? usageSummary.getTotalTokens() : 0L)
-                        .monthlyCost(usageSummary != null ? usageSummary.getTotalCost() : BigDecimal.ZERO)
-                        .build())
-                .build();
+        UserUsageSummaryVO usage = new UserUsageSummaryVO();
+        usage.setMonthlyTokens(usageSummary != null ? usageSummary.getTotalTokens() : 0L);
+        usage.setMonthlyCost(usageSummary != null ? usageSummary.getTotalCost() : BigDecimal.ZERO);
+
+        AiConfigVO response = new AiConfigVO();
+        response.setSelectedModelOptionCode(selectedModelOptionCode);
+        response.setModelOptions(modelOptions);
+        response.setSwitches(switches);
+        response.setUsage(usage);
+        return response;
     }
 
     @Override
@@ -129,22 +136,22 @@ public class AiConfigServiceImpl implements AiConfigService {
         LambdaQueryWrapper<UserAiProfile> queryWrapper = new LambdaQueryWrapper<UserAiProfile>()
                 .eq(UserAiProfile::getUserId, userId);
 
-        // 安全过滤 profileType（支持字符串匹配枚举）
         if (profileType != null && !profileType.trim().isEmpty()) {
             queryWrapper.eq(UserAiProfile::getProfileType, profileType.trim().toUpperCase());
         }
 
         List<UserAiProfile> profiles = userAiProfileMapper.selectList(queryWrapper);
 
-        return profiles.stream().map(profile -> AiProfileVO.builder()
-                .profileType(profile.getProfileType())
-                .content(profile.getContent())
-                .provider(profile.getProvider())
-                .modelName(profile.getModelName())
-                .createdAt(profile.getCreatedAt())
-                .updatedAt(profile.getUpdatedAt())
-                .build()
-        ).collect(Collectors.toList());
+        return profiles.stream().map(profile -> {
+            AiProfileVO item = new AiProfileVO();
+            item.setProfileType(profile.getProfileType());
+            item.setContent(profile.getContent());
+            item.setModelName(profile.getModelName());
+            item.setProvider(profile.getProvider());
+            item.setCreatedAt(profile.getCreatedAt());
+            item.setUpdatedAt(profile.getUpdatedAt());
+            return item;
+        }).collect(Collectors.toList());
     }
 
     @Override
@@ -161,11 +168,11 @@ public class AiConfigServiceImpl implements AiConfigService {
         List<DailyUsageVO> daily = aiUsageStatsMapper.getDailyBreakdown(userId, from, to);
         List<ProviderUsageVO> byProvider = aiUsageStatsMapper.getUsageByProvider(userId, from, to);
 
-        return AiUsageVO.builder()
-                .summary(summary)
-                .dailyBreakdown(daily)
-                .byProvider(byProvider)
-                .build();
+        AiUsageVO usage = new AiUsageVO();
+        usage.setSummary(summary);
+        usage.setDailyBreakdown(daily);
+        usage.setByProvider(byProvider);
+        return usage;
     }
 
     @Override
@@ -269,5 +276,37 @@ public class AiConfigServiceImpl implements AiConfigService {
         task.setType(taskType);
         String taskJson = JsonUtil.toJson(task);
         stringRedisTemplate.opsForList().leftPush(PERSONA_TASK_QUEUE_KEY, taskJson);
+    }
+
+    private String resolveSelectedOptionCode(AiConfigDTO config) {
+        if (config != null && config.getModelOptionCode() != null && !config.getModelOptionCode().isBlank()) {
+            return config.getModelOptionCode().trim();
+        }
+
+        List<AiModelVO> options = getAvailableModels();
+        if (!options.isEmpty()) {
+            return options.getFirst().getOptionCode();
+        }
+
+        return "managed-default";
+    }
+
+    private AiConfigParams sanitizeSwitches(AiConfigParams raw) {
+        AiConfigParams params = new AiConfigParams();
+        if (raw == null) {
+            params.setAutoModeration(Boolean.TRUE);
+            params.setSmartReplyEnabled(Boolean.TRUE);
+            return params;
+        }
+
+        params.setAutoModeration(raw.getAutoModeration());
+        params.setSmartReplyEnabled(raw.getSmartReplyEnabled());
+        return params;
+    }
+
+    private String buildOptionCode(String provider, String modelName) {
+        String safeProvider = provider == null ? "unknown" : provider.trim().toLowerCase();
+        String safeModel = modelName == null ? "default" : modelName.trim().toLowerCase();
+        return safeProvider + ":" + safeModel;
     }
 }

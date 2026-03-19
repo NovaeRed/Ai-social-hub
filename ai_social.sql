@@ -202,22 +202,22 @@ CREATE INDEX idx_ai_tasks_type_status ON ai_tasks (task_type, task_status);
 -- 10. 用户画像配置表 (user_ai_profiles)
 CREATE TABLE user_ai_profiles
 (
-    id                      BIGSERIAL PRIMARY KEY,
-    user_id                 BIGINT      NOT NULL REFERENCES users (id),
-    profile_type            VARCHAR(50) NOT NULL, -- PERSONA, PREFERENCES, BEHAVIOR, etc.
-    model_name              VARCHAR(100),         -- 生成此配置的模型名称
-    model_version           VARCHAR(100),         -- 生成此配置的具体模型版本
-    provider                VARCHAR(50),          -- 生成此配置的AI服务提供商
-    content                 JSONB       NOT NULL, -- 可扩展画像内容
-    confidence              DECIMAL(5, 4),        -- 画像可信度（0~1）
-    source_message_count    INTEGER     NOT NULL DEFAULT 0, -- 本次分析使用的消息数
-    source_time_from        TIMESTAMPTZ,          -- 样本时间窗口起点
-    source_time_to          TIMESTAMPTZ,          -- 样本时间窗口终点
-    last_analyzed_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    embedding               VECTOR(1536),         -- 向量表示，用于相似度搜索
-    version                 INT         NOT NULL DEFAULT 1,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                   BIGSERIAL PRIMARY KEY,
+    user_id              BIGINT      NOT NULL REFERENCES users (id),
+    profile_type         VARCHAR(50) NOT NULL,           -- PERSONA, PREFERENCES, BEHAVIOR, etc.
+    model_name           VARCHAR(100),                   -- 生成此配置的模型名称
+    model_version        VARCHAR(100),                   -- 生成此配置的具体模型版本
+    provider             VARCHAR(50),                    -- 生成此配置的AI服务提供商
+    content              JSONB       NOT NULL,           -- 可扩展画像内容
+    confidence           DECIMAL(5, 4),                  -- 画像可信度（0~1）
+    source_message_count INTEGER     NOT NULL DEFAULT 0, -- 本次分析使用的消息数
+    source_time_from     TIMESTAMPTZ,                    -- 样本时间窗口起点
+    source_time_to       TIMESTAMPTZ,                    -- 样本时间窗口终点
+    last_analyzed_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    embedding            VECTOR(1536),                   -- 向量表示，用于相似度搜索
+    version              INT         NOT NULL DEFAULT 1,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 COMMENT
     ON TABLE user_ai_profiles IS '用户AI配置表，统一存储用户AI相关配置、画像和向量';
@@ -249,20 +249,18 @@ CREATE INDEX idx_ai_profile_embedding ON user_ai_profiles USING hnsw (embedding 
 -- 11. AI用户配置表（ai_user_configs）
 CREATE TABLE ai_user_configs
 (
-    id                 BIGSERIAL PRIMARY KEY,
-    user_id            BIGINT UNIQUE NOT NULL REFERENCES users (id),
-    default_model      VARCHAR(100) DEFAULT 'gpt-4o',
-    default_provider   VARCHAR(50)  DEFAULT 'openai',
-    config_params      JSONB        DEFAULT '{
-      "temperature": 0.7,
-      "max_tokens": 1000
+    id            BIGSERIAL PRIMARY KEY,
+    user_id       BIGINT UNIQUE NOT NULL REFERENCES users (id),
+    default_model VARCHAR(100) DEFAULT 'managed-default',
+    config_params JSONB        DEFAULT '{
+      "auto_moderation": true,
+      "smart_reply_enabled": true
     }',
-    api_keys_encrypted JSONB, -- 加密存储不同提供商的API key
-    is_active          BOOLEAN      DEFAULT TRUE,
-    created_at         TIMESTAMPTZ  DEFAULT NOW(),
-    updated_at         TIMESTAMPTZ  DEFAULT NOW()
+    is_active     BOOLEAN      DEFAULT TRUE,
+    created_at    TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ  DEFAULT NOW()
 );
-COMMENT ON TABLE ai_user_configs IS 'AI用户配置表，存储用户的AI模型和API配置';
+COMMENT ON TABLE ai_user_configs IS 'AI用户托管配置表，存储模型选项编码与功能开关';
 CREATE INDEX idx_ai_user_configs_user ON ai_user_configs (user_id);
 
 -- 12. AI提供商配置表（ai_provider_configs）
@@ -307,11 +305,11 @@ CREATE TABLE ai_model_capabilities
     model_name               VARCHAR(100)      NOT NULL,
     provider                 VARCHAR(50)       NOT NULL REFERENCES ai_provider_configs (provider_name),
     capability_type          ai_task_type_enum NOT NULL,
-    is_enabled               BOOLEAN        DEFAULT TRUE,
+    is_enabled               BOOLEAN     DEFAULT TRUE,
     max_tokens               INTEGER,
     input_price_per_million  DECIMAL(10, 4),
     output_price_per_million DECIMAL(10, 4),
-    created_at               TIMESTAMPTZ    DEFAULT NOW()
+    created_at               TIMESTAMPTZ DEFAULT NOW()
 );
 COMMENT ON TABLE ai_model_capabilities IS 'AI模型能力定义表，细化到每个模型在不同任务下的定价和限制';
 CREATE UNIQUE INDEX idx_model_capability ON ai_model_capabilities (model_name, capability_type);

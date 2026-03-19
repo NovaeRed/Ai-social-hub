@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class SpringAiConfig {
 
-    @Value("${ai.qwen.default-model}")
+    @Value("${ai.managed.default-model-type:qwen-max}")
     public String QWEN_MODEL;
 
     @Value("${ai.qwen.api-key}")

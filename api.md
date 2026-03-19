@@ -820,10 +820,7 @@ es.onmessage = (event) => {
 ```json
 {
   "message": "我想要吃一个比较甜的食物可以吧",
-  "override_config": {
-    "temperature": 0.8,
-    "max_tokens": 1500
-  }
+  "model_option_code": "dashscope:qwen-max"
 }
 ```
 
@@ -853,10 +850,7 @@ es.onmessage = (event) => {
       "timestamp": "2025-12-01T11:00:00Z"
     }
   ],
-  "override_config": {
-    "temperature": 0.3,
-    "max_tokens": 500
-  },
+  "model_option_code": "dashscope:qwen-max",
   "context": {
     "timezone": "Asia/Shanghai",
     "user_preferences": {
@@ -967,7 +961,8 @@ es.onmessage = (event) => {
 
 **Request Body (性格分析，支持两种模式):**
 
-- 两步模式（隐私优先）：前端先调用 `GET /api/v1/ai/tasks/message-candidates` 获取候选消息，再传 `messages` 或 `selected_message_ids`。
+- 两步模式（隐私优先）：前端先调用 `GET /api/v1/ai/tasks/message-candidates` 获取候选消息，再传 `messages` 或
+  `selected_message_ids`。
 - 一体化模式（易用优先）：不传 `messages` 与 `selected_message_ids`，后端自动取当前用户最近 50 条消息。
 
 ```json5
@@ -990,14 +985,12 @@ es.onmessage = (event) => {
       "timestamp": "2025-12-01T09:10:00Z"
     }
   ],
-
   // 模式2: 仅传消息ID（推荐，后端按ID查询）
   "selected_message_ids": [
     101,
     102,
     103
   ],
-
   "target_user_id": "user1",
   "analysis_config": {
     "dimensions": [
@@ -1010,10 +1003,7 @@ es.onmessage = (event) => {
     "depth": "comprehensive"
     // basic, standard, comprehensive
   },
-  "override_config": {
-    "temperature": 0.5,
-    "max_tokens": 2000
-  }
+  "model_option_code": "dashscope:qwen-max"
 }
 ```
 
@@ -1078,10 +1068,7 @@ es.onmessage = (event) => {
     "role": "项目经理",
     "communication_style": "professional"
   },
-  "override_config": {
-    "temperature": 0.7,
-    "max_tokens": 500
-  }
+  "model_option_code": "dashscope:qwen-max"
 }
 ```
 
@@ -1108,13 +1095,14 @@ data: {"type":"COMPLETE"}
 {
   // 模式1: 直接传 content（两步模式）
   "content": "今天的会议主要讨论了项目进展和下一步计划。有人认为需要加快开发进度，同时也要注意质量控制。最后决定在下周召开一次全体会议，确保所有成员都了解最新情况。",
-
   // 模式2: 仅传会话ID（后端自动取最近50条消息）
   "conversation_public_id": "conv_a1b2c3d4",
-
   // 模式3: 仅传消息ID（后端按ID查询）
-  "selected_message_ids": [101, 102, 103],
-
+  "selected_message_ids": [
+    101,
+    102,
+    103
+  ],
   "summary_type": "meeting",
   // meeting, chat, article, email
   "target_length": "short",
@@ -1124,10 +1112,7 @@ data: {"type":"COMPLETE"}
     "决策",
     "行动项"
   ],
-  "override_config": {
-    "temperature": 0.3,
-    "max_tokens": 1000
-  }
+  "model_option_code": "dashscope:qwen-max"
 }
 ```
 
@@ -1152,10 +1137,7 @@ data: {"type":"COMPLETE"}
   "target_lang": "zh",
   "domain": "business",
   // business, casual, technical, academic
-  "override_config": {
-    "temperature": 0.1,
-    "max_tokens": 1000
-  }
+  "model_option_code": "dashscope:qwen-max"
 }
 ```
 
@@ -1211,7 +1193,9 @@ data: {"type":"COMPLETE"}
 
 ### 5.11 `POST /api/v1/ai/config`
 
-**设置用户AI配置**
+**设置用户托管AI配置**
+
+托管模式下，用户只可选择模型选项编码与开关项，底层参数（temperature/top_p/max_tokens）由服务端管理。
 
 开启 AI 画像分析功能后，系统不会自动读取历史消息。用户需要通过 `/api/v1/ai/profiles/init` 接口手动触发首次画像生成。
 
@@ -1219,10 +1203,8 @@ data: {"type":"COMPLETE"}
 
 ```json
 {
-  "default_model": "gpt-4o",
+  "model_option_code": "dashscope:qwen-max",
   "preferences": {
-    "temperature": 0.7,
-    "max_tokens": 1000,
     "auto_moderation": true,
     "smart_reply_enabled": true
   }
@@ -1240,18 +1222,38 @@ data: {"type":"COMPLETE"}
 
 ### 5.12 `GET /api/v1/ai/config`
 
-**获取用户AI配置**
+**获取用户托管AI配置**
 
 **Response 200 (Success):**
 
 ```json
 {
-  "default_model": "gpt-4o",
-  "preferences": {
-    "temperature": 0.7,
-    "max_tokens": 1000,
+  "selected_model_option_code": "dashscope:qwen-max",
+  "model_options": [
+    {
+      "option_code": "dashscope:qwen-max",
+      "display_name": "qwen-max",
+      "name": "qwen-max",
+      "provider": "dashscope",
+      "capabilities": [
+        "POLISH",
+        "CHAT_SUMMARY",
+        "SMART_REPLY"
+      ],
+      "pricing": {
+        "input_token_price": 0.005,
+        "output_token_price": 0.015
+      },
+      "max_tokens": 128000
+    }
+  ],
+  "switches": {
     "auto_moderation": true,
     "smart_reply_enabled": true
+  },
+  "usage": {
+    "monthly_tokens": 15000,
+    "monthly_cost": 0.25
   }
 }
 ```
@@ -1335,27 +1337,38 @@ data: {"type":"COMPLETE"}
 
 ### 5.16 `GET /ai/config`
 
-**获取用户AI配置**
+**获取用户托管AI配置**
 
 **Response 200 (Success):**
 
 ```json
 {
-  "default_model": "gpt-4o",
-  "providers": [
-    "openai",
-    "anthropic"
+  "selected_model_option_code": "dashscope:qwen-max",
+  "model_options": [
+    {
+      "option_code": "dashscope:qwen-max",
+      "display_name": "qwen-max",
+      "name": "qwen-max",
+      "provider": "dashscope",
+      "capabilities": [
+        "POLISH",
+        "CHAT_SUMMARY",
+        "SMART_REPLY"
+      ],
+      "pricing": {
+        "input_token_price": 0.005,
+        "output_token_price": 0.015
+      },
+      "max_tokens": 128000
+    }
   ],
-  "preferences": {
-    "temperature": 0.7,
-    "max_tokens": 1000,
+  "switches": {
     "auto_moderation": true,
     "smart_reply_enabled": true
   },
   "usage": {
-    "daily_tokens": 15000,
     "monthly_tokens": 450000,
-    "cost": 25.50
+    "monthly_cost": 25.50
   }
 }
 ```

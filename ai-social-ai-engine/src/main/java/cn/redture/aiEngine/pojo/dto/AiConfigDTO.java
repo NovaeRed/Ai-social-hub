@@ -6,11 +6,8 @@ import lombok.Data;
 
 @Data
 public class AiConfigDTO {
-    @JsonProperty("default_model")
-    private String defaultModel;
-    
-    @JsonProperty("default_provider")
-    private String defaultProvider;
-    
+    @JsonProperty("model_option_code")
+    private String modelOptionCode;
+
     private AiConfigParams preferences;
 }

@@ -2,18 +2,17 @@ package cn.redture.aiEngine.pojo.vo;
 
 import cn.redture.aiEngine.pojo.model.AiConfigParams;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
-import java.util.Map;
 
 @Data
-@Builder
+@NoArgsConstructor
 public class AiConfigVO {
-    @JsonProperty("default_model")
-    private String defaultModel;
-    private List<String> providers;
-    private AiConfigParams preferences;
+    @JsonProperty("selected_model_option_code")
+    private String selectedModelOptionCode;
+    private List<AiModelVO> modelOptions;
+    private AiConfigParams switches;
     private UserUsageSummaryVO usage;
 }

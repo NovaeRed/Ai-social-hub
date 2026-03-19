@@ -20,14 +20,13 @@ spring:
           time-between-eviction-runs: 10s
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
-      
-  # Spring AI Alibaba (Qwen)
+
+  # Spring AI 自动配置兼容项：某些组件会强校验该键是否存在
   ai:
     dashscope:
-      api-key: ${Qwen-api}
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      default-model: qwen-max
-      timeout: 60000
+      api-key: ${ai.qwen.api-key}
+      base-url: ${ai.qwen.base-url}
+      default-model: ${ai.managed.default-model-type}
 
 mybatis-plus:
   type-aliases-package: cn.redture
@@ -46,11 +45,13 @@ ai:
       cooldown-seconds: 21600
 
   # Qwen配置
+  managed:
+    # 托管模式默认模型类型；请求未携带 model_option_code 或数据库未命中时回退
+    default-model-type: qwen-max
+
   qwen:
     api-key: ${Qwen-api}
     base-url: ${Qwen-base-url:https://dashscope.aliyuncs.com/compatible-mode/v1}
-    default-model: qwen-max
-    timeout: 60000
 
 jwt:
   secret: ai-social-project-secret-key-for-jwt-authentication-hs256-20240520

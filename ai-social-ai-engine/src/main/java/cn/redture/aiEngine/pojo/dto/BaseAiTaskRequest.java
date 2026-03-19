@@ -1,6 +1,6 @@
 package cn.redture.aiEngine.pojo.dto;
 
-import cn.redture.aiEngine.pojo.model.ModelConfig;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.util.Map;
@@ -10,11 +10,12 @@ import java.util.Map;
  */
 @Data
 public class BaseAiTaskRequest {
-    
+
     /**
-     * 覆盖配置（可选）
+     * 模型选项编码（可选），由服务端解析为托管配置。
      */
-    private ModelConfig overrideConfig;
+    @JsonProperty("model_option_code")
+    private String modelOptionCode;
     
     /**
      * 上下文信息（可选）

@@ -53,8 +53,8 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         log.info("Polish request from user: {}", userId);
         Map<String, Object> params = new HashMap<>();
         params.put("message", request.getMessage());
-        if (request.getOverrideConfig() != null) {
-            params.put("override_config", request.getOverrideConfig());
+        if (request.getModelOptionCode() != null && !request.getModelOptionCode().isBlank()) {
+            params.put("model_option_code", request.getModelOptionCode().trim());
         }
         return executeStreamTask(userId, AiTaskType.POLISH, params, "polished_message");
     }
@@ -68,8 +68,8 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         if (request.getDomain() != null) {
             params.put("domain", request.getDomain());
         }
-        if (request.getOverrideConfig() != null) {
-            params.put("override_config", request.getOverrideConfig());
+        if (request.getModelOptionCode() != null && !request.getModelOptionCode().isBlank()) {
+            params.put("model_option_code", request.getModelOptionCode().trim());
         }
         return executeStreamTask(userId, AiTaskType.TRANSLATION, params, "translation");
     }
@@ -98,8 +98,8 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         if (request.getUserProfile() != null) {
             params.put("user_profile", request.getUserProfile());
         }
-        if (request.getOverrideConfig() != null) {
-            params.put("override_config", request.getOverrideConfig());
+        if (request.getModelOptionCode() != null && !request.getModelOptionCode().isBlank()) {
+            params.put("model_option_code", request.getModelOptionCode().trim());
         }
 
         return executeStreamTask(userId, AiTaskType.SMART_REPLY, params, "reply");
@@ -116,8 +116,8 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         if (request.getKeywords() != null && !request.getKeywords().isEmpty()) {
             params.put("keywords", request.getKeywords());
         }
-        if (request.getOverrideConfig() != null) {
-            params.put("override_config", request.getOverrideConfig());
+        if (request.getModelOptionCode() != null && !request.getModelOptionCode().isBlank()) {
+            params.put("model_option_code", request.getModelOptionCode().trim());
         }
 
         log.debug("Summarize content length: {}, type: {}",
@@ -133,8 +133,8 @@ public class AiInteractionServiceImpl implements AiInteractionService {
 
         Map<String, Object> params = new HashMap<>();
         params.put("messages", request.getMessages());
-        if (request.getOverrideConfig() != null) {
-            params.put("override_config", request.getOverrideConfig());
+        if (request.getModelOptionCode() != null && !request.getModelOptionCode().isBlank()) {
+            params.put("model_option_code", request.getModelOptionCode().trim());
         }
 
         AiTask task = aiTaskService.createTask(userId, AiTaskType.SCHEDULE_EXTRACTION, params);
@@ -203,8 +203,8 @@ public class AiInteractionServiceImpl implements AiInteractionService {
         if (request.getAnalysisConfig() != null) {
             params.put("analysis_config", request.getAnalysisConfig());
         }
-        if (request.getOverrideConfig() != null) {
-            params.put("override_config", request.getOverrideConfig());
+        if (request.getModelOptionCode() != null && !request.getModelOptionCode().isBlank()) {
+            params.put("model_option_code", request.getModelOptionCode().trim());
         }
 
         AiTask task = aiTaskService.createTask(userId, AiTaskType.PERSONA_ANALYSIS, params);

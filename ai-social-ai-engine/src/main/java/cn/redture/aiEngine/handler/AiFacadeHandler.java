@@ -1,12 +1,15 @@
 package cn.redture.aiEngine.handler;
 
+import cn.redture.aiEngine.mapper.AiModelCapabilityMapper;
 import cn.redture.aiEngine.pojo.dto.SmartReplyRequest;
+import cn.redture.aiEngine.pojo.entity.AiModelCapability;
 import cn.redture.aiEngine.pojo.enums.AiProvider;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
-import cn.redture.aiEngine.pojo.model.ModelConfig;
 import cn.redture.common.util.JsonUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import jakarta.annotation.Resource;
+import org.springframework.beans.factory.annotation.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.tool.ToolCallback;
@@ -14,7 +17,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,9 +27,15 @@ import java.util.Map;
 public class AiFacadeHandler {
 
     private final ChatClient qwenClient;
+    private final AiModelCapabilityMapper aiModelCapabilityMapper;
 
-    public AiFacadeHandler(@Qualifier("qwenClient") ChatClient qwenClient) {
+    @Value("${ai.managed.default-model-type:qwen-max}")
+    private String defaultModelType;
+
+    public AiFacadeHandler(@Qualifier("qwenClient") ChatClient qwenClient,
+                           AiModelCapabilityMapper aiModelCapabilityMapper) {
         this.qwenClient = qwenClient;
+        this.aiModelCapabilityMapper = aiModelCapabilityMapper;
     }
 
     public Flux<String> executeTaskStream(Long userId, AiTaskType taskType, Map<String, Object> params, AiProvider provider) {
@@ -76,41 +84,49 @@ public class AiFacadeHandler {
     }
 
     private DashScopeChatOptions buildOptions(Map<String, Object> params) {
-        var builder = DashScopeChatOptions.builder();
+        // 托管模式：根据用户传入的模型选项编码，在数据库中查找并设置模型类型。
+        String modelType = resolveModelTypeFromParams(params);
+        return DashScopeChatOptions.builder().withModel(modelType).build();
+    }
 
-        if (params.containsKey("override_config")) {
-            Object configObj = params.get("override_config");
-            if (configObj instanceof ModelConfig config) {
-                if (config.getTemperature() != null) {
-                    builder.withTemperature(config.getTemperature());
-                }
-                if (config.getTopP() != null) {
-                    builder.withTopP(config.getTopP());
-                }
-                if (config.getTopK() != null) {
-                    builder.withTopK(config.getTopK());
-                }
-                if (config.getMaxTokens() != null) {
-                    builder.withMaxToken(config.getMaxTokens());
-                }
-                if (config.getStop() != null) {
-                    builder.withStop(List.of(config.getStop()));
-                }
-            } else if (configObj instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> config = (Map<String, Object>) configObj;
-                if (config.containsKey("temperature")) {
-                    builder.withTemperature((Double) config.get("temperature"));
-                }
-                if (config.containsKey("top_p")) {
-                    builder.withTopP((Double) config.get("top_p"));
-                }
-                if (config.containsKey("top_k")) {
-                    builder.withTopK(Integer.valueOf(config.get("top_k").toString()));
-                }
-            }
+    private String resolveModelTypeFromParams(Map<String, Object> params) {
+        String defaultType = (defaultModelType == null || defaultModelType.isBlank()) ? "qwen-max" : defaultModelType.trim();
+        if (params == null) {
+            return defaultType;
         }
-        return builder.build();
+
+        Object optionObj = params.get("model_option_code");
+        if (!(optionObj instanceof String optionCode) || optionCode.isBlank()) {
+            return defaultType;
+        }
+
+        String modelType = extractModelType(optionCode);
+        if (modelType == null || modelType.isBlank()) {
+            return defaultType;
+        }
+
+        AiModelCapability capability = aiModelCapabilityMapper.selectOne(
+                new LambdaQueryWrapper<AiModelCapability>()
+                        .eq(AiModelCapability::getModelName, modelType)
+                        .eq(AiModelCapability::getIsEnabled, true)
+                        .last("LIMIT 1")
+        );
+
+        if (capability == null) {
+            log.warn("model_option_code={} 对应模型 {} 未在数据库启用，回退默认模型 {}", optionCode, modelType, defaultType);
+            return defaultType;
+        }
+
+        return capability.getModelName();
+    }
+
+    private String extractModelType(String optionCode) {
+        String normalized = optionCode.trim();
+        int index = normalized.indexOf(':');
+        if (index >= 0 && index < normalized.length() - 1) {
+            return normalized.substring(index + 1).trim();
+        }
+        return normalized;
     }
 
     public String buildPrompt(AiTaskType taskType, Map<String, Object> params) {

@@ -45,7 +45,7 @@ public interface AiInteractionService {
     PersonaAnalysisVO analyzePersonaAsync(Long userId, PersonaAnalysisRequest request);
 
     /**
-     * 初始化用户画像 (基于历史消息)
+     * 初始化用户画像(基于历史消息)
      */
     void initPersona(Long userId);
 
