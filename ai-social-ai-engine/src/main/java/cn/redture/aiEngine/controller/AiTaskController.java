@@ -1,7 +1,14 @@
 package cn.redture.aiEngine.controller;
 
-import cn.redture.aiEngine.pojo.dto.*;
-import cn.redture.aiEngine.pojo.vo.*;
+import cn.redture.aiEngine.pojo.dto.PolishRequest;
+import cn.redture.aiEngine.pojo.dto.ScheduleRequest;
+import cn.redture.aiEngine.pojo.dto.SmartReplyRequest;
+import cn.redture.aiEngine.pojo.dto.SummarizeRequest;
+import cn.redture.aiEngine.pojo.dto.TranslationRequest;
+import cn.redture.aiEngine.pojo.vo.AiTaskDetailVO;
+import cn.redture.aiEngine.pojo.vo.AiTaskItemVO;
+import cn.redture.aiEngine.pojo.vo.ScheduleExtractionVO;
+import cn.redture.aiEngine.pojo.vo.StreamOutputVO;
 import cn.redture.aiEngine.service.AiInteractionService;
 import cn.redture.aiEngine.service.AiTaskService;
 import cn.redture.common.exception.businessException.InvalidInputException;
@@ -162,15 +169,6 @@ public class AiTaskController {
     public RestResult<AiTaskDetailVO> getTaskDetail(@PathVariable String publicId) {
         AiTaskDetailVO detail = aiTaskService.getTaskDetail(publicId);
         return RestResult.success(detail);
-    }
-
-    /**
-     * 性格分析（异步）
-     */
-    @PostMapping("/personality-analysis")
-    public RestResult<PersonaAnalysisVO> analyzePersona(@RequestBody PersonaAnalysisRequest request) {
-        Long userId = SecurityContextHolderUtil.getUserId();
-        return RestResult.accepted(aiInteractionService.analyzePersonaAsync(userId, request));
     }
 
     private List<SmartReplyRequest.HistoryMessage> toHistoryMessages(List<AiExternalMessageItem> messages) {

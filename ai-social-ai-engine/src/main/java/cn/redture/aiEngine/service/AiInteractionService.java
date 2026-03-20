@@ -1,12 +1,9 @@
 package cn.redture.aiEngine.service;
 
 import cn.redture.aiEngine.pojo.dto.*;
-import cn.redture.aiEngine.pojo.vo.PersonaAnalysisVO;
 import cn.redture.aiEngine.pojo.vo.ScheduleExtractionVO;
 import cn.redture.aiEngine.pojo.vo.StreamOutputVO;
 import reactor.core.publisher.Flux;
-
-import java.util.Map;
 
 /**
  * AI交互服务接口
@@ -40,9 +37,11 @@ public interface AiInteractionService {
     ScheduleExtractionVO extractSchedule(Long userId, ScheduleRequest request);
 
     /**
-     * 性格分析 (异步)
+     * 基于时间线自动触发画像分析。
+     *
+     * @param userId 用户 ID
      */
-    PersonaAnalysisVO analyzePersonaAsync(Long userId, PersonaAnalysisRequest request);
+    void analyzePersonaFromTimeline(Long userId);
 
     /**
      * 禁用用户画像 (清理或标记)

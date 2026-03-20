@@ -154,7 +154,7 @@ public class AiConfigServiceImpl implements AiConfigService {
     /**
      * 查询用户画像信息，可按画像类型过滤。
      *
-     * @param userId 用户 ID
+     * @param userId      用户 ID
      * @param profileType 画像类型过滤条件
      * @return 用户画像列表
      */
@@ -184,9 +184,9 @@ public class AiConfigServiceImpl implements AiConfigService {
     /**
      * 查询用户 AI 使用统计。
      *
-     * @param userId 用户 ID
+     * @param userId   用户 ID
      * @param dateFrom 起始日期
-     * @param dateTo 结束日期
+     * @param dateTo   结束日期
      * @param provider 服务商过滤条件
      * @return 使用统计视图
      */
@@ -214,7 +214,7 @@ public class AiConfigServiceImpl implements AiConfigService {
     /**
      * 处理用户 AI 分析授权变更事件。
      *
-     * @param userId 用户 ID
+     * @param userId  用户 ID
      * @param enabled 是否启用
      */
     @Override
@@ -260,7 +260,7 @@ public class AiConfigServiceImpl implements AiConfigService {
     /**
      * 处理用户新消息事件，并按阈值与冷却策略触发画像分析任务。
      *
-     * @param userId 用户 ID
+     * @param userId      用户 ID
      * @param messageTime 消息时间
      */
     @Override
@@ -289,14 +289,13 @@ public class AiConfigServiceImpl implements AiConfigService {
         }
 
         enqueuePersonaTask(userId, AiPersonaTaskType.AI_PERSONA_ANALYSIS);
-        stringRedisTemplate.opsForValue().set(counterKey, "0", 30, TimeUnit.DAYS);
         log.info("用户 {} 达到时间线画像阈值，已投递增量分析任务，pending={}", userId, pending);
     }
 
     /**
      * 校验是否满足冷却时间，满足时刷新最近触发时间戳。
      *
-     * @param userId 用户 ID
+     * @param userId      用户 ID
      * @param messageTime 当前消息时间
      * @return true 表示允许触发，false 表示仍在冷却窗口
      */
@@ -347,7 +346,7 @@ public class AiConfigServiceImpl implements AiConfigService {
     /**
      * 向画像任务队列投递任务。
      *
-     * @param userId 用户 ID
+     * @param userId   用户 ID
      * @param taskType 任务类型
      */
     private void enqueuePersonaTask(Long userId, AiPersonaTaskType taskType) {
@@ -399,7 +398,7 @@ public class AiConfigServiceImpl implements AiConfigService {
     /**
      * 生成模型选项编码。
      *
-     * @param provider 服务商标识
+     * @param provider  服务商标识
      * @param modelName 模型名称
      * @return 形如 provider:model 的模型选项编码
      */

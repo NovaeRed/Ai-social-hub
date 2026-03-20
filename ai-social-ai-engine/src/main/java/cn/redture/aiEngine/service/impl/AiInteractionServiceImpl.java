@@ -9,12 +9,10 @@ import cn.redture.aiEngine.pojo.enums.AiProvider;
 import cn.redture.aiEngine.pojo.enums.AiTaskStatus;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
 import cn.redture.aiEngine.pojo.vo.PersonaAnalysisResultVO;
-import cn.redture.aiEngine.pojo.vo.PersonaAnalysisVO;
 import cn.redture.aiEngine.pojo.vo.ScheduleExtractionVO;
 import cn.redture.aiEngine.pojo.vo.StreamOutputVO;
 import cn.redture.aiEngine.service.AiInteractionService;
 import cn.redture.aiEngine.service.AiTaskService;
-import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.exception.JsonException;
 import cn.redture.common.integration.ai.AiExternalService;
 import cn.redture.common.integration.ai.dto.AiExternalMessageItem;
@@ -23,6 +21,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -30,9 +29,13 @@ import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -43,15 +46,20 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AiInteractionServiceImpl implements AiInteractionService {
 
+    private static final String PERSONA_TIMELINE_COUNTER_KEY_PREFIX = "ai:persona:timeline:pending:";
+    private static final String PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX = "ai:persona:timeline:last-trigger:";
+    private static final int PERSONA_TIMELINE_FETCH_MAX = 500;
+
     private final AiTaskService aiTaskService;
     private final AiFacadeHandler aiFacadeHandler;
     private final UserAiProfileMapper userAiProfileMapper;
     private final AiExternalService aiExternalService;
+    private final StringRedisTemplate stringRedisTemplate;
 
     /**
      * 执行文本润色任务（流式返回）。
      *
-     * @param userId 用户 ID
+     * @param userId  用户 ID
      * @param request 润色请求
      * @return 流式输出结果
      */
@@ -69,7 +77,7 @@ public class AiInteractionServiceImpl implements AiInteractionService {
     /**
      * 执行翻译任务（流式返回）。
      *
-     * @param userId 用户 ID
+     * @param userId  用户 ID
      * @param request 翻译请求
      * @return 流式输出结果
      */
@@ -91,7 +99,7 @@ public class AiInteractionServiceImpl implements AiInteractionService {
     /**
      * 执行智能回复建议任务（流式返回）。
      *
-     * @param userId 用户 ID
+     * @param userId  用户 ID
      * @param request 智能回复请求
      * @return 流式输出结果
      */
@@ -129,7 +137,7 @@ public class AiInteractionServiceImpl implements AiInteractionService {
     /**
      * 执行内容总结任务（流式返回）。
      *
-     * @param userId 用户 ID
+     * @param userId  用户 ID
      * @param request 总结请求
      * @return 流式输出结果
      */
@@ -158,7 +166,7 @@ public class AiInteractionServiceImpl implements AiInteractionService {
     /**
      * 执行日程提取任务（同步返回结构化结果）。
      *
-     * @param userId 用户 ID
+     * @param userId  用户 ID
      * @param request 日程提取请求
      * @return 日程提取结果
      */
@@ -204,53 +212,35 @@ public class AiInteractionServiceImpl implements AiInteractionService {
     }
 
     /**
-     * 发起异步人格分析任务并返回任务 ID。
+     * 基于时间线消息发起异步人格分析任务。
      *
      * @param userId 用户 ID
-     * @param request 人格分析请求
-     * @return 异步任务信息
      */
     @Override
-    public PersonaAnalysisVO analyzePersonaAsync(Long userId, PersonaAnalysisRequest request) {
-        // 检查用户是否开启了 AI 画像分析
+    public void analyzePersonaFromTimeline(Long userId) {
         if (!aiExternalService.isAiAnalysisEnabled(userId)) {
-            log.warn("User {} has not enabled AI persona analysis", userId);
-            throw new JsonException(HttpStatus.FORBIDDEN.value(), "请先在设置中开启 AI 画像分析功能");
+            log.debug("Skip persona analysis because user {} has disabled analysis", userId);
+            return;
+        }
+
+        String pendingKey = PERSONA_TIMELINE_COUNTER_KEY_PREFIX + userId;
+        int pendingCount = readPendingCount(pendingKey);
+
+        OffsetDateTime triggerTime = readTriggerTime(userId);
+        OffsetDateTime lastAnalyzedAt = getLastAnalyzedAt(userId);
+
+        int fetchLimit = Math.min(Math.max(pendingCount * 3, pendingCount + 20), PERSONA_TIMELINE_FETCH_MAX);
+        List<MessageItem> messages = selectIncrementalMessages(userId, fetchLimit, pendingCount, lastAnalyzedAt, triggerTime);
+        if (messages.isEmpty()) {
+            log.info("Skip persona analysis because user {} has no incremental messages in window", userId);
+            return;
         }
 
         Map<String, Object> params = new HashMap<>();
-
-        // 支持两种方式提供消息：
-        // 1. 显式传 messages（两步式）
-        // 2. 传 selected_message_ids 或走后端自动兜底（一体化）
-        List<MessageItem> messages = request.getMessages();
-        if (messages == null || messages.isEmpty()) {
-            if (request.getSelectedMessageIds() != null && !request.getSelectedMessageIds().isEmpty()) {
-                messages = toInternalMessages(aiExternalService.getMessagesByIds(request.getSelectedMessageIds()));
-                log.debug("Resolved {} messages from selected_message_ids", messages.size());
-            } else {
-                messages = toInternalMessages(aiExternalService.getUserRecentMessagesForAnalysis(userId, 50));
-                log.debug("Resolved {} recent messages for persona analysis", messages.size());
-            }
-        }
-
-        if (messages.isEmpty()) {
-            throw new InvalidInputException("缺少可分析的消息内容");
-        }
-
-        final List<MessageItem> finalMessages = messages;
-        params.put("messages", finalMessages);
-        params.put("target_user_id", request.getTargetUserId() != null ? request.getTargetUserId() : userId.toString());
-
-        if (request.getAnalysisConfig() != null) {
-            params.put("analysis_config", request.getAnalysisConfig());
-        }
-        if (request.getModelOptionCode() != null && !request.getModelOptionCode().isBlank()) {
-            params.put("model_option_code", request.getModelOptionCode().trim());
-        }
+        params.put("messages", messages);
+        params.put("target_user_id", userId.toString());
 
         AiTask task = aiTaskService.createTask(userId, AiTaskType.PERSONA_ANALYSIS, params);
-
         aiTaskService.updateTaskStatus(task.getId(), AiTaskStatus.PROCESSING);
 
         Mono.fromCallable(() -> aiFacadeHandler.executeTask(userId, AiTaskType.PERSONA_ANALYSIS, params, AiProvider.QWEN))
@@ -267,28 +257,162 @@ public class AiInteractionServiceImpl implements AiInteractionService {
                                 }
 
                                 aiTaskService.updateTaskResult(task.getId(), AiTaskStatus.COMPLETED, resultData, null);
+                                savePersonaAnalysis(userId, result, messages);
+                                consumePendingMessages(userId, messages.size());
 
-                                // 保存性格分析结果到用户画像
-                                savePersonaAnalysis(userId, result, finalMessages);
-
-                                log.info("Persona analysis completed for user: {}, task: {}", userId, task.getPublicId());
+                                log.info("Timeline persona analysis completed for user: {}, task: {}", userId, task.getPublicId());
                             } catch (Exception e) {
-                                log.error("Failed to update task result", e);
+                                log.error("Failed to persist timeline persona analysis result for user {}", userId, e);
                             }
                         },
                         error -> {
-                            log.error("Persona analysis failed", error);
+                            log.error("Timeline persona analysis failed for user {}", userId, error);
                             try {
                                 aiTaskService.updateTaskResult(task.getId(), AiTaskStatus.FAILED, null, error.getMessage());
                             } catch (Exception e) {
-                                log.error("Failed to update task status", e);
+                                log.error("Failed to update persona task status to FAILED for user {}", userId, e);
                             }
                         }
                 );
+    }
 
-        PersonaAnalysisVO vo = new PersonaAnalysisVO();
-        vo.setTaskPublicId(task.getPublicId());
-        return vo;
+    /**
+     * 读取待分析计数。
+     *
+     * @param pendingKey Redis 计数键
+     * @return 待分析消息数量，解析失败时返回 0
+     */
+    private int readPendingCount(String pendingKey) {
+        String value = stringRedisTemplate.opsForValue().get(pendingKey);
+        if (value == null || value.isBlank()) {
+            return 0;
+        }
+        try {
+            return Math.max(Integer.parseInt(value), 0);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /**
+     * 读取最近触发时间；如果不存在则使用当前时间。
+     *
+     * @param userId 用户 ID
+     * @return 最近触发时间
+     */
+    private OffsetDateTime readTriggerTime(Long userId) {
+        String triggerKey = PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX + userId;
+        String value = stringRedisTemplate.opsForValue().get(triggerKey);
+        if (value == null || value.isBlank()) {
+            return OffsetDateTime.now();
+        }
+        try {
+            long epochSeconds = Long.parseLong(value);
+            return OffsetDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), ZoneOffset.UTC);
+        } catch (NumberFormatException e) {
+            return OffsetDateTime.now();
+        }
+    }
+
+    /**
+     * 查询当前画像最近分析时间，用于增量窗口起点。
+     *
+     * @param userId 用户 ID
+     * @return 最近分析时间，若不存在画像则返回 null
+     */
+    private OffsetDateTime getLastAnalyzedAt(Long userId) {
+        UserAiProfile profile = userAiProfileMapper.selectOne(new LambdaQueryWrapper<UserAiProfile>()
+                .eq(UserAiProfile::getUserId, userId)
+                .eq(UserAiProfile::getProfileType, "PERSONA"));
+        return profile == null ? null : profile.getLastAnalyzedAt();
+    }
+
+    /**
+     * 在触发窗口内挑选增量消息，优先选取 lastAnalyzedAt 之后且 triggerTime 之前的消息。
+     *
+     * @param userId         用户 ID
+     * @param fetchLimit     拉取候选消息上限
+     * @param pendingCount   待消费的消息数量
+     * @param lastAnalyzedAt 上次画像分析时间
+     * @param triggerTime    本次触发时间
+     * @return 供本次画像分析使用的增量消息列表
+     */
+    private List<MessageItem> selectIncrementalMessages(Long userId,
+                                                        int fetchLimit,
+                                                        int pendingCount,
+                                                        OffsetDateTime lastAnalyzedAt,
+                                                        OffsetDateTime triggerTime) {
+        List<MessageItem> all = toInternalMessages(aiExternalService.getUserRecentMessagesForAnalysis(userId, fetchLimit));
+        if (all.isEmpty()) {
+            return List.of();
+        }
+
+        List<MessageItem> filtered = all.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> isInTimelineWindow(item, lastAnalyzedAt, triggerTime))
+                .sorted(Comparator.comparing(this::safeTimestamp))
+                .toList();
+
+        if (filtered.isEmpty()) {
+            filtered = all.stream().filter(Objects::nonNull).toList();
+        }
+
+        int size = filtered.size();
+        int startIndex = Math.max(size - pendingCount, 0);
+        return filtered.subList(startIndex, size);
+    }
+
+    /**
+     * 判断消息是否位于本次增量分析窗口。
+     *
+     * @param item           消息对象
+     * @param lastAnalyzedAt 上次画像分析时间
+     * @param triggerTime    本次触发时间
+     * @return true 表示消息位于增量窗口内
+     */
+    private boolean isInTimelineWindow(MessageItem item, OffsetDateTime lastAnalyzedAt, OffsetDateTime triggerTime) {
+        OffsetDateTime ts = safeTimestamp(item);
+        if (ts == null) {
+            return true;
+        }
+        if (lastAnalyzedAt != null && !ts.isAfter(lastAnalyzedAt)) {
+            return false;
+        }
+        return triggerTime == null || !ts.isAfter(triggerTime);
+    }
+
+    /**
+     * 解析消息时间戳；不可解析时返回 null。
+     *
+     * @param item 消息对象
+     * @return 消息时间戳，无法解析时返回 null
+     */
+    private OffsetDateTime safeTimestamp(MessageItem item) {
+        if (item == null || item.getTimestamp() == null || item.getTimestamp().isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(item.getTimestamp());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 分析成功后扣减已消费的 pending 计数，保留并发期间新增的未消费计数。
+     *
+     * @param userId   用户 ID
+     * @param consumed 本次已消费消息数量
+     */
+    private void consumePendingMessages(Long userId, int consumed) {
+        if (consumed <= 0) {
+            return;
+        }
+        String pendingKey = PERSONA_TIMELINE_COUNTER_KEY_PREFIX + userId;
+        Long remain = stringRedisTemplate.opsForValue().increment(pendingKey, -consumed);
+        if (remain == null || remain < 0) {
+            stringRedisTemplate.opsForValue().set(pendingKey, "0");
+        }
     }
 
     /**
@@ -308,7 +432,7 @@ public class AiInteractionServiceImpl implements AiInteractionService {
     /**
      * 保存人格分析结果到用户画像表。
      *
-     * @param userId 用户 ID
+     * @param userId         用户 ID
      * @param analysisResult 原始分析结果文本
      * @param sourceMessages 样本消息集合
      */
@@ -381,7 +505,7 @@ public class AiInteractionServiceImpl implements AiInteractionService {
      * 解析样本消息时间边界。
      *
      * @param sourceMessages 样本消息列表
-     * @param isMin true 取最小时间，false 取最大时间
+     * @param isMin          true 取最小时间，false 取最大时间
      * @return 时间边界，无法解析时返回 null
      */
     private OffsetDateTime resolveSourceTimeBoundary(List<MessageItem> sourceMessages, boolean isMin) {
@@ -456,13 +580,13 @@ public class AiInteractionServiceImpl implements AiInteractionService {
     }
 
     /**
-        * 通用流式任务执行模板：创建任务、执行流式输出、写入任务结果。
-        *
-        * @param userId 用户 ID
-        * @param taskType 任务类型
-        * @param params 输入参数
-        * @param resultKey 结果写入键
-        * @return 流式输出
+     * 通用流式任务执行模板：创建任务、执行流式输出、写入任务结果。
+     *
+     * @param userId    用户 ID
+     * @param taskType  任务类型
+     * @param params    输入参数
+     * @param resultKey 结果写入键
+     * @return 流式输出
      */
     private Flux<StreamOutputVO> executeStreamTask(Long userId, AiTaskType taskType, Map<String, Object> params, String resultKey) {
         return Flux.defer(() -> {

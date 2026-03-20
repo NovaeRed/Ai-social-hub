@@ -957,69 +957,9 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.5 `POST /api/v1/ai/tasks/personality-analysis`
+### 5.5 `GET /api/v1/ai/tasks/message-candidates`
 
-**Request Body (性格分析，支持两种模式):**
-
-- 两步模式（隐私优先）：前端先调用 `GET /api/v1/ai/tasks/message-candidates` 获取候选消息，再传 `messages` 或
-  `selected_message_ids`。
-- 一体化模式（易用优先）：不传 `messages` 与 `selected_message_ids`，后端自动取当前用户最近 50 条消息。
-
-```json5
-{
-  // 模式1: 直接传消息对象（两步模式）
-  "messages": [
-    {
-      "sender": "user1",
-      "content": "我觉得这个方案不太可行，风险太大了。",
-      "timestamp": "2025-12-01T09:00:00Z"
-    },
-    {
-      "sender": "user1",
-      "content": "不过我们可以考虑一些风险控制措施。",
-      "timestamp": "2025-12-01T09:05:00Z"
-    },
-    {
-      "sender": "user2",
-      "content": "是的，我同意你的看法。",
-      "timestamp": "2025-12-01T09:10:00Z"
-    }
-  ],
-  // 模式2: 仅传消息ID（推荐，后端按ID查询）
-  "selected_message_ids": [
-    101,
-    102,
-    103
-  ],
-  "target_user_id": "user1",
-  "analysis_config": {
-    "dimensions": [
-      "openness",
-      "conscientiousness",
-      "extraversion",
-      "agreeableness",
-      "neuroticism"
-    ],
-    "depth": "comprehensive"
-    // basic, standard, comprehensive
-  },
-  "model_option_code": "dashscope:qwen-max"
-}
-```
-
-**Response 202 (Accepted):**
-
-```json
-{
-  "task_public_id": "task_p1q2r3s4"
-}
-```
-
----
-
-### 5.6 `GET /api/v1/ai/tasks/message-candidates`
-
-**获取可供用户显式选择的消息样本（用于 Persona Analysis / Custom Summary）**
+**获取可供用户显式选择的消息样本（用于 Custom Summary）**
 
 **Query Parameters:**
 
@@ -1045,7 +985,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.7 `POST /api/v1/ai/tasks/smart-reply`
+### 5.6 `POST /api/v1/ai/tasks/smart-reply`
 
 **Request Body (智能回复建议，支持两种模式):**
 
@@ -1082,7 +1022,7 @@ data: {"type":"STREAM","content":"，需要准备什么材料吗？"}
 data: {"type":"COMPLETE"}
 ```
 
-### 5.8 `POST /api/v1/ai/tasks/summarize`
+### 5.7 `POST /api/v1/ai/tasks/summarize`
 
 **Request Body (内容总结，支持两种模式):**
 
@@ -1126,7 +1066,7 @@ data: {"type":"STREAM","content":"要点1: ..."}
 data: {"type":"COMPLETE"}
 ```
 
-### 5.9 `POST /api/v1/ai/tasks/translate`
+### 5.8 `POST /api/v1/ai/tasks/translate`
 
 **Request Body (智能翻译):**
 
@@ -1149,7 +1089,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.10 `GET /api/v1/ai/models`
+### 5.9 `GET /api/v1/ai/models`
 
 **获取可用AI模型列表**
 
@@ -1191,7 +1131,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.11 `POST /api/v1/ai/config`
+### 5.10 `POST /api/v1/ai/config`
 
 **设置用户托管AI配置**
 
@@ -1218,7 +1158,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.12 `GET /api/v1/ai/config`
+### 5.11 `GET /api/v1/ai/config`
 
 **获取用户托管AI配置**
 
@@ -1256,7 +1196,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.13 `GET /api/v1/ai/profiles`
+### 5.12 `GET /api/v1/ai/profiles`
 
 **获取用户AI画像**
 
@@ -1284,7 +1224,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.14 `GET /api/v1/ai/usage`
+### 5.13 `GET /api/v1/ai/usage`
 
 **获取AI使用统计**
 
@@ -1319,7 +1259,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.15 `GET /ai/config`
+### 5.14 `GET /ai/config`
 
 **获取用户托管AI配置**
 
@@ -1357,7 +1297,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.16 `GET /ai/profiles`
+### 5.15 `GET /ai/profiles`
 
 **获取用户AI画像**
 
@@ -1396,7 +1336,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.17 `GET /ai/usage`
+### 5.16 `GET /ai/usage`
 
 **获取AI使用统计**
 
