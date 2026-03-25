@@ -172,6 +172,9 @@ public class AiTaskServiceImpl implements AiTaskService {
         vo.setPublicId(task.getPublicId());
         vo.setType(task.getTaskType().name());
         vo.setStatus(task.getTaskStatus().name());
+        vo.setRequestedModelOptionCode(readModelOptionCode(task.getInputPayload()));
+        vo.setResolvedModelName(task.getModelConfig() == null ? null : task.getModelConfig().getModelName());
+        vo.setResolvedProvider(task.getProvider());
         vo.setInputPayload(task.getInputPayload());
         vo.setOutputPayload(task.getOutputPayload());
         vo.setErrorMessage(task.getErrorMessage());
@@ -195,8 +198,22 @@ public class AiTaskServiceImpl implements AiTaskService {
         vo.setStatus(task.getTaskStatus());
         vo.setCreatedAt(task.getCreatedAt());
         vo.setCompletedAt(task.getCompletedAt());
+        vo.setRequestedModelOptionCode(readModelOptionCode(task.getInputPayload()));
+        vo.setResolvedModelName(task.getModelConfig() == null ? null : task.getModelConfig().getModelName());
+        vo.setResolvedProvider(task.getProvider());
         vo.setResult(task.getOutputPayload());
         vo.setModelConfig(task.getModelConfig());
         return vo;
+    }
+
+    private String readModelOptionCode(Map<String, Object> inputPayload) {
+        if (inputPayload == null) {
+            return null;
+        }
+        Object value = inputPayload.get("model_option_code");
+        if (!(value instanceof String optionCode) || optionCode.isBlank()) {
+            return null;
+        }
+        return optionCode.trim();
     }
 }

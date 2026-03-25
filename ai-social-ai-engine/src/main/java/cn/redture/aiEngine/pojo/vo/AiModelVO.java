@@ -5,7 +5,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
-import java.util.Map;
 
 @Data
 @NoArgsConstructor
@@ -17,7 +16,4 @@ public class AiModelVO {
     private String name;
     private String provider;
     private List<String> capabilities;
-    private ModelPricingVO pricing;
-    @JsonProperty("max_tokens")
-    private Integer maxTokens;
 }

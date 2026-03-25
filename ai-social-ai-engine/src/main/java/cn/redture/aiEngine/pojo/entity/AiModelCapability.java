@@ -6,7 +6,6 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 /**
@@ -25,12 +24,13 @@ public class AiModelCapability {
     private AiTaskType capabilityType;
     
     private Boolean isEnabled;
-    
-    private Integer maxTokens;
-    
-    private BigDecimal inputPricePerMillion;
-    
-    private BigDecimal outputPricePerMillion;
+
+    /**
+     * 是否作为该能力的默认路由模型。
+     */
+    private Boolean isDefault;
     
     private OffsetDateTime createdAt;
+
+    private OffsetDateTime updatedAt;
 }

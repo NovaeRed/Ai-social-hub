@@ -19,6 +19,15 @@ public class AiTaskDetailVO {
 
     private String status;
 
+    @JsonProperty("requested_model_option_code")
+    private String requestedModelOptionCode;
+
+    @JsonProperty("resolved_model_name")
+    private String resolvedModelName;
+
+    @JsonProperty("resolved_provider")
+    private String resolvedProvider;
+
     @JsonProperty("input_payload")
     private Map<String, Object> inputPayload;
 

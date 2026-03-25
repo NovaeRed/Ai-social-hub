@@ -1,5 +1,7 @@
 server:
   port: 8080
+  servlet:
+    context-path: ${app.api-prefix:/api/v1}
 spring:
   application:
     name: ai-social-app
@@ -21,13 +23,6 @@ spring:
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
 
-  # Spring AI 自动配置兼容项：某些组件会强校验该键是否存在
-  ai:
-    dashscope:
-      api-key: ${ai.qwen.api-key}
-      base-url: ${ai.qwen.base-url}
-      default-model: ${ai.managed.default-model-type}
-
 mybatis-plus:
   type-aliases-package: cn.redture
   configuration:
@@ -37,21 +32,42 @@ logging:
     cn.redture: debug
 
 ai:
-  persona:
+  async:
     consumer:
       enabled: true
+    queue:
+      block-ms: 5000
+      batch-size: 10
+      max-retries: 5
+      retry-base-ms: 1000
+      retry-max-ms: 60000
+    dlq:
+      consumer:
+        enabled: true
+      notification-max-replay: 3
+  persona:
     timeline:
       message-threshold: 20
       cooldown-seconds: 21600
 
-  # Qwen配置
-  managed:
-    # 托管模式默认模型类型；请求未携带 model_option_code 或数据库未命中时回退
-    default-model-type: qwen-max
+  providers:
+    dashscope:
+      url: https://dashscope.aliyuncs.com
+      api-key: ${Qwen-api:}
+      endpoints:
+        chat: /compatible-mode/v1/chat/completions
 
-  qwen:
-    api-key: ${Qwen-api}
-    base-url: ${Qwen-base-url:https://dashscope.aliyuncs.com/compatible-mode/v1}
+  chat:
+    default-model: qwen3-max-2026-01-23
+    candidates:
+      - id: qwen3
+        provider: dashscope
+        model: qwen3-max-2026-01-23
+        enabled: true
+      - id: qwen-plus
+        provider: dashscope
+        model: qwen-plus-latest
+        enabled: true
 
 jwt:
   secret: ai-social-project-secret-key-for-jwt-authentication-hs256-20240520
@@ -59,6 +75,7 @@ jwt:
   refresh_token_expiration_seconds: 604800 # 7 days in seconds
 
 app:
+  api-prefix: /api/v1
   security:
     entry-rate-limit:
       enabled: true

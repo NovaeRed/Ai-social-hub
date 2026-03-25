@@ -1,5 +1,6 @@
 package cn.redture.common.exception.businessException;
 
+import cn.redture.common.constants.ErrorCodes;
 import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;
 
@@ -10,14 +11,12 @@ import org.springframework.http.HttpStatus;
  */
 public class InvalidInputException extends BaseException {
 
-    private static final String DEFAULT_ERROR_CODE = "INVALID_INPUT";
-
     /**
      * 构造一个“输入参数无效”异常
      *
      * @param message 具体的错误信息，例如 "邮箱格式不正确"
      */
     public InvalidInputException(String message) {
-        super(HttpStatus.BAD_REQUEST, message, DEFAULT_ERROR_CODE);
+        super(HttpStatus.BAD_REQUEST, message, ErrorCodes.INVALID_INPUT);
     }
 }

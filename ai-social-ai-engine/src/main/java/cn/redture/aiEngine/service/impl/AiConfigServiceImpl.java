@@ -1,20 +1,22 @@
 package cn.redture.aiEngine.service.impl;
 
 import cn.redture.aiEngine.mapper.*;
-import cn.redture.aiEngine.pojo.dto.AiConfigDTO;
 import cn.redture.aiEngine.pojo.dto.AiPersonaTaskDTO;
 import cn.redture.aiEngine.pojo.entity.*;
+import cn.redture.aiEngine.pojo.enums.AsyncTaskDomain;
 import cn.redture.aiEngine.pojo.enums.AiPersonaTaskType;
 import cn.redture.aiEngine.pojo.enums.ProfileType;
 import cn.redture.aiEngine.pojo.model.AiConfigParams;
 import cn.redture.aiEngine.pojo.vo.*;
 import cn.redture.aiEngine.service.AiConfigService;
+import cn.redture.aiEngine.service.AiAsyncSubmissionService;
 import cn.redture.common.integration.ai.AiExternalService;
 import cn.redture.common.util.JsonUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +28,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static cn.redture.common.constants.RedisConstants.PERSONA_TASK_QUEUE_KEY;
+import static cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_STREAM_KEY;
 
 @Slf4j
 @Service
@@ -36,13 +38,13 @@ public class AiConfigServiceImpl implements AiConfigService {
     private static final String PERSONA_TIMELINE_COUNTER_KEY_PREFIX = "ai:persona:timeline:pending:";
     private static final String PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX = "ai:persona:timeline:last-trigger:";
 
-    private final AiUserConfigMapper aiUserConfigMapper;
     private final UserAiProfileMapper userAiProfileMapper;
     private final UserAiContextMapper userAiContextMapper;
     private final AiModelCapabilityMapper aiModelCapabilityMapper;
     private final AiUsageStatsMapper aiUsageStatsMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final AiExternalService aiExternalService;
+    private final AiAsyncSubmissionService aiAsyncSubmissionService;
 
     // 批量分析触发的消息数阈值
     @Value("${ai.persona.timeline.message-threshold:20}")
@@ -71,84 +73,15 @@ public class AiConfigServiceImpl implements AiConfigService {
                     String optionCode = buildOptionCode(first.getProvider(), first.getModelName());
                     List<String> capabilitiesByModel = list.stream().map(c -> c.getCapabilityType().name()).collect(Collectors.toList());
 
-                    ModelPricingVO pricing = new ModelPricingVO();
-                    pricing.setInputPricePerMillion(first.getInputPricePerMillion());
-                    pricing.setOutputPricePerMillion(first.getOutputPricePerMillion());
-
                     AiModelVO model = new AiModelVO();
                     model.setOptionCode(optionCode);
                     model.setDisplayName(first.getModelName());
                     model.setName(first.getModelName());
                     model.setProvider(first.getProvider());
                     model.setCapabilities(capabilitiesByModel);
-                    model.setPricing(pricing);
-                    model.setMaxTokens(first.getMaxTokens());
                     return model;
                 })
                 .collect(Collectors.toList());
-    }
-
-    /**
-     * 保存用户托管 AI 配置（模型选项 + 开关项）。
-     *
-     * @param userId 用户 ID
-     * @param config 用户提交的配置请求
-     * @return 配置记录 ID
-     */
-    @Override
-    public String setUserConfig(Long userId, AiConfigDTO config) {
-        AiUserConfig userConfig = aiUserConfigMapper.selectOne(new LambdaQueryWrapper<AiUserConfig>()
-                .eq(AiUserConfig::getUserId, userId));
-
-        String selectedOptionCode = resolveSelectedOptionCode(config);
-        AiConfigParams managedSwitches = sanitizeSwitches(config == null ? null : config.getPreferences());
-
-        if (userConfig == null) {
-            userConfig = new AiUserConfig();
-            userConfig.setUserId(userId);
-            userConfig.setDefaultModel(selectedOptionCode);
-            userConfig.setConfigParams(managedSwitches);
-            aiUserConfigMapper.insert(userConfig);
-        } else {
-            userConfig.setDefaultModel(selectedOptionCode);
-            userConfig.setConfigParams(managedSwitches);
-            aiUserConfigMapper.updateById(userConfig);
-        }
-        return userConfig.getId().toString();
-    }
-
-    /**
-     * 查询用户 AI 配置，同时附带可选模型列表与当月用量摘要。
-     *
-     * @param userId 用户 ID
-     * @return 用户 AI 配置视图
-     */
-    @Override
-    public AiConfigVO getUserConfig(Long userId) {
-        AiUserConfig userConfig = aiUserConfigMapper.selectOne(new LambdaQueryWrapper<AiUserConfig>()
-                .eq(AiUserConfig::getUserId, userId));
-
-        List<AiModelVO> modelOptions = getAvailableModels();
-        String selectedModelOptionCode = userConfig != null ? userConfig.getDefaultModel() : null;
-        if (selectedModelOptionCode == null || selectedModelOptionCode.isBlank()) {
-            selectedModelOptionCode = modelOptions.isEmpty() ? "managed-default" : modelOptions.getFirst().getOptionCode();
-        }
-        AiConfigParams switches = sanitizeSwitches(userConfig == null ? null : userConfig.getConfigParams());
-
-        // 获取本月用量统计
-        LocalDate startOfMonth = LocalDate.now().withDayOfMonth(1);
-        UsageSummaryVO usageSummary = aiUsageStatsMapper.getUsageSummary(userId, startOfMonth);
-
-        UserUsageSummaryVO usage = new UserUsageSummaryVO();
-        usage.setMonthlyTokens(usageSummary != null ? usageSummary.getTotalTokens() : 0L);
-        usage.setMonthlyCost(usageSummary != null ? usageSummary.getTotalCost() : BigDecimal.ZERO);
-
-        AiConfigVO response = new AiConfigVO();
-        response.setSelectedModelOptionCode(selectedModelOptionCode);
-        response.setModelOptions(modelOptions);
-        response.setSwitches(switches);
-        response.setUsage(usage);
-        return response;
     }
 
     /**
@@ -288,8 +221,32 @@ public class AiConfigServiceImpl implements AiConfigService {
             return;
         }
 
-        enqueuePersonaTask(userId, AiPersonaTaskType.AI_PERSONA_ANALYSIS);
-        log.info("用户 {} 达到时间线画像阈值，已投递增量分析任务，pending={}", userId, pending);
+        aiAsyncSubmissionService.analyzePersonaFromTimeline(userId);
+        log.info("用户 {} 达到时间线画像阈值，已提交增量分析 ai_task，pending={}", userId, pending);
+    }
+
+    /**
+     * 处理 PERSONA 任务在死信队列中的补偿丢弃
+     *
+     * @param userId          用户ID
+     * @param personaTaskType 画像任务类型
+     * @param reason          丢弃原因
+     */
+    @Override
+    public void compensatePersonaTaskDrop(Long userId, String personaTaskType, String reason) {
+        if (userId == null) {
+            return;
+        }
+
+        if (AiPersonaTaskType.AI_PERSONA_ANALYSIS.name().equalsIgnoreCase(personaTaskType)) {
+            String triggerKey = PERSONA_TIMELINE_LAST_TRIGGER_KEY_PREFIX + userId;
+            stringRedisTemplate.delete(triggerKey);
+            log.warn("PERSONA_TASK 死信补偿完成：userId={}, taskType={}, action=clear_last_trigger, reason={}",
+                    userId, personaTaskType, reason);
+            return;
+        }
+
+        log.warn("PERSONA_TASK 死信丢弃：userId={}, taskType={}, reason={}", userId, personaTaskType, reason);
     }
 
     /**
@@ -352,47 +309,19 @@ public class AiConfigServiceImpl implements AiConfigService {
     private void enqueuePersonaTask(Long userId, AiPersonaTaskType taskType) {
         AiPersonaTaskDTO task = new AiPersonaTaskDTO();
         task.setUserId(userId);
-        task.setType(taskType);
+        task.setTaskType(taskType);
         String taskJson = JsonUtil.toJson(task);
-        stringRedisTemplate.opsForList().leftPush(PERSONA_TASK_QUEUE_KEY, taskJson);
-    }
 
-    /**
-     * 解析用户选择的模型选项编码；若未提供则回退到可用模型中的第一个。
-     *
-     * @param config 配置请求
-     * @return 模型选项编码
-     */
-    private String resolveSelectedOptionCode(AiConfigDTO config) {
-        if (config != null && config.getModelOptionCode() != null && !config.getModelOptionCode().isBlank()) {
-            return config.getModelOptionCode().trim();
-        }
-
-        List<AiModelVO> options = getAvailableModels();
-        if (!options.isEmpty()) {
-            return options.getFirst().getOptionCode();
-        }
-
-        return "managed-default";
-    }
-
-    /**
-     * 规范化开关类配置，保证关键开关具备默认值。
-     *
-     * @param raw 原始开关配置
-     * @return 规范化后的开关配置
-     */
-    private AiConfigParams sanitizeSwitches(AiConfigParams raw) {
-        AiConfigParams params = new AiConfigParams();
-        if (raw == null) {
-            params.setAutoModeration(Boolean.TRUE);
-            params.setSmartReplyEnabled(Boolean.TRUE);
-            return params;
-        }
-
-        params.setAutoModeration(raw.getAutoModeration());
-        params.setSmartReplyEnabled(raw.getSmartReplyEnabled());
-        return params;
+        Map<String, String> payload = new HashMap<>();
+        payload.put("domain", AsyncTaskDomain.PERSONA_TASK.name());
+        payload.put("task", taskJson);
+        payload.put("taskType", taskType.name());
+        payload.put("biz_id", "persona:" + userId + ":" + taskType.name());
+        payload.put("trace_id", UUID.randomUUID().toString());
+        payload.put("user_id", String.valueOf(userId));
+        payload.put("created_at_epoch", String.valueOf(OffsetDateTime.now().toEpochSecond()));
+        payload.put("retry_count", "0");
+        stringRedisTemplate.opsForStream().add(StreamRecords.string(payload).withStreamKey(AI_ASYNC_TASK_STREAM_KEY));
     }
 
     /**

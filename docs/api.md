@@ -4,13 +4,18 @@
 
 **Base URL:** `https://api.ai-social.com/`
 
-**Last Updated:** 2026-03-09
+**API Prefix:** 由前后端配置统一提供（默认 `/api/v1`，后端对应 `server.servlet.context-path`）
+
+> 文档中的接口路径均为**去前缀后的相对路径**（例如 `/ai/interactions/polish`）。
+> 实际请求地址为：`<Base URL> + <API Prefix> + <Path>`。
+
+**Last Updated:** 2026-03-25
 
 **Architecture Overview:**
 
 - **网关优先：** 所有请求通过 `ai-social-gateway` 路由，负责认证、限流和文件上传。
 - **模块化服务：** 网关将请求分发到专用的下游服务（`identity`、`chat`、`schedule`、`ai-engine` 模块）。
-- **异步 AI：** 所有计算密集型的 AI 任务通过任务队列以异步方式处理，确保非阻塞的用户体验。
+- **AI 双模式：** 在线交互能力（润色、翻译、总结、智能回复）以 SSE 流式返回；离线/重任务通过 Redis Streams 异步队列处理。
 
 ---
 
@@ -119,17 +124,17 @@ Authorization: Bearer <expired_access_token>
 **Possible Error Responses:**
 
 - `401 UNAUTHORIZED` (`TOKEN_EXPIRED`): Access Token 已过期。这是调用本接口的**预期**场景之一。
-- `401 UNAUTHORIZED` (`INVALID_TOKEN`): Access Token 无效（格式错误、签名错误等）。
-- `401 UNAUTHORIZED` (`INVALID_REFRESH_TOKEN`): Refresh Token 无效。
+- `401 UNAUTHORIZED` (`TOKEN_INVALID`): Access Token 无效（格式错误、签名错误等）。
+- `401 UNAUTHORIZED` (`REFRESH_TOKEN_INVALID`): Refresh Token 无效。
 - `401 UNAUTHORIZED` (`TOKEN_BLACKLISTED`): Access Token 已被吊销（例如，在别处登出或刷新过）。
-- `401 UNAUTHORIZED` (`REVOKED_REFRESH_TOKEN`): Refresh Token 已被吊销。
+- `401 UNAUTHORIZED` (`REFRESH_TOKEN_REVOKED`): Refresh Token 已被吊销。
 
 **客户端调用建议：**
 
 - Access Token 有效期为 15 分钟，Refresh Token 有效期为 7 天。
 - 推荐在收到后端返回 `401 UNAUTHORIZED` 且错误码为 `TOKEN_EXPIRED` 时，调用本接口。
 - 每次调用成功后，客户端**必须**使用返回的**新 Refresh Token** 替换掉本地存储的旧 Refresh Token。
-- 收到任何关于 Refresh Token 的错误（如 `INVALID_REFRESH_TOKEN`, `REVOKED_REFRESH_TOKEN`）时，前端应清除本地所有 Token
+- 收到任何关于 Refresh Token 的错误（如 `REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_REVOKED`）时，前端应清除本地所有 Token
   并引导用户重新登录。
 
 ---
@@ -647,13 +652,19 @@ Authorization: Bearer <expired_access_token>
 
 **Description:** 通过 Server-Sent Events (SSE) 将新消息、正在输入等事件实时推送给在线客户端。
 
-#### 4.6.1 `GET /api/v1/sse/subscribe`
+#### 4.6.1 `GET /sse/subscribe`
 
 **建立 SSE 订阅连接**
 
 - 建立一个与当前登录用户绑定的 SSE 长连接，用于接收后台推送的各种通知事件。
-- 需要携带正常的认证 Header（`Authorization: Bearer <access_token>`）。
+- 浏览器场景统一使用 Cookie 鉴权（`HttpOnly` + `Secure` + `SameSite`），并通过 `withCredentials: true` 建立连接。
+- 非浏览器客户端（如服务端或移动端自定义 SSE 客户端）可使用 `Authorization: Bearer <access_token>` 进行鉴权。
 - 支持可选查询参数 `client_id`，用于区分同一用户的不同终端连接（如 web / ios / android）。
+
+**鉴权约定（统一口径）：**
+
+- 前端 Web：使用 Cookie 鉴权，不在 `EventSource` 中传 Authorization Header。
+- 原生 `EventSource` 不支持自定义请求头；若必须 Header 鉴权，请使用支持自定义 Header 的 SSE 客户端实现。
 
 **Query Parameters:**
 
@@ -662,9 +673,9 @@ Authorization: Bearer <expired_access_token>
 **Request:**
 
 ```http
-GET /api/v1/sse/subscribe?client_id=web-3f9d6d7e HTTP/1.1
+GET /sse/subscribe?client_id=web-3f9d6d7e HTTP/1.1
 Accept: text/event-stream
-Authorization: Bearer <access_token>
+Cookie: access_token=<access_token>
 ```
 
 **多端语义说明：**
@@ -689,7 +700,7 @@ Authorization: Bearer <access_token>
 **客户端接入示例（浏览器）：**
 
 ```js
-const es = new EventSource('/api/v1/sse/subscribe', {withCredentials: true});
+const es = new EventSource('/sse/subscribe', {withCredentials: true});
 
 es.onmessage = (event) => {
     const notification = JSON.parse(event.data);
@@ -811,16 +822,16 @@ es.onmessage = (event) => {
 
 ## 5.0 AI 引擎模块 (AI Engine Service)
 
-* **Description:** 提供统一的AI能力，支持多模型配置和流式输出，通过异步任务接口进行交互。
+* **Description:** 提供统一的 AI 能力，支持在线流式交互与异步任务处理两种模式。
 
-### 5.1 `POST /api/v1/ai/tasks/polish`
+### 5.1 `POST /ai/interactions/polish`
 
 **Request Body (AI润色):**
 
 ```json
 {
   "message": "我想要吃一个比较甜的食物可以吧",
-  "model_option_code": "dashscope:qwen-max"
+  "model_option_code": "qwen3-max"
 }
 ```
 
@@ -832,7 +843,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.2 `POST /api/v1/ai/tasks/schedule`
+### 5.2 `POST /ai/interactions/schedule`
 
 **Request Body (智能日程):**
 
@@ -860,15 +871,29 @@ es.onmessage = (event) => {
 }
 ```
 
-**Response 202 (Accepted):**
+**Response 200 (Success):**
 
 ```json
 {
-  "task_public_id": "task_t1u2v3w4"
+  "title": "项目复盘会议",
+  "schedules": [
+    {
+      "title": "项目复盘会议",
+      "start_time": "2025-12-03T14:00:00+08:00",
+      "end_time": "2025-12-03T15:00:00+08:00",
+      "location": "会议室A",
+      "participants": [
+        "user1",
+        "user2"
+      ],
+      "confidence": 0.92
+    }
+  ],
+  "raw_result": "..."
 }
 ```
 
-### 5.3 `GET /api/v1/ai/tasks`
+### 5.3 `GET /ai/jobs`
 
 **获取AI任务列表状态和结果**
 
@@ -888,6 +913,9 @@ es.onmessage = (event) => {
       "public_id": "task_t1u2v3w4",
       "type": "SCHEDULE_EXTRACTION",
       "status": "COMPLETED",
+      "requested_model_option_code": "dashscope:qwen-max",
+      "resolved_model_name": "qwen-max",
+      "resolved_provider": "dashscope",
       "created_at": "2025-12-01T10:00:00Z",
       "completed_at": "2025-12-01T10:00:05Z",
       "result": {
@@ -915,7 +943,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.4 `GET /api/v1/ai/tasks/{public_id}`
+### 5.4 `GET /ai/jobs/{public_id}`
 
 **获取单个AI任务详情（用于异步任务轮询）**
 
@@ -926,6 +954,9 @@ es.onmessage = (event) => {
   "public_id": "task_p1q2r3s4",
   "type": "PERSONA_ANALYSIS",
   "status": "COMPLETED",
+  "requested_model_option_code": "dashscope:qwen-max",
+  "resolved_model_name": "qwen-max",
+  "resolved_provider": "dashscope",
   "input_payload": {
     "messages": "...",
     "target_user_id": "user1"
@@ -957,7 +988,33 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.5 `GET /api/v1/ai/tasks/message-candidates`
+### 5.4.1 AI 异步任务状态机
+
+**状态定义：**
+
+- `PENDING`: 任务已创建，等待消费者处理。
+- `PROCESSING`: 任务正在执行中。
+- `COMPLETED`: 任务执行成功，可读取 `output_payload`。
+- `FAILED`: 任务执行失败，可读取 `error_message`。
+- `CANCELLED`: 任务被取消（若启用取消能力）。
+
+**状态迁移：**
+
+```text
+PENDING -> PROCESSING -> COMPLETED
+PENDING -> PROCESSING -> FAILED
+PENDING -> CANCELLED
+PROCESSING -> CANCELLED (可选，取决于执行器是否支持中断)
+```
+
+**字段可见性规则：**
+
+- `PENDING/PROCESSING`: `output_payload` 为空，`error_message` 为空。
+- `COMPLETED`: `output_payload` 非空，`error_message` 为空。
+- `FAILED`: `output_payload` 可为空，`error_message` 非空，并建议携带标准错误码前缀。
+- `CANCELLED`: `output_payload` 为空，`error_message` 可选。
+
+### 5.5 `GET /ai/jobs/message-candidates`
 
 **获取可供用户显式选择的消息样本（用于 Custom Summary）**
 
@@ -985,7 +1042,7 @@ es.onmessage = (event) => {
 }
 ```
 
-### 5.6 `POST /api/v1/ai/tasks/smart-reply`
+### 5.6 `POST /ai/interactions/smart-reply`
 
 **Request Body (智能回复建议，支持两种模式):**
 
@@ -1022,7 +1079,7 @@ data: {"type":"STREAM","content":"，需要准备什么材料吗？"}
 data: {"type":"COMPLETE"}
 ```
 
-### 5.7 `POST /api/v1/ai/tasks/summarize`
+### 5.7 `POST /ai/interactions/summarize`
 
 **Request Body (内容总结，支持两种模式):**
 
@@ -1066,7 +1123,7 @@ data: {"type":"STREAM","content":"要点1: ..."}
 data: {"type":"COMPLETE"}
 ```
 
-### 5.8 `POST /api/v1/ai/tasks/translate`
+### 5.8 `POST /ai/interactions/translate`
 
 **Request Body (智能翻译):**
 
@@ -1081,15 +1138,17 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-**Response 200 (Success):**
+**Response 200 (Success, SSE流):**
 
-```json
-{
-  "output": "你好，你怎么样？"
-}
+`Content-Type: text/event-stream`
+
+```text
+data: {"type":"STREAM","content":"你好"}
+data: {"type":"STREAM","content":"，你怎么样？"}
+data: {"type":"COMPLETE"}
 ```
 
-### 5.9 `GET /api/v1/ai/models`
+### 5.9 `GET /ai/models`
 
 **获取可用AI模型列表**
 
@@ -1106,12 +1165,7 @@ data: {"type":"COMPLETE"}
         "image",
         "code",
         "reasoning"
-      ],
-      "pricing": {
-        "input_token_price": 0.005,
-        "output_token_price": 0.015
-      },
-      "max_tokens": 128000
+      ]
     },
     {
       "name": "claude-3-opus",
@@ -1120,83 +1174,13 @@ data: {"type":"COMPLETE"}
         "text",
         "reasoning",
         "long_context"
-      ],
-      "pricing": {
-        "input_token_price": 0.015,
-        "output_token_price": 0.075
-      },
-      "max_tokens": 200000
+      ]
     }
   ]
 }
 ```
 
-### 5.10 `POST /api/v1/ai/config`
-
-**设置用户托管AI配置**
-
-托管模式下，用户只可选择模型选项编码与开关项，底层参数（temperature/top_p/max_tokens）由服务端管理。
-
-**Request Body:**
-
-```json
-{
-  "model_option_code": "dashscope:qwen-max",
-  "preferences": {
-    "auto_moderation": true,
-    "smart_reply_enabled": true
-  }
-}
-```
-
-**Response 200 (Success):**
-
-```json
-{
-  "message": "配置已保存",
-  "config_id": "conf_123"
-}
-```
-
-### 5.11 `GET /api/v1/ai/config`
-
-**获取用户托管AI配置**
-
-**Response 200 (Success):**
-
-```json
-{
-  "selected_model_option_code": "dashscope:qwen-max",
-  "model_options": [
-    {
-      "option_code": "dashscope:qwen-max",
-      "display_name": "qwen-max",
-      "name": "qwen-max",
-      "provider": "dashscope",
-      "capabilities": [
-        "POLISH",
-        "CHAT_SUMMARY",
-        "SMART_REPLY"
-      ],
-      "pricing": {
-        "input_token_price": 0.005,
-        "output_token_price": 0.015
-      },
-      "max_tokens": 128000
-    }
-  ],
-  "switches": {
-    "auto_moderation": true,
-    "smart_reply_enabled": true
-  },
-  "usage": {
-    "monthly_tokens": 15000,
-    "monthly_cost": 0.25
-  }
-}
-```
-
-### 5.12 `GET /api/v1/ai/profiles`
+### 5.10 `GET /ai/profiles`
 
 **获取用户AI画像**
 
@@ -1224,7 +1208,7 @@ data: {"type":"COMPLETE"}
 }
 ```
 
-### 5.13 `GET /api/v1/ai/usage`
+### 5.11 `GET /ai/usage`
 
 **获取AI使用统计**
 
@@ -1245,131 +1229,6 @@ data: {"type":"COMPLETE"}
       "model_name": "gpt-4o",
       "tokens": 10000,
       "cost": 0.15
-    }
-  ]
-}
-```
-
-**Response 200 (Success):**
-
-```json
-{
-  "message": "配置已保存",
-  "config_id": "config_abc123"
-}
-```
-
-### 5.14 `GET /ai/config`
-
-**获取用户托管AI配置**
-
-**Response 200 (Success):**
-
-```json
-{
-  "selected_model_option_code": "dashscope:qwen-max",
-  "model_options": [
-    {
-      "option_code": "dashscope:qwen-max",
-      "display_name": "qwen-max",
-      "name": "qwen-max",
-      "provider": "dashscope",
-      "capabilities": [
-        "POLISH",
-        "CHAT_SUMMARY",
-        "SMART_REPLY"
-      ],
-      "pricing": {
-        "input_token_price": 0.005,
-        "output_token_price": 0.015
-      },
-      "max_tokens": 128000
-    }
-  ],
-  "switches": {
-    "auto_moderation": true,
-    "smart_reply_enabled": true
-  },
-  "usage": {
-    "monthly_tokens": 450000,
-    "monthly_cost": 25.50
-  }
-}
-```
-
-### 5.15 `GET /ai/profiles`
-
-**获取用户AI画像**
-
-**Query Parameters:**
-
-- `profile_type` (string, optional): 配置类型过滤，如 `PERSONA`, `PREFERENCES`, `BEHAVIOR`。
-
-**Response 200 (Success):**
-
-```json
-{
-  "items": [
-    {
-      "profile_type": "PERSONA",
-      "content": {
-        "big_five": {
-          "openness": 0.8,
-          "conscientiousness": 0.7,
-          "extraversion": 0.6,
-          "agreeableness": 0.9,
-          "neuroticism": 0.4
-        },
-        "communication_style": "collaborative",
-        "interests": [
-          "technology",
-          "business",
-          "innovation"
-        ]
-      },
-      "model_name": "gpt-4o",
-      "provider": "openai",
-      "created_at": "2025-12-01T10:00:00Z",
-      "updated_at": "2025-12-01T10:00:00Z"
-    }
-  ]
-}
-```
-
-### 5.16 `GET /ai/usage`
-
-**获取AI使用统计**
-
-**Query Parameters:**
-
-- `date_from` (string, optional): 开始日期，格式 YYYY-MM-DD
-- `date_to` (string, optional): 结束日期，格式 YYYY-MM-DD
-- `provider` (string, optional): 服务提供商过滤
-
-**Response 200 (Success):**
-
-```json
-{
-  "summary": {
-    "total_tokens": 450000,
-    "input_tokens": 300000,
-    "output_tokens": 150000,
-    "total_cost": 25.50,
-    "date_from": "2025-12-01",
-    "date_to": "2025-12-31"
-  },
-  "daily_breakdown": [
-    {
-      "date": "2025-12-01",
-      "tokens_used": 15000,
-      "cost": 0.85
-    }
-  ],
-  "by_provider": [
-    {
-      "provider": "openai",
-      "tokens_used": 300000,
-      "cost": 18.00
     }
   ]
 }
@@ -1489,30 +1348,48 @@ data: {"type":"COMPLETE"}
 
 ---
 
-## Appendix A: 错误码规范
+## Appendix A: 统一错误响应模型
 
-| HTTP Status | Error Code              | Description                                   |
-|:------------|:------------------------|:----------------------------------------------|
-| 400         | `INVALID_INPUT`         | 请求参数无效或缺失。                                    |
-| 401         | `UNAUTHORIZED`          | 认证失败（如用户名密码错误）。                               |
-| 401         | `TOKEN_EXPIRED`         | Access Token 已过期。客户端应使用 Refresh Token 来获取新令牌。 |
-| 401         | `TOKEN_BLACKLISTED`     | Access Token 已被吊销（因为登出或刷新）。客户端应强制用户重新登录。      |
-| 401         | `INVALID_TOKEN`         | Access Token 无效（格式、签名错误或无法解析）。客户端应强制用户重新登录。   |
-| 401         | `INVALID_REFRESH_TOKEN` | Refresh Token 无效或已过期。客户端应强制用户重新登录。            |
-| 401         | `REVOKED_REFRESH_TOKEN` | Refresh Token 已被系统吊销（可能因为安全风险）。客户端应强制用户重新登录。  |
-| 403         | `FORBIDDEN`             | 无权访问该资源或执行该操作。                                |
-| 404         | `NOT_FOUND`             | 请求的资源不存在。                                     |
-| 409         | `CONFLICT`              | 资源冲突（如用户名已存在）。                                |
-| 429         | `RATE_LIMIT_EXCEEDED`   | 请求过于频繁，请稍后再试。                                 |
-| 500         | `INTERNAL_SERVER_ERROR` | 服务器内部发生未知错误。                                  |
-| 503         | `SERVICE_UNAVAILABLE`   | 依赖的第三方服务（如AI模型）暂时不可用。                         |
+所有失败响应建议使用统一结构，便于前端和网关做通用处理。
 
-## Appendix B: 技术实现注解
+**Error Response JSON:**
 
-- **数据隔离**: 用户授权AI分析后，其聊天记录**仅用于在请求时动态构建上下文 (Prompt-Time Context)**，发送给大模型以生成个性化回复。数据
-  **绝不会**被用于模型的再训练。
-- **AI并发控制**: 为保证同一用户的AI请求按序处理并避免上下文冲突，所有提交的任务会根据 `user_id` 被放入一个**串行队列**
-  中（如使用Redis List实现）。
-- **模型路由**: `ai-social-ai-engine`内部会根据`task_type`进行**模型路由**，例如文本任务路由到`Qwen-Turbo`，多模态任务路由到
-  `Qwen-VL-Max`，语音识别路由到`DashScope Paraformer`。
-- **多端同步**: 通过SSE或WebSocket通道，当一个事件发生时（如新消息、AI任务完成），服务端向该用户所有在线设备广播事件，确保多端体验一致。
+```json
+{
+  "code": 401,
+  "msg": "Access Token 无效",
+  "data": null,
+  "errorCode": "TOKEN_INVALID",
+  "traceId": "d2d97a60e6f544e0a59ee3d6c8d95d0f"
+}
+```
+
+**字段说明：**
+
+- `code`: HTTP 状态码。
+- `msg`: 用户可读错误信息。
+- `data`: 失败时固定为 `null`。
+- `errorCode`: 稳定的业务错误码（用于前端分支判断与监控聚合）。
+- `traceId`: 可选链路追踪标识（建议网关或服务端统一注入）。
+
+## Appendix B: 错误码规范
+
+| HTTP Status | Error Code                  | Description                                   |
+|:------------|:----------------------------|:----------------------------------------------|
+| 400         | `INVALID_INPUT`             | 请求参数无效或缺失。                                    |
+| 401         | `AUTHENTICATION_REQUIRED`   | 用户未认证或登录态缺失。                                  |
+| 401         | `BAD_CREDENTIALS`           | 用户名或密码错误。                                     |
+| 401         | `TOKEN_EXPIRED`             | Access Token 已过期。客户端应使用 Refresh Token 来获取新令牌。 |
+| 401         | `TOKEN_BLACKLISTED`         | Access Token 已被吊销（因为登出或刷新）。客户端应强制用户重新登录。      |
+| 401         | `TOKEN_INVALID`             | Access Token 无效（格式、签名错误或无法解析）。客户端应强制用户重新登录。   |
+| 401         | `REFRESH_TOKEN_INVALID`     | Refresh Token 无效或已过期。客户端应强制用户重新登录。            |
+| 401         | `REFRESH_TOKEN_REVOKED`     | Refresh Token 已被系统吊销（可能因为安全风险）。客户端应强制用户重新登录。  |
+| 403         | `ACCESS_DENIED`             | 无权访问该资源或执行该操作。                                |
+| 404         | `RESOURCE_NOT_FOUND`        | 请求的资源不存在。                                     |
+| 409         | `CONFLICT`                  | 资源冲突（如用户名已存在）。                                |
+| 400         | `MODEL_OPTION_INVALID`      | 模型选项编码格式非法或无法识别。                              |
+| 400         | `MODEL_NOT_ENABLED`         | 指定模型未启用或不可用。                                  |
+| 400         | `MODEL_CAPABILITY_MISMATCH` | 指定模型不支持当前任务类型。                                |
+| 429         | `RATE_LIMITED`              | 请求过于频繁，请稍后再试。                                 |
+| 500         | `INTERNAL_ERROR`            | 服务器内部发生未知错误。                                  |
+| 503         | `UPSTREAM_UNAVAILABLE`      | 上游依赖服务（如 AI 模型）暂时不可用。                         |

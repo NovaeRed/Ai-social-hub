@@ -1,134 +1,117 @@
 package cn.redture.aiEngine.handler;
 
-import cn.redture.aiEngine.mapper.AiModelCapabilityMapper;
+import cn.redture.aiEngine.model.core.execution.ModelProviderExecutor;
+import cn.redture.aiEngine.model.core.routing.ModelSelector;
+import cn.redture.aiEngine.model.core.routing.ModelRouteDecision;
 import cn.redture.aiEngine.pojo.dto.SmartReplyRequest;
-import cn.redture.aiEngine.pojo.entity.AiModelCapability;
-import cn.redture.aiEngine.pojo.enums.AiProvider;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
 import cn.redture.common.util.JsonUtil;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
-import jakarta.annotation.Resource;
-import org.springframework.beans.factory.annotation.Value;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
 import java.util.Map;
 
 /**
- * AI门面服务实现
+ * AI 门面处理器
+ *
+ * <p>统一负责提示词构建、模型路由决策和模型调用执行</p>
  */
 @Slf4j
 @Component
 public class AiFacadeHandler {
 
-    private final ChatClient qwenClient;
-    private final AiModelCapabilityMapper aiModelCapabilityMapper;
+    private final ModelSelector modelModelSelector;
+    private final ModelProviderExecutor modelProviderExecutor;
 
-    @Value("${ai.managed.default-model-type:qwen-max}")
-    private String defaultModelType;
-
-    public AiFacadeHandler(@Qualifier("qwenClient") ChatClient qwenClient,
-                           AiModelCapabilityMapper aiModelCapabilityMapper) {
-        this.qwenClient = qwenClient;
-        this.aiModelCapabilityMapper = aiModelCapabilityMapper;
+    /**
+     * 构造 AI 门面处理器
+     *
+     * @param modelModelSelector   LLM 模型路由选择器
+     * @param modelProviderExecutor LLM 厂商执行器
+     */
+    public AiFacadeHandler(ModelSelector modelModelSelector,
+                           ModelProviderExecutor modelProviderExecutor) {
+        this.modelModelSelector = modelModelSelector;
+        this.modelProviderExecutor = modelProviderExecutor;
     }
 
-    public Flux<String> executeTaskStream(Long userId, AiTaskType taskType, Map<String, Object> params, AiProvider provider) {
-        log.debug("Execute stream task: userId={}, taskType={}, provider={}", userId, taskType, provider);
+    /**
+     * 执行流式 AI 任务
+     *
+     * @param userId   用户 ID
+     * @param taskType 任务类型
+     * @param params   任务参数
+     * @param route    模型路由决策
+     * @return 流式输出内容
+     */
+    public Flux<String> executeTaskStream(Long userId, AiTaskType taskType, Map<String, Object> params, ModelRouteDecision route) {
+        log.debug("Execute stream task: userId={}, taskType={}, provider={}, model={}", userId, taskType, route.resolvedProvider(), route.resolvedModelName());
 
         String prompt = buildPrompt(taskType, params);
-        DashScopeChatOptions options = buildOptions(params);
-
-        return qwenClient.prompt()
-                .user(prompt)
-                .options(options)
-                .stream()
-                .content()
-                .doOnError(error -> log.error("Error in stream task", error))
-                .doOnComplete(() -> log.debug("Stream task completed"));
+        return modelProviderExecutor.stream(route, prompt);
     }
 
-    public String executeTask(Long userId, AiTaskType taskType, Map<String, Object> params, AiProvider provider) {
-        log.debug("Execute task: userId={}, taskType={}, provider={}", userId, taskType, provider);
+    /**
+     * 执行同步 AI 任务（按已解析路由）。
+     *
+     * @param userId   用户 ID
+     * @param taskType 任务类型
+     * @param params   任务参数
+     * @param route    模型路由决策
+     * @return 模型输出内容
+     */
+    public String executeTask(Long userId, AiTaskType taskType, Map<String, Object> params, ModelRouteDecision route) {
+        log.debug("Execute task: userId={}, taskType={}, provider={}, model={}", userId, taskType, route.resolvedProvider(), route.resolvedModelName());
 
         String prompt = buildPrompt(taskType, params);
-        DashScopeChatOptions options = buildOptions(params);
-
-        return qwenClient.prompt()
-                .user(prompt)
-                .options(options)
-                .call()
-                .content();
+        return modelProviderExecutor.call(route, prompt);
     }
 
-    @Resource
-    private ToolCallback[] toolCallbacks;
-
-    public String executeTaskWithTools(Long userId, AiTaskType taskType, Map<String, Object> params, AiProvider provider) {
-        log.debug("Execute task with tools: userId={}, taskType={}, provider={}", userId, taskType, provider);
+    /**
+     * 执行带工具调用的同步 AI 任务
+     *
+     * @param userId   用户 ID
+     * @param taskType 任务类型
+     * @param params   任务参数
+     * @param route    模型路由决策
+     * @return 模型输出内容
+     */
+    public String executeTaskWithTools(Long userId, AiTaskType taskType, Map<String, Object> params, ModelRouteDecision route) {
+        log.debug("Execute task with tools: userId={}, taskType={}, provider={}, model={}", userId, taskType, route.resolvedProvider(), route.resolvedModelName());
 
         String prompt = buildPrompt(taskType, params);
-        DashScopeChatOptions options = buildOptions(params);
-
-        return qwenClient.prompt()
-                .user(prompt)
-                .options(options)
-                .toolCallbacks(toolCallbacks)
-                .call()
-                .content();
+        return modelProviderExecutor.callWithTools(route, prompt);
     }
 
-    private DashScopeChatOptions buildOptions(Map<String, Object> params) {
-        // 托管模式：根据用户传入的模型选项编码，在数据库中查找并设置模型类型。
-        String modelType = resolveModelTypeFromParams(params);
-        return DashScopeChatOptions.builder().withModel(modelType).build();
+    /**
+     * 解析模型路由
+     *
+     * @param taskType 任务类型
+     * @param params   请求参数
+     * @return 模型路由决策
+     */
+    public ModelRouteDecision resolveModelRoute(AiTaskType taskType, Map<String, Object> params) {
+        return modelModelSelector.resolveModelRoute(taskType, params);
     }
 
-    private String resolveModelTypeFromParams(Map<String, Object> params) {
-        String defaultType = (defaultModelType == null || defaultModelType.isBlank()) ? "qwen-max" : defaultModelType.trim();
-        if (params == null) {
-            return defaultType;
-        }
-
-        Object optionObj = params.get("model_option_code");
-        if (!(optionObj instanceof String optionCode) || optionCode.isBlank()) {
-            return defaultType;
-        }
-
-        String modelType = extractModelType(optionCode);
-        if (modelType == null || modelType.isBlank()) {
-            return defaultType;
-        }
-
-        AiModelCapability capability = aiModelCapabilityMapper.selectOne(
-                new LambdaQueryWrapper<AiModelCapability>()
-                        .eq(AiModelCapability::getModelName, modelType)
-                        .eq(AiModelCapability::getIsEnabled, true)
-                        .last("LIMIT 1")
-        );
-
-        if (capability == null) {
-            log.warn("model_option_code={} 对应模型 {} 未在数据库启用，回退默认模型 {}", optionCode, modelType, defaultType);
-            return defaultType;
-        }
-
-        return capability.getModelName();
+    /**
+     * 解析系统默认模型路由
+     *
+     * @param taskType 任务类型
+     * @return 模型路由决策
+     */
+    public ModelRouteDecision resolveSystemDefaultRoute(AiTaskType taskType) {
+        return modelModelSelector.resolveSystemDefaultRoute(taskType);
     }
 
-    private String extractModelType(String optionCode) {
-        String normalized = optionCode.trim();
-        int index = normalized.indexOf(':');
-        if (index >= 0 && index < normalized.length() - 1) {
-            return normalized.substring(index + 1).trim();
-        }
-        return normalized;
-    }
-
+    /**
+     * 根据任务类型构建提示词
+     *
+     * @param taskType 任务类型
+     * @param params   任务参数
+     * @return 提示词
+     */
     public String buildPrompt(AiTaskType taskType, Map<String, Object> params) {
         return switch (taskType) {
             case POLISH -> buildPolishPrompt(params);
@@ -141,6 +124,12 @@ public class AiFacadeHandler {
         };
     }
 
+    /**
+     * 构建润色提示词
+     *
+     * @param params 任务参数
+     * @return 润色提示词
+     */
     private String buildPolishPrompt(Map<String, Object> params) {
         String message = (String) params.get("message");
         return String.format("""
@@ -151,6 +140,12 @@ public class AiFacadeHandler {
                 """, message);
     }
 
+    /**
+     * 构建日程提取提示词
+     *
+     * @param params 任务参数
+     * @return 日程提取提示词
+     */
     private String buildSchedulePrompt(Map<String, Object> params) {
         String messages = params.get("messages").toString();
         return String.format("""
@@ -169,6 +164,12 @@ public class AiFacadeHandler {
                 """, messages);
     }
 
+    /**
+     * 构建翻译提示词
+     *
+     * @param params 任务参数
+     * @return 翻译提示词
+     */
     private String buildTranslationPrompt(Map<String, Object> params) {
         String text = (String) params.get("text");
         String targetLanguage = (String) params.get("targetLanguage");
@@ -191,6 +192,12 @@ public class AiFacadeHandler {
         }
     }
 
+    /**
+     * 构建智能回复提示词
+     *
+     * @param params 任务参数
+     * @return 智能回复提示词
+     */
     private String buildSmartReplyPrompt(Map<String, Object> params) {
         log.debug("Building smart reply prompt with params: {}", params);
         String message = params.get("message").toString();
@@ -227,6 +234,12 @@ public class AiFacadeHandler {
                 """.formatted(message, historyStr, profileHint);
     }
 
+    /**
+     * 构建摘要提示词
+     *
+     * @param params 任务参数
+     * @return 摘要提示词
+     */
     private String buildSummaryPrompt(Map<String, Object> params) {
         String content = (String) params.get("content");
         String summaryType = (String) params.getOrDefault("summary_type", "general");
@@ -248,6 +261,12 @@ public class AiFacadeHandler {
                 """, summaryType, targetLength, keywords, content);
     }
 
+    /**
+     * 构建画像分析提示词
+     *
+     * @param params 任务参数
+     * @return 画像分析提示词
+     */
     private String buildPersonaPrompt(Map<String, Object> params) {
         String messages = params.get("messages").toString();
         return String.format("""

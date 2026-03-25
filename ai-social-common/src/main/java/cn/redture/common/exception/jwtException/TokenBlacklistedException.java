@@ -1,5 +1,6 @@
 package cn.redture.common.exception.jwtException;
 
+import cn.redture.common.constants.ErrorCodes;
 import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;
 
@@ -11,7 +12,7 @@ import org.springframework.http.HttpStatus;
 public class TokenBlacklistedException extends BaseException {
 
     public TokenBlacklistedException(String message) {
-        super(HttpStatus.UNAUTHORIZED, message, "TOKEN_BLACKLISTED");
+        super(HttpStatus.UNAUTHORIZED, message, ErrorCodes.TOKEN_BLACKLISTED);
     }
 
     public TokenBlacklistedException() {

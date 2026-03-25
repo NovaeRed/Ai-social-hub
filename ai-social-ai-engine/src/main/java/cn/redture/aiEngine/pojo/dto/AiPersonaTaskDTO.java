@@ -10,9 +10,9 @@ import lombok.Data;
 public class AiPersonaTaskDTO {
 
     /**
-        * 任务类型，例如：AI_PERSONA_AUTH_DISABLED, AI_PERSONA_CLEAR
+     * 任务类型，例如：AI_PERSONA_AUTH_DISABLED, AI_PERSONA_CLEAR
      */
-    private AiPersonaTaskType type;
+    private AiPersonaTaskType taskType;
 
     /**
      * 内部用户ID

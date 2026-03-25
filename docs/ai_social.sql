@@ -177,8 +177,8 @@ CREATE TABLE ai_tasks
     output_payload    JSONB,
     error_message     TEXT,
     -- AI配置相关字段
-    model_config      JSONB,          -- 执行任务时使用的模型配置
-    provider          VARCHAR(50),    -- AI服务提供商
+    model_config      JSONB,          -- 执行任务时使用的模型配置（至少包含 model_name）
+    provider          VARCHAR(50),    -- 解析后的AI服务提供商（resolved_provider）
     token_usage       JSONB,          -- 令牌使用统计
     cost              DECIMAL(10, 4), -- 任务执行成本
     created_at        TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
@@ -188,9 +188,9 @@ CREATE TABLE ai_tasks
 COMMENT
     ON TABLE ai_tasks IS '追踪所有异步AI任务的状态，用于前端展示与后端管理';
 COMMENT
-    ON COLUMN ai_tasks.model_config IS '执行任务时使用的模型配置';
+    ON COLUMN ai_tasks.model_config IS '执行任务时使用的模型配置，建议至少包含 model_name 以支持审计';
 COMMENT
-    ON COLUMN ai_tasks.provider IS 'AI服务提供商';
+    ON COLUMN ai_tasks.provider IS '任务执行时解析得到的模型提供商（resolved_provider）';
 COMMENT
     ON COLUMN ai_tasks.token_usage IS '令牌使用统计';
 COMMENT
@@ -246,39 +246,20 @@ CREATE INDEX idx_ai_profile_analyzed_at ON user_ai_profiles (user_id, last_analy
 CREATE INDEX idx_ai_profile_embedding ON user_ai_profiles USING hnsw (embedding vector_l2_ops) WHERE embedding IS NOT NULL;
 
 
--- 11. AI用户配置表（ai_user_configs）
-CREATE TABLE ai_user_configs
-(
-    id            BIGSERIAL PRIMARY KEY,
-    user_id       BIGINT UNIQUE NOT NULL REFERENCES users (id),
-    default_model VARCHAR(100) DEFAULT 'managed-default',
-    config_params JSONB        DEFAULT '{
-      "auto_moderation": true,
-      "smart_reply_enabled": true
-    }',
-    is_active     BOOLEAN      DEFAULT TRUE,
-    created_at    TIMESTAMPTZ  DEFAULT NOW(),
-    updated_at    TIMESTAMPTZ  DEFAULT NOW()
-);
-COMMENT ON TABLE ai_user_configs IS 'AI用户托管配置表，存储模型选项编码与功能开关';
-CREATE INDEX idx_ai_user_configs_user ON ai_user_configs (user_id);
-
--- 12. AI提供商配置表（ai_provider_configs）
+-- 11. AI提供商配置表（ai_provider_configs）
 CREATE TABLE ai_provider_configs
 (
-    id             BIGSERIAL PRIMARY KEY,
-    provider_name  VARCHAR(50) UNIQUE NOT NULL, -- openai, anthropic, azure, dashscope
-    display_name   VARCHAR(100),
-    api_base_url   VARCHAR(255),
-    is_enabled     BOOLEAN     DEFAULT TRUE,
-    default_config JSONB,                       -- 默认配置参数（如 temperature, top_p 等）
-    created_at     TIMESTAMPTZ DEFAULT NOW(),
-    updated_at     TIMESTAMPTZ DEFAULT NOW()
+    id            BIGSERIAL PRIMARY KEY,
+    provider_name VARCHAR(50) UNIQUE NOT NULL, -- openai, anthropic, azure, dashscope
+    display_name  VARCHAR(100),
+    is_enabled    BOOLEAN     DEFAULT TRUE,
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
-COMMENT ON TABLE ai_provider_configs IS 'AI提供商系统配置表';
+COMMENT ON TABLE ai_provider_configs IS 'AI提供商主配置表';
 
 
--- 13. AI使用统计表（ai_usage_stats）
+-- 12. AI使用统计表（ai_usage_stats）
 CREATE TABLE ai_usage_stats
 (
     id            BIGSERIAL PRIMARY KEY,
@@ -293,40 +274,34 @@ CREATE TABLE ai_usage_stats
     date          DATE         NOT NULL,
     created_at    TIMESTAMPTZ DEFAULT NOW()
 );
-COMMENT ON TABLE ai_usage_stats IS 'AI使用统计表，用于计费和用量分析';
+COMMENT ON TABLE ai_usage_stats IS 'AI使用统计表，用于用量分析';
 CREATE INDEX idx_ai_usage_user_date ON ai_usage_stats (user_id, date);
 CREATE INDEX idx_ai_usage_provider_date ON ai_usage_stats (provider, date);
 
 
--- 14. AI模型能力表（ai_model_capabilities）
+-- 13. AI模型能力表（ai_model_capabilities）
 CREATE TABLE ai_model_capabilities
 (
-    id                       BIGSERIAL PRIMARY KEY,
-    model_name               VARCHAR(100)      NOT NULL,
-    provider                 VARCHAR(50)       NOT NULL REFERENCES ai_provider_configs (provider_name),
-    capability_type          ai_task_type_enum NOT NULL,
-    is_enabled               BOOLEAN     DEFAULT TRUE,
-    max_tokens               INTEGER,
-    input_price_per_million  DECIMAL(10, 4),
-    output_price_per_million DECIMAL(10, 4),
-    created_at               TIMESTAMPTZ DEFAULT NOW()
+    id              BIGSERIAL PRIMARY KEY,
+    model_name      VARCHAR(100)      NOT NULL,
+    provider        VARCHAR(50)       NOT NULL REFERENCES ai_provider_configs (provider_name),
+    capability_type ai_task_type_enum NOT NULL,
+    is_enabled      BOOLEAN     DEFAULT TRUE,
+    is_default      BOOLEAN     DEFAULT FALSE,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
-COMMENT ON TABLE ai_model_capabilities IS 'AI模型能力定义表，细化到每个模型在不同任务下的定价和限制';
-CREATE UNIQUE INDEX idx_model_capability ON ai_model_capabilities (model_name, capability_type);
-COMMENT ON TABLE ai_model_capabilities IS 'AI模型能力定义表';
-CREATE UNIQUE INDEX idx_model_capability ON ai_model_capabilities (model_name, capability_type);
+COMMENT ON TABLE ai_model_capabilities IS 'AI模型能力开关与默认路由表';
+COMMENT ON COLUMN ai_model_capabilities.is_default IS '是否为该能力默认模型';
+CREATE UNIQUE INDEX idx_model_capability_active
+    ON ai_model_capabilities (provider, model_name, capability_type);
 
 -- =======================================================================================
 -- ==                                 END OF SCHEMA                                     ==
 -- =======================================================================================
 
 -- 插入默认提供商配置
-INSERT INTO ai_provider_configs (provider_name, display_name, api_base_url, is_enabled, default_config)
-VALUES ('openai', 'OpenAI', 'https://api.openai.com/v1', true, '{
-  "temperature": 0.7,
-  "max_tokens": 1000
-}'),
-       ('anthropic', 'Anthropic', 'https://api.anthropic.com/v1', true, '{
-         "temperature": 0.7,
-         "max_tokens": 1000
-       }');
+INSERT INTO ai_provider_configs (provider_name, display_name, is_enabled)
+VALUES ('openai', 'OpenAI', true),
+       ('anthropic', 'Anthropic', true),
+       ('dashscope', 'DashScope', true);

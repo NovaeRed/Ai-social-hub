@@ -1,5 +1,6 @@
 package cn.redture.common.exception.jwtException;
 
+import cn.redture.common.constants.ErrorCodes;
 import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;
 
@@ -8,7 +9,7 @@ import org.springframework.http.HttpStatus;
  */
 public class InvalidTokenException extends BaseException {
     public InvalidTokenException(String message) {
-        super(HttpStatus.UNAUTHORIZED, message);
+        super(HttpStatus.UNAUTHORIZED, message, ErrorCodes.TOKEN_INVALID);
     }
 }
 

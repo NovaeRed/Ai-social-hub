@@ -1,5 +1,6 @@
 package cn.redture.common.exception.businessException;
 
+import cn.redture.common.constants.ErrorCodes;
 import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;
 
@@ -8,9 +9,7 @@ import org.springframework.http.HttpStatus;
  */
 public class CircuitBreakerException extends BaseException {
 
-    private static final String DEFAULT_ERROR_CODE = "CIRCUIT_BREAKER_OPEN";
-
     public CircuitBreakerException(String message) {
-        super(HttpStatus.SERVICE_UNAVAILABLE, message, DEFAULT_ERROR_CODE);
+        super(HttpStatus.SERVICE_UNAVAILABLE, message, ErrorCodes.CIRCUIT_BREAKER_OPEN);
     }
 }

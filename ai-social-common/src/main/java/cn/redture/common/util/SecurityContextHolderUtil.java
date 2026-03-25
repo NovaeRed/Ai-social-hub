@@ -1,5 +1,6 @@
 package cn.redture.common.util;
 
+import cn.redture.common.constants.ErrorCodes;
 import cn.redture.common.pojo.dto.UserPrincipal;
 import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;
@@ -20,7 +21,7 @@ public class SecurityContextHolderUtil {
     public static Long getUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null) {
-            throw new BaseException(HttpStatus.UNAUTHORIZED, "用户未认证，请先登录");
+            throw new BaseException(HttpStatus.UNAUTHORIZED, "用户未认证，请先登录", ErrorCodes.AUTHENTICATION_REQUIRED);
         }
 
         Object principal = authentication.getPrincipal();
@@ -30,10 +31,10 @@ public class SecurityContextHolderUtil {
             return Long.valueOf(uid);
         } else if (principal instanceof String && "anonymousUser".equals(principal)) {
             // 处理匿名用户情况
-            throw new BaseException(HttpStatus.UNAUTHORIZED, "用户未认证，请先登录");
+            throw new BaseException(HttpStatus.UNAUTHORIZED, "用户未认证，请先登录", ErrorCodes.AUTHENTICATION_REQUIRED);
         }
 
         // 处理未知 principal 类型的回退或错误
-        throw new BaseException(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误：无法解析认证信息");
+        throw new BaseException(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误：无法解析认证信息", ErrorCodes.INTERNAL_ERROR);
     }
 }

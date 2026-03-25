@@ -1,5 +1,6 @@
 package cn.redture.common.exception.businessException;
 
+import cn.redture.common.constants.ErrorCodes;
 import cn.redture.common.exception.BaseException;
 import org.springframework.http.HttpStatus;
 
@@ -12,11 +13,11 @@ import org.springframework.http.HttpStatus;
 public class ResourceTypeConvertException extends BaseException {
 
     public ResourceTypeConvertException() {
-        super();
+        super(HttpStatus.BAD_REQUEST, "资源类型转换失败", ErrorCodes.RESOURCE_TYPE_CONVERT);
     }
 
     public ResourceTypeConvertException(String message) {
-        super(HttpStatus.BAD_REQUEST, message);
+        super(HttpStatus.BAD_REQUEST, message, ErrorCodes.RESOURCE_TYPE_CONVERT);
     }
 
     public ResourceTypeConvertException(String message, String errorCode) {
@@ -24,7 +25,7 @@ public class ResourceTypeConvertException extends BaseException {
     }
 
     public ResourceTypeConvertException(int code, String message) {
-        super(code, message);
+        super(code, message, ErrorCodes.RESOURCE_TYPE_CONVERT);
     }
 
     public ResourceTypeConvertException(int code, String message, String errorCode) {

@@ -13,7 +13,22 @@ public class RedisConstants {
     public static final String AUTH_JWT_BLACKLIST_KEY_PREFIX = "blacklist:jwt:";
 
     /**
-     * AI 画像任务队列 Redis Key：ai:persona:tasks
+     * 统一异步任务 Streams Key：ai:async:tasks:stream
      */
-    public static final String PERSONA_TASK_QUEUE_KEY = "ai:persona:tasks";
+    public static final String AI_ASYNC_TASK_STREAM_KEY = "ai:async:tasks:stream";
+
+    /**
+     * 统一异步任务 Streams 消费组：ai-async-group
+     */
+    public static final String AI_ASYNC_TASK_STREAM_GROUP = "ai-async-group";
+
+    /**
+     * 统一异步任务死信 Streams Key：ai:async:tasks:dlq
+     */
+    public static final String AI_ASYNC_TASK_DLQ_STREAM_KEY = "ai:async:tasks:dlq";
+
+    /**
+     * 统一异步任务死信 Streams 消费组：ai-async-dlq-group
+     */
+    public static final String AI_ASYNC_TASK_DLQ_STREAM_GROUP = "ai-async-dlq-group";
 }

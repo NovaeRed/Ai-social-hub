@@ -25,6 +25,15 @@ public class AiTaskItemVO {
     @JsonProperty("completed_at")
     private OffsetDateTime completedAt;
 
+    @JsonProperty("requested_model_option_code")
+    private String requestedModelOptionCode;
+
+    @JsonProperty("resolved_model_name")
+    private String resolvedModelName;
+
+    @JsonProperty("resolved_provider")
+    private String resolvedProvider;
+
     private Map<String, Object> result;
 
     @JsonProperty("model_config")

@@ -22,13 +22,13 @@ public class AiPersonaTaskHandlerRegistry {
     }
 
     public void dispatch(AiPersonaTaskDTO task) {
-        if (task == null || task.getType() == null) {
+        if (task == null || task.getTaskType() == null) {
             log.warn("[AiPersonaTaskHandlerRegistry] 收到空任务或无类型任务，直接丢弃");
             return;
         }
-        AiPersonaTaskHandler handler = handlerMap.get(task.getType().toString());
+        AiPersonaTaskHandler handler = handlerMap.get(task.getTaskType().toString());
         if (handler == null) {
-            log.warn("[AiPersonaTaskHandlerRegistry] 未找到类型为 {} 的 handler，忽略此任务: {}", task.getType(), task);
+            log.warn("[AiPersonaTaskHandlerRegistry] 未找到类型为 {} 的 handler，忽略此任务: {}", task.getTaskType(), task);
             return;
         }
         try {

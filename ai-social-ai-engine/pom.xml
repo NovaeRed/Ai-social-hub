@@ -86,17 +86,18 @@
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
-        <!-- Spring AI Alibaba (Qwen) -->
-        <dependency>
-            <groupId>com.alibaba.cloud.ai</groupId>
-            <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
-        </dependency>
-
         <!-- PgVector -->
         <dependency>
             <groupId>com.pgvector</groupId>
             <artifactId>pgvector</artifactId>
             <version>0.1.4</version>
+        </dependency>
+
+        <!-- OkHttp for provider HTTP clients -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.12.0</version>
         </dependency>
     </dependencies>
 

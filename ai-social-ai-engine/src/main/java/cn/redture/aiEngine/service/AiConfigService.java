@@ -1,7 +1,5 @@
 package cn.redture.aiEngine.service;
 
-import cn.redture.aiEngine.pojo.dto.AiConfigDTO;
-import cn.redture.aiEngine.pojo.vo.AiConfigVO;
 import cn.redture.aiEngine.pojo.vo.AiModelVO;
 import cn.redture.aiEngine.pojo.vo.AiProfileVO;
 import cn.redture.aiEngine.pojo.vo.AiUsageVO;
@@ -20,23 +18,6 @@ public interface AiConfigService {
      * @return 模型列表
      */
     List<AiModelVO> getAvailableModels();
-
-    /**
-     * 设置用户AI配置
-     *
-     * @param userId 用户ID
-     * @param config 配置DTO
-     * @return 配置ID
-     */
-    String setUserConfig(Long userId, AiConfigDTO config);
-
-    /**
-     * 获取用户AI配置
-     *
-     * @param userId 用户ID
-     * @return 配置VO
-     */
-    AiConfigVO getUserConfig(Long userId);
 
     /**
      * 获取用户AI画像
@@ -87,4 +68,13 @@ public interface AiConfigService {
      * @param messageTime 消息时间
      */
     void onUserMessageCreated(Long userId, OffsetDateTime messageTime);
+
+    /**
+     * 处理 PERSONA 任务在死信队列中的补偿丢弃。
+     *
+     * @param userId 用户ID
+     * @param personaTaskType 画像任务类型
+     * @param reason 丢弃原因
+     */
+    void compensatePersonaTaskDrop(Long userId, String personaTaskType, String reason);
 }

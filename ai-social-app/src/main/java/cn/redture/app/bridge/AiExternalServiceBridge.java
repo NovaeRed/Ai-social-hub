@@ -2,13 +2,17 @@ package cn.redture.app.bridge;
 
 import cn.redture.chat.pojo.vo.MessageItemVO;
 import cn.redture.chat.service.MessageService;
+import cn.redture.chat.sse.Notification;
+import cn.redture.chat.sse.SseEmitterService;
 import cn.redture.common.integration.ai.AiExternalService;
 import cn.redture.common.integration.ai.dto.AiExternalMessageItem;
+import cn.redture.common.integration.notification.NotificationExternalService;
 import cn.redture.identity.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -16,10 +20,11 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
-public class AiExternalServiceBridge implements AiExternalService {
+public class AiExternalServiceBridge implements AiExternalService, NotificationExternalService {
 
     private final UserService userService;
     private final MessageService messageService;
+    private final SseEmitterService sseEmitterService;
 
     @Override
     public boolean isAiAnalysisEnabled(Long userId) {
@@ -48,6 +53,14 @@ public class AiExternalServiceBridge implements AiExternalService {
     public List<AiExternalMessageItem> getUserRecentMessagesForAnalysis(Long userId, int limit) {
         List<MessageItemVO> messages = messageService.getUserRecentMessagesForAnalysis(userId, limit);
         return convert(messages, userId);
+    }
+
+    @Override
+    public void sendToUser(Long userId, String eventType, Map<String, Object> payload) {
+        Notification<Map<String, Object>> notification = new Notification<>();
+        notification.setType(eventType == null || eventType.isBlank() ? "AI_TASK_COMPLETED" : eventType);
+        notification.setPayload(payload);
+        sseEmitterService.sendToUser(userId, notification);
     }
 
     private List<AiExternalMessageItem> convert(List<MessageItemVO> messages, Long fallbackUserId) {
