@@ -13,10 +13,9 @@ import cn.redture.common.constants.ErrorCodes;
 import cn.redture.common.exception.BaseException;
 import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.util.JsonUtil;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
@@ -45,7 +44,7 @@ import static cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_STREAM_KE
  */
 @Slf4j
 @Component
-public class AiAsyncTaskStreamConsumer {
+public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -67,6 +66,7 @@ public class AiAsyncTaskStreamConsumer {
 
     private Thread consumerThread;
     private Thread dlqThread;
+    private volatile boolean running;
 
     @Value("${ai.async.consumer.enabled:true}")
     private boolean consumerEnabled;
@@ -98,12 +98,17 @@ public class AiAsyncTaskStreamConsumer {
     @Value("${ai.async.dlq.notification-max-replay:3}")
     private int notificationMaxDlqReplay;
 
-    @PostConstruct
+    @Override
     public void start() {
+        if (running) {
+            return;
+        }
         if (!consumerEnabled) {
             log.debug("统一异步 Streams 消费者已禁用 (ai.async.consumer.enabled=false)");
             return;
         }
+
+        running = true;
 
         ensureStreamGroup();
         ensureDlqStreamGroup();
@@ -121,18 +126,46 @@ public class AiAsyncTaskStreamConsumer {
         }
     }
 
-    @PreDestroy
+    @Override
     public void stop() {
+        running = false;
         if (consumerThread != null && consumerThread.isAlive()) {
             consumerThread.interrupt();
+            joinQuietly(consumerThread, 2000L);
         }
         if (dlqThread != null && dlqThread.isAlive()) {
             dlqThread.interrupt();
+            joinQuietly(dlqThread, 2000L);
         }
     }
 
+    @Override
+    public void stop(Runnable callback) {
+        try {
+            stop();
+        } finally {
+            callback.run();
+        }
+    }
+
+    @Override
+    public boolean isRunning() {
+        return running;
+    }
+
+    @Override
+    public boolean isAutoStartup() {
+        return true;
+    }
+
+    @Override
+    public int getPhase() {
+        // Use a high phase so this consumer stops earlier in shutdown than lower-phase infra.
+        return Integer.MAX_VALUE - 100;
+    }
+
     private void consumeLoop() {
-        while (!Thread.currentThread().isInterrupted()) {
+        while (running && !Thread.currentThread().isInterrupted()) {
             try {
                 List<MapRecord<String, Object, Object>> records = stringRedisTemplate.opsForStream().read(
                         Consumer.from(streamGroup, consumerName),
@@ -148,6 +181,10 @@ public class AiAsyncTaskStreamConsumer {
                     processRecord(record);
                 }
             } catch (Exception e) {
+                if (!running || Thread.currentThread().isInterrupted() || isRedisStoppedException(e)) {
+                    log.debug("统一异步 Streams 消费线程停止中，结束消费循环");
+                    break;
+                }
                 log.error("消费统一异步 Streams 任务时发生异常", e);
             }
         }
@@ -338,7 +375,7 @@ public class AiAsyncTaskStreamConsumer {
     }
 
     private void consumeDlqLoop() {
-        while (!Thread.currentThread().isInterrupted()) {
+        while (running && !Thread.currentThread().isInterrupted()) {
             try {
                 List<MapRecord<String, Object, Object>> records = stringRedisTemplate.opsForStream().read(
                         Consumer.from(AI_ASYNC_TASK_DLQ_STREAM_GROUP, consumerName + "-dlq"),
@@ -354,6 +391,10 @@ public class AiAsyncTaskStreamConsumer {
                     disposeDlqRecord(record);
                 }
             } catch (Exception e) {
+                if (!running || Thread.currentThread().isInterrupted() || isRedisStoppedException(e)) {
+                    log.debug("统一异步 DLQ 处置线程停止中，结束消费循环");
+                    break;
+                }
                 log.error("处理统一异步 DLQ 时发生异常", e);
             }
         }
@@ -684,5 +725,25 @@ public class AiAsyncTaskStreamConsumer {
             current = current.getCause();
         }
         return false;
+    }
+
+    private boolean isRedisStoppedException(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String msg = current.getMessage();
+            if (msg != null && msg.contains("LettuceConnectionFactory has been STOPPED")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private void joinQuietly(Thread thread, long timeoutMs) {
+        try {
+            thread.join(Math.max(1L, timeoutMs));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

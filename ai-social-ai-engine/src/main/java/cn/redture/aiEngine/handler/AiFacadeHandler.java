@@ -150,7 +150,8 @@ public class AiFacadeHandler {
         String messages = params.get("messages").toString();
         return String.format("""
                 请从以下对话中提取所有日程安排信息，并严格按照指定格式返回一个 JSON 对象，不要包含任何额外说明、注释或文本。
-                如果对话中包含相对时间（如“明天”、“下周五”），请调用工具获取当前时间，并计算出具体的日期和时间。
+                如果对话中包含相对时间（如“明天”、“下周五”），你必须调用工具 get_current_time 获取当前时间后再换算，不要自行假设当前日期。
+                get_current_time 的参数示例：{"timezone":"Asia/Shanghai"}。
                 
                 对话内容：
                 %s
@@ -161,6 +162,7 @@ public class AiFacadeHandler {
                 注意：
                 1. 必须严格遵守上述 JSON 格式。
                 2. 不要返回 Markdown 代码块（如 ```json ... ```），直接返回纯 JSON 字符串。
+                3. 如果没有可提取的日程，返回 {"schedules":[]}。
                 """, messages);
     }
 

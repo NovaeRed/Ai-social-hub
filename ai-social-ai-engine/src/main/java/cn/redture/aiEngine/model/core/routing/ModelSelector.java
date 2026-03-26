@@ -66,9 +66,7 @@ public class ModelSelector {
 
         AiModelCapability capability = findEnabledCapability(defaultSpec.provider(), defaultSpec.modelName(), taskType);
         if (capability == null) {
-            throw new BaseException(HttpStatus.BAD_REQUEST,
-                    "系统默认模型未启用、不可用或不支持当前任务类型",
-                    ErrorCodes.MODEL_NOT_ENABLED);
+            throw new BaseException(HttpStatus.BAD_REQUEST, "系统默认模型未启用、不可用或不支持当前任务类型", ErrorCodes.MODEL_NOT_ENABLED);
         }
 
         return new ModelRouteDecision(requestedCode,
@@ -93,9 +91,7 @@ public class ModelSelector {
 
         if (normalized.isBlank()) {
             if (strict) {
-                throw new BaseException(HttpStatus.BAD_REQUEST,
-                        "model_option_code 不存在或未配置",
-                        ErrorCodes.MODEL_OPTION_INVALID);
+                throw new BaseException(HttpStatus.BAD_REQUEST, "model_option_code 不存在或未配置", ErrorCodes.MODEL_OPTION_INVALID);
             }
             return new ParsedOptionCode("", "");
         }
@@ -107,18 +103,14 @@ public class ModelSelector {
             }
 
             if (strict) {
-                throw new BaseException(HttpStatus.BAD_REQUEST,
-                        "model_option_code 不存在或未配置",
-                        ErrorCodes.MODEL_OPTION_INVALID);
+                throw new BaseException(HttpStatus.BAD_REQUEST, "model_option_code 不存在或未配置", ErrorCodes.MODEL_OPTION_INVALID);
             }
         }
 
         int index = normalized.indexOf(':');
         if (index <= 0 || index >= normalized.length() - 1) {
             if (strict) {
-                throw new BaseException(HttpStatus.BAD_REQUEST,
-                        "model_option_code 格式非法，必须为 provider:model_name",
-                        ErrorCodes.MODEL_OPTION_INVALID);
+                throw new BaseException(HttpStatus.BAD_REQUEST, "model_option_code 格式非法，必须为 provider:model_name", ErrorCodes.MODEL_OPTION_INVALID);
             }
             return new ParsedOptionCode("", "");
         }
@@ -127,9 +119,7 @@ public class ModelSelector {
         String modelName = ModelProviderUtil.normalizeModelName(normalized.substring(index + 1));
         if (provider.isBlank() || modelName.isBlank()) {
             if (strict) {
-                throw new BaseException(HttpStatus.BAD_REQUEST,
-                        "model_option_code 格式非法，provider 或 model_name 为空",
-                        ErrorCodes.MODEL_OPTION_INVALID);
+                throw new BaseException(HttpStatus.BAD_REQUEST, "model_option_code 格式非法，provider 或 model_name 为空", ErrorCodes.MODEL_OPTION_INVALID);
             }
         }
         return new ParsedOptionCode(provider, modelName);
