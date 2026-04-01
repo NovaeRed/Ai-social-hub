@@ -1,7 +1,7 @@
 package cn.redture.aiEngine.pojo.entity;
 
-import cn.redture.aiEngine.handler.JsonbTypeHandler;
-import cn.redture.aiEngine.handler.PGvectorTypeHandler;
+import cn.redture.aiEngine.infrastructure.persistence.typehandler.JsonbTypeHandler;
+import cn.redture.aiEngine.infrastructure.persistence.typehandler.PGvectorTypeHandler;
 import cn.redture.aiEngine.pojo.vo.PersonaAnalysisResultVO;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;

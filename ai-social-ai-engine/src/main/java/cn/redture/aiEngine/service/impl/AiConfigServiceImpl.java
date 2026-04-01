@@ -3,6 +3,8 @@ package cn.redture.aiEngine.service.impl;
 import cn.redture.aiEngine.mapper.*;
 import cn.redture.aiEngine.pojo.dto.AiPersonaTaskDTO;
 import cn.redture.aiEngine.pojo.entity.*;
+import cn.redture.aiEngine.producer.StreamMessagePublisher;
+import cn.redture.common.event.MessageEnvelope;
 import cn.redture.aiEngine.pojo.enums.AsyncTaskDomain;
 import cn.redture.aiEngine.pojo.enums.AiPersonaTaskType;
 import cn.redture.aiEngine.pojo.enums.ProfileType;
@@ -43,6 +45,7 @@ public class AiConfigServiceImpl implements AiConfigService {
     private final AiModelCapabilityMapper aiModelCapabilityMapper;
     private final AiUsageStatsMapper aiUsageStatsMapper;
     private final StringRedisTemplate stringRedisTemplate;
+    private final StreamMessagePublisher streamMessagePublisher;
     private final AiExternalService aiExternalService;
     private final AiAsyncSubmissionService aiAsyncSubmissionService;
 
@@ -310,18 +313,16 @@ public class AiConfigServiceImpl implements AiConfigService {
         AiPersonaTaskDTO task = new AiPersonaTaskDTO();
         task.setUserId(userId);
         task.setTaskType(taskType);
-        String taskJson = JsonUtil.toJson(task);
 
-        Map<String, String> payload = new HashMap<>();
-        payload.put("domain", AsyncTaskDomain.PERSONA_TASK.name());
-        payload.put("task", taskJson);
-        payload.put("taskType", taskType.name());
-        payload.put("biz_id", "persona:" + userId + ":" + taskType.name());
-        payload.put("trace_id", UUID.randomUUID().toString());
-        payload.put("user_id", String.valueOf(userId));
-        payload.put("created_at_epoch", String.valueOf(OffsetDateTime.now().toEpochSecond()));
-        payload.put("retry_count", "0");
-        stringRedisTemplate.opsForStream().add(StreamRecords.string(payload).withStreamKey(AI_ASYNC_TASK_STREAM_KEY));
+        MessageEnvelope<AiPersonaTaskDTO> envelope = MessageEnvelope.<AiPersonaTaskDTO>builder()
+                .domain("PERSONA_TASK")
+                .eventType(taskType.name())
+                .userId(userId)
+                .bizId("persona:" + userId + ":" + taskType.name())
+                .payload(task)
+                .build();
+
+        streamMessagePublisher.publish("stream:ai-async-tasks", envelope);
     }
 
     /**

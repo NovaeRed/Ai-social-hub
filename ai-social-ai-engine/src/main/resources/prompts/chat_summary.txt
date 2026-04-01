@@ -1,0 +1,10 @@
+﻿请对以下内容进行总结。
+
+总结类型：${summary_type}
+目标长度：${target_length}
+关注关键词：${keywords}
+
+内容：
+${content}
+
+请直接输出总结结果，不要包含其他废话。

@@ -1,8 +1,11 @@
 package cn.redture.aiEngine.handler;
 
 import cn.redture.aiEngine.pojo.dto.AiPersonaTaskDTO;
+import cn.redture.common.event.internal.AiAsyncTaskEvent;
+import cn.redture.common.util.JsonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -19,6 +22,14 @@ public class AiPersonaTaskHandlerRegistry {
     @Autowired
     public AiPersonaTaskHandlerRegistry(Map<String, AiPersonaTaskHandler> handlerMap) {
         this.handlerMap = handlerMap;
+    }
+
+    @EventListener(condition = "#event.domain == 'PERSONA_TASK'")
+    public void onAiAsyncTaskEvent(AiAsyncTaskEvent event) {
+        AiPersonaTaskDTO task = JsonUtil.fromJson(
+            event.getTaskJsonPayload(), AiPersonaTaskDTO.class
+        );
+        dispatch(task);
     }
 
     public void dispatch(AiPersonaTaskDTO task) {

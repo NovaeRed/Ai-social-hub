@@ -1,17 +1,13 @@
 package cn.redture.aiEngine.service.impl;
 
-import cn.redture.aiEngine.handler.AiFacadeHandler;
-import cn.redture.aiEngine.model.core.routing.ModelRouteDecision;
+import cn.redture.aiEngine.facade.orchestrator.AiTaskOrchestrator;
 import cn.redture.aiEngine.mapper.AiTaskMapper;
 import cn.redture.aiEngine.pojo.dto.PolishRequest;
 import cn.redture.aiEngine.pojo.dto.ScheduleRequest;
 import cn.redture.aiEngine.pojo.dto.SmartReplyRequest;
 import cn.redture.aiEngine.pojo.dto.SummarizeRequest;
 import cn.redture.aiEngine.pojo.dto.TranslationRequest;
-import cn.redture.aiEngine.pojo.entity.AiTask;
-import cn.redture.aiEngine.pojo.enums.AiTaskStatus;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
-import cn.redture.aiEngine.pojo.model.ModelConfig;
 import cn.redture.aiEngine.pojo.vo.ScheduleExtractionVO;
 import cn.redture.aiEngine.pojo.vo.StreamOutputVO;
 import cn.redture.aiEngine.service.AiOnlineInteractionService;
@@ -35,9 +31,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AiOnlineInteractionServiceImpl implements AiOnlineInteractionService {
 
-    private final AiTaskService aiTaskService;
-    private final AiTaskMapper aiTaskMapper;
-    private final AiFacadeHandler aiFacadeHandler;
+    private final AiTaskOrchestrator aiTaskOrchestrator;
 
     /**
      * 执行文本润色流式任务
@@ -152,35 +146,19 @@ public class AiOnlineInteractionServiceImpl implements AiOnlineInteractionServic
             params.put("model_option_code", request.getModelOptionCode().trim());
         }
 
-        ModelRouteDecision route = aiFacadeHandler.resolveModelRoute(AiTaskType.SCHEDULE_EXTRACTION, params);
-        attachRequestedModelOptionCode(params, route);
-        AiTask task = aiTaskService.createTask(userId, AiTaskType.SCHEDULE_EXTRACTION, params);
-        persistTaskRouting(task.getId(), params, route);
-
-        try {
-            aiTaskService.updateTaskStatus(task.getId(), AiTaskStatus.PROCESSING);
-            String result = aiFacadeHandler.executeTaskWithTools(userId, AiTaskType.SCHEDULE_EXTRACTION, params, route);
-
-            Map<String, Object> resultData = new HashMap<>();
-            resultData.put("raw_result", result);
-
-            ScheduleExtractionVO vo;
-            try {
-                String cleanResult = result.replaceAll("```json", "").replaceAll("```", "").trim();
-                vo = JsonUtil.fromJson(cleanResult, ScheduleExtractionVO.class);
-                resultData.put("schedules", vo);
-            } catch (Exception e) {
-                log.warn("Failed to parse AI result to VO", e);
-                throw new JsonException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "解析AI结果失败");
-            }
-
-            aiTaskService.updateTaskResult(task.getId(), AiTaskStatus.COMPLETED, resultData, null);
-            return vo;
-        } catch (Exception e) {
-            log.error("Schedule extraction failed", e);
-            aiTaskService.updateTaskResult(task.getId(), AiTaskStatus.FAILED, null, e.getMessage());
-            throw new RuntimeException("AI schedule extraction failed", e);
-        }
+        return aiTaskOrchestrator.submitAndExecuteSync(
+                userId,
+                AiTaskType.SCHEDULE_EXTRACTION,
+                params,
+                rawResult -> {
+                    String cleanResult = rawResult.replaceAll("```json", "").replaceAll("```", "").trim();
+                    try {
+                        return JsonUtil.fromJson(cleanResult, ScheduleExtractionVO.class);
+                    } catch (Exception e) {
+                        throw new JsonException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "解析AI结果失败: " + e.getMessage());
+                    }
+                }
+        );
     }
 
     /**
@@ -193,72 +171,6 @@ public class AiOnlineInteractionServiceImpl implements AiOnlineInteractionServic
      * @return 流式输出
      */
     private Flux<StreamOutputVO> executeStreamTask(Long userId, AiTaskType taskType, Map<String, Object> params, String resultKey) {
-        return Flux.defer(() -> {
-            ModelRouteDecision route = aiFacadeHandler.resolveModelRoute(taskType, params);
-            attachRequestedModelOptionCode(params, route);
-            AiTask task = aiTaskService.createTask(userId, taskType, params);
-            persistTaskRouting(task.getId(), params, route);
-            aiTaskService.updateTaskStatus(task.getId(), AiTaskStatus.PROCESSING);
-
-            StringBuilder fullContent = new StringBuilder();
-
-            return aiFacadeHandler
-                    .executeTaskStream(userId, taskType, params, route)
-                    .map(chunk -> {
-                        fullContent.append(chunk);
-                        return new StreamOutputVO(chunk);
-                    })
-                    .doOnComplete(() -> {
-                        try {
-                            Map<String, Object> resultData = new HashMap<>();
-                            resultData.put(resultKey, fullContent.toString());
-                            aiTaskService.updateTaskResult(task.getId(), AiTaskStatus.COMPLETED, resultData, null);
-                        } catch (Exception e) {
-                            log.error("Failed to update task result", e);
-                        }
-                    })
-                    .doOnError(e -> {
-                        try {
-                            aiTaskService.updateTaskResult(task.getId(), AiTaskStatus.FAILED, null, e.getMessage());
-                        } catch (Exception ex) {
-                            log.error("Failed to update task status to FAILED", ex);
-                        }
-                    });
-        });
-    }
-
-    /**
-     * 确保任务输入中包含用于审计展示的请求模型编码
-     *
-     * @param params 任务参数
-     * @param route  模型路由决策
-     */
-    private void attachRequestedModelOptionCode(Map<String, Object> params, ModelRouteDecision route) {
-        if (params == null || route == null) {
-            return;
-        }
-        Object value = params.get("model_option_code");
-        if (value == null || String.valueOf(value).isBlank()) {
-            params.put("model_option_code", route.requestedModelOptionCode());
-        }
-    }
-
-    /**
-     * 将模型路由结果持久化到任务记录，便于后续查询展示
-     *
-     * @param taskId       任务主键 ID
-     * @param inputPayload 任务输入参数
-     * @param route        模型路由决策
-     */
-    private void persistTaskRouting(Long taskId, Map<String, Object> inputPayload, ModelRouteDecision route) {
-        if (taskId == null || route == null) {
-            return;
-        }
-        AiTask patch = new AiTask();
-        patch.setId(taskId);
-        patch.setInputPayload(inputPayload);
-        patch.setProvider(route.resolvedProvider());
-        patch.setModelConfig(new ModelConfig(route.resolvedModelName(), null, null, null, null, null));
-        aiTaskMapper.updateById(patch);
+        return aiTaskOrchestrator.submitAndExecuteStream(userId, taskType, params, resultKey);
     }
 }

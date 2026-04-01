@@ -1,6 +1,6 @@
 package cn.redture.aiEngine.pojo.entity;
 
-import cn.redture.aiEngine.handler.JsonbTypeHandler;
+import cn.redture.aiEngine.infrastructure.persistence.typehandler.JsonbTypeHandler;
 import cn.redture.aiEngine.pojo.enums.AiTaskStatus;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
 import cn.redture.aiEngine.pojo.model.ModelConfig;

@@ -1,17 +1,18 @@
 package cn.redture.aiEngine.consumer;
 
-import cn.redture.aiEngine.handler.AiNotificationTaskHandler;
-import cn.redture.aiEngine.handler.AiPersonaTaskHandlerRegistry;
 import cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO;
 import cn.redture.aiEngine.pojo.dto.AiPersonaTaskDTO;
-import cn.redture.aiEngine.pojo.dto.NotificationAsyncTaskDTO;
+import cn.redture.common.event.AiTaskCompletedEvent;
 import cn.redture.aiEngine.pojo.enums.AsyncTaskDomain;
 import cn.redture.aiEngine.service.AsyncTaskAuditService;
 import cn.redture.aiEngine.service.AiConfigService;
 import cn.redture.aiEngine.service.AiTaskExecutionService;
-import cn.redture.common.constants.ErrorCodes;
-import cn.redture.common.exception.BaseException;
+import cn.redture.common.event.internal.AiAsyncTaskEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import cn.redture.common.exception.businessException.InvalidInputException;
+import cn.redture.common.exception.BaseException;
+import cn.redture.common.constants.ErrorCodes;
+import cn.redture.common.util.TraceContext;
 import cn.redture.common.util.JsonUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -50,19 +51,16 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
     private StringRedisTemplate stringRedisTemplate;
 
     @Resource
-    private AiPersonaTaskHandlerRegistry handlerRegistry;
-
-    @Resource
     private AiTaskExecutionService aiTaskExecutionService;
-
-    @Resource
-    private AiNotificationTaskHandler aiNotificationTaskHandler;
 
     @Resource
     private AiConfigService aiConfigService;
 
     @Resource
     private AsyncTaskAuditService asyncTaskAuditService;
+
+    @Resource
+    private ApplicationEventPublisher eventPublisher;
 
     private Thread consumerThread;
     private Thread dlqThread;
@@ -202,6 +200,13 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
         String bizId = firstNonBlank(asString(record.getValue().get("biz_id")), record.getId().getValue());
         String traceId = firstNonBlank(asString(record.getValue().get("trace_id")), UUID.randomUUID().toString());
         String createdAt = firstNonBlank(asString(record.getValue().get("created_at_epoch")), String.valueOf(OffsetDateTime.now().toEpochSecond()));
+        Long envelopeUserId = null;
+        try {
+            String uStr = asString(record.getValue().get("user_id"));
+            if (uStr != null) envelopeUserId = Long.valueOf(uStr);
+        } catch (NumberFormatException ignored) {
+        }
+        String envelopeEventType = asString(record.getValue().get("event_type"));
 
         if (taskJson == null || taskJson.isBlank()) {
             acknowledge(record);
@@ -214,8 +219,9 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
             return;
         }
 
+        TraceContext.setTraceId(traceId);
         try {
-            dispatchByDomain(domain, taskJson, record.getId().getValue());
+            dispatchByDomain(domain, envelopeEventType, envelopeUserId, taskJson, record.getId().getValue());
             acknowledge(record);
             asyncTaskAuditService.record("CONSUME_SUCCESS", parseDomain(domain), Map.of(
                     "biz_id", bizId,
@@ -225,6 +231,8 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
         } catch (Exception e) {
             log.error("处理统一异步任务失败，recordId={}, retryCount={}", record.getId(), retryCount, e);
             retryOrDlq(record, domain, taskJson, retryCount, createdAt, bizId, traceId, e);
+        } finally {
+            TraceContext.clear();
         }
     }
 
@@ -235,33 +243,8 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
      * @param taskJson 任务载荷JSON
      * @param recordId Stream记录ID
      */
-    private void dispatchByDomain(String domain, String taskJson, String recordId) {
-        if (AsyncTaskDomain.PERSONA_TASK.name().equalsIgnoreCase(domain)) {
-            AiAsyncTaskDTO aiTask = JsonUtil.fromJson(taskJson, AiAsyncTaskDTO.class);
-            boolean aiTaskPayload = aiTask != null && aiTask.getUserId() != null && aiTask.getAiTaskId() != null;
-            if (aiTaskPayload) {
-                aiTaskExecutionService.executeQueuedAiTask(aiTask.getUserId(), aiTask.getAiTaskId());
-                return;
-            }
-
-            AiPersonaTaskDTO personaTask = JsonUtil.fromJson(taskJson, AiPersonaTaskDTO.class);
-            if (personaTask == null || personaTask.getUserId() == null || personaTask.getTaskType() == null) {
-                throw new InvalidInputException("统一异步 PERSONA_TASK 载荷不完整");
-            }
-            handlerRegistry.dispatch(personaTask);
-            return;
-        }
-
-        if (AsyncTaskDomain.NOTIFICATION_TASK.name().equalsIgnoreCase(domain)) {
-            NotificationAsyncTaskDTO task = JsonUtil.fromJson(taskJson, NotificationAsyncTaskDTO.class);
-            if (task == null || task.getUserId() == null || task.getEventType() == null || task.getEventType().isBlank() || task.getPayload() == null) {
-                throw new InvalidInputException("统一异步 NOTIFICATION_TASK 载荷不完整");
-            }
-            aiNotificationTaskHandler.handle(task);
-            return;
-        }
-
-        throw new InvalidInputException("统一异步任务收到未知领域 domain=" + domain + ", recordId=" + recordId);
+    private void dispatchByDomain(String domain, String eventType, Long userId, String taskJson, String recordId) {
+        eventPublisher.publishEvent(new AiAsyncTaskEvent(this, domain, eventType, userId, taskJson, recordId));
     }
 
     /**

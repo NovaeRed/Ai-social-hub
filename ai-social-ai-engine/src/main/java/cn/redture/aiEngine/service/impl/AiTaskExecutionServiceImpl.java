@@ -1,11 +1,13 @@
 package cn.redture.aiEngine.service.impl;
 
-import cn.redture.aiEngine.handler.AiFacadeHandler;
-import cn.redture.aiEngine.model.core.routing.ModelRouteDecision;
+import cn.redture.aiEngine.facade.orchestrator.AiFacadeHandler;
+import cn.redture.aiEngine.llm.core.routing.ModelRouteDecision;
 import cn.redture.aiEngine.mapper.AiTaskMapper;
 import cn.redture.aiEngine.mapper.UserAiProfileMapper;
+import cn.redture.aiEngine.producer.StreamMessagePublisher;
+import cn.redture.common.event.MessageEnvelope;
+import cn.redture.common.event.AiTaskCompletedEvent;
 import cn.redture.aiEngine.pojo.dto.MessageItem;
-import cn.redture.aiEngine.pojo.dto.NotificationAsyncTaskDTO;
 import cn.redture.aiEngine.pojo.entity.AiTask;
 import cn.redture.aiEngine.pojo.entity.UserAiProfile;
 import cn.redture.aiEngine.pojo.enums.AsyncTaskDomain;
@@ -22,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -50,6 +53,17 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
     private final AiFacadeHandler aiFacadeHandler;
     private final UserAiProfileMapper userAiProfileMapper;
     private final StringRedisTemplate stringRedisTemplate;
+    private final StreamMessagePublisher streamMessagePublisher;
+
+    @EventListener(condition = "#event.domain == 'AI_TASK'")
+    public void onAiAsyncTaskEvent(cn.redture.common.event.internal.AiAsyncTaskEvent event) {
+        cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO task = cn.redture.common.util.JsonUtil.fromJson(
+            event.getTaskJsonPayload(), cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO.class
+        );
+        if (task != null && task.getUserId() != null && task.getAiTaskId() != null) {
+            executeQueuedAiTask(task.getUserId(), task.getAiTaskId());
+        }
+    }
 
     @Override
     public void executeQueuedAiTask(Long userId, Long aiTaskId) {
@@ -155,26 +169,22 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
      * @param aiTask AI 任务实体
      */
     private void enqueueNotificationTask(Long userId, AiTask aiTask) {
-        NotificationAsyncTaskDTO notification = new NotificationAsyncTaskDTO();
-        notification.setUserId(userId);
-        notification.setEventType("AI_TASK_COMPLETED");
+        AiTaskCompletedEvent eventPayload = AiTaskCompletedEvent.builder()
+                .aiTaskId(aiTask.getId())
+                .taskPublicId(aiTask.getPublicId())
+                .taskType(aiTask.getTaskType() != null ? aiTask.getTaskType().name() : null)
+                .status(AiTaskStatus.COMPLETED.name())
+                .build();
 
-        Map<String, Object> payloadBody = new HashMap<>();
-        payloadBody.put("ai_task_id", aiTask.getId());
-        payloadBody.put("task_public_id", aiTask.getPublicId());
-        payloadBody.put("task_type", aiTask.getTaskType() == null ? null : aiTask.getTaskType().name());
-        payloadBody.put("status", AiTaskStatus.COMPLETED.name());
-        notification.setPayload(payloadBody);
+        MessageEnvelope<AiTaskCompletedEvent> envelope = MessageEnvelope.<AiTaskCompletedEvent>builder()
+                .domain("NOTIFICATION_TASK")
+                .eventType("AI_TASK_COMPLETED")
+                .userId(userId)
+                .bizId("notify:" + userId + ":" + aiTask.getId())
+                .payload(eventPayload)
+                .build();
 
-        Map<String, String> payload = new HashMap<>();
-        payload.put("domain", AsyncTaskDomain.NOTIFICATION_TASK.name());
-        payload.put("task", JsonUtil.toJson(notification));
-        payload.put("biz_id", "notify:" + userId + ":" + aiTask.getId());
-        payload.put("trace_id", UUID.randomUUID().toString());
-        payload.put("user_id", String.valueOf(userId));
-        payload.put("created_at_epoch", String.valueOf(OffsetDateTime.now().toEpochSecond()));
-        payload.put("retry_count", "0");
-        stringRedisTemplate.opsForStream().add(StreamRecords.string(payload).withStreamKey(AI_ASYNC_TASK_STREAM_KEY));
+        streamMessagePublisher.publish(AI_ASYNC_TASK_STREAM_KEY, envelope);
     }
 
     /**

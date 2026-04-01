@@ -1,7 +1,7 @@
 package cn.redture.aiEngine.pojo.enums;
 
 /**
- * AI 画像任务类型枚举，替代代码中硬编码的字符串
+ * AI 画像任务类型枚举
  */
 public enum AiPersonaTaskType {
     AI_PERSONA_ANALYSIS,

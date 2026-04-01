@@ -1,5 +1,7 @@
 package cn.redture.aiEngine.service.impl;
 
+import cn.redture.aiEngine.producer.StreamMessagePublisher;
+import cn.redture.common.event.MessageEnvelope;
 import cn.redture.aiEngine.mapper.UserAiProfileMapper;
 import cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO;
 import cn.redture.aiEngine.pojo.dto.MessageItem;
@@ -46,6 +48,7 @@ public class AiAsyncSubmissionServiceImpl implements AiAsyncSubmissionService {
 
     private final AiTaskService aiTaskService;
     private final UserAiProfileMapper userAiProfileMapper;
+    private final StreamMessagePublisher streamMessagePublisher;
     private final AiExternalService aiExternalService;
     private final StringRedisTemplate stringRedisTemplate;
 
@@ -85,16 +88,15 @@ public class AiAsyncSubmissionServiceImpl implements AiAsyncSubmissionService {
         asyncTask.setAiTaskId(task.getId());
         asyncTask.setTaskType(task.getTaskType().name());
 
-        Map<String, String> payload = new HashMap<>();
-        payload.put("domain", AsyncTaskDomain.PERSONA_TASK.name());
-        payload.put("task", JsonUtil.toJson(asyncTask));
-        payload.put("biz_id", "ai-task:" + task.getId());
-        payload.put("trace_id", UUID.randomUUID().toString());
-        payload.put("user_id", String.valueOf(userId));
-        payload.put("ai_task_id", String.valueOf(task.getId()));
-        payload.put("created_at_epoch", String.valueOf(OffsetDateTime.now().toEpochSecond()));
-        payload.put("retry_count", "0");
-        stringRedisTemplate.opsForStream().add(StreamRecords.string(payload).withStreamKey(AI_ASYNC_TASK_STREAM_KEY));
+        MessageEnvelope<AiAsyncTaskDTO> envelope = MessageEnvelope.<AiAsyncTaskDTO>builder()
+                .domain("PERSONA_TASK")
+                .eventType(task.getTaskType().name())
+                .userId(userId)
+                .bizId("ai-task:" + task.getId())
+                .payload(asyncTask)
+                .build();
+
+        streamMessagePublisher.publish("stream:ai-async-tasks", envelope);
     }
 
     private int readPendingCount(String pendingKey) {
