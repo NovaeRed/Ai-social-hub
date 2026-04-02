@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 public class Notification<T> {
 
     /**
-     * 事件类型, 例如 MESSAGE_CREATED, TYPING, FRIEND_REQUEST_NEW
+     * 事件类型, 例如 MESSAGE_CREATED, FRIEND_REQUEST_NEW
      */
     private String type;
 

@@ -17,8 +17,8 @@ public class SseController {
     private SseEmitterService sseEmitterService;
 
     @GetMapping(value = "/subscribe", produces = "text/event-stream")
-    public SseEmitter subscribe(@RequestParam(value = "client_id", required = false) String clientId) {
+    public SseEmitter subscribe() {
         Long currentUserId = SecurityContextHolderUtil.getUserId();
-        return sseEmitterService.createEmitter(currentUserId, clientId);
+        return sseEmitterService.createEmitter(currentUserId);
     }
 }
