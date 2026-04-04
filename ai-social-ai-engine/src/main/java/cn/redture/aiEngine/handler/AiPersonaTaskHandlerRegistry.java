@@ -1,5 +1,6 @@
 package cn.redture.aiEngine.handler;
 
+import cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO;
 import cn.redture.aiEngine.pojo.dto.AiPersonaTaskDTO;
 import cn.redture.common.event.internal.AiAsyncTaskEvent;
 import cn.redture.common.util.JsonUtil;
@@ -24,11 +25,20 @@ public class AiPersonaTaskHandlerRegistry {
         this.handlerMap = handlerMap;
     }
 
-    @EventListener(condition = "#event.domain == 'PERSONA_TASK'")
+    @EventListener(condition = "#a0.domain == 'PERSONA_TASK'")
     public void onAiAsyncTaskEvent(AiAsyncTaskEvent event) {
-        AiPersonaTaskDTO task = JsonUtil.fromJson(
-            event.getTaskJsonPayload(), AiPersonaTaskDTO.class
+        AiAsyncTaskDTO taskDTO = JsonUtil.fromJson(
+            event.getTaskJsonPayload(), AiAsyncTaskDTO.class
         );
+        AiPersonaTaskDTO task = new AiPersonaTaskDTO();
+        if (taskDTO != null && taskDTO.getTaskType() != null) {
+            String typeStr = taskDTO.getTaskType();
+            if ("PERSONA_ANALYSIS".equals(typeStr)) {
+                typeStr = "AI_PERSONA_ANALYSIS";
+            }
+            task.setTaskType(cn.redture.aiEngine.pojo.enums.AiPersonaTaskType.valueOf(typeStr));
+            task.setUserId(taskDTO.getUserId());
+        }
         dispatch(task);
     }
 

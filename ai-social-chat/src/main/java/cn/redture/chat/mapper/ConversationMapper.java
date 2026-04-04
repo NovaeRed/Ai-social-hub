@@ -1,5 +1,6 @@
 package cn.redture.chat.mapper;
 
+import cn.redture.chat.pojo.dto.ConversationTimelineDTO;
 import cn.redture.chat.pojo.entity.Conversation;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
@@ -11,9 +12,9 @@ import java.util.List;
 @Mapper
 public interface ConversationMapper extends BaseMapper<Conversation> {
 
-    List<Conversation> selectByUserIdAndCursor(@Param("userId") Long userId,
-                                               @Param("cursorId") Long cursorId,
-                                               @Param("pageSize") int pageSize);
+    List<ConversationTimelineDTO> selectTimelineConversations(@Param("userId") Long userId,
+                                                              @Param("cursorId") Long cursorId,
+                                                              @Param("pageSize") int pageSize);
 
     Conversation selectPrivateConversationBetween(@Param("userId1") Long userId1,
                                                   @Param("userId2") Long userId2);

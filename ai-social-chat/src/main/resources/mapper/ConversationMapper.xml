@@ -19,6 +19,36 @@
         LIMIT #{pageSize}
     </select>
 
+    <!-- 按照时间线序拉取会话列表 -->
+    <select id="selectTimelineConversations" resultType="cn.redture.chat.pojo.dto.ConversationTimelineDTO">
+        SELECT
+        c.id,
+        c.public_id AS publicId,
+        c.type,
+        c.name,
+        c.latest_message_id AS latestMessageId,
+        m.public_id AS latestMessagePublicId,
+        m.content AS latestMessageContent,
+        m.created_at AS latestMessageCreatedAt,
+        (SELECT COUNT(*)
+        FROM messages m2
+        WHERE m2.conversation_id = c.id
+        AND m2.deleted_at IS NULL
+        AND m2.sender_id != #{userId}
+        AND m2.id > coalesce(cm.last_read_message_id, 0)
+        ) AS unreadCount
+        FROM conversations c
+        INNER JOIN conversation_members cm ON c.id = cm.conversation_id
+        LEFT JOIN messages m ON m.id = c.latest_message_id
+        WHERE cm.user_id = #{userId}
+        AND c.deleted_at IS NULL
+        <if test="cursorId != null">
+            AND COALESCE(c.latest_message_id, c.id) &lt; #{cursorId}
+        </if>
+        ORDER BY COALESCE(c.latest_message_id, c.id) DESC
+        LIMIT #{pageSize}
+    </select>
+
     <!-- 查找两个用户之间是否已经存在 PRIVATE 会话 -->
     <select id="selectPrivateConversationBetween" resultType="cn.redture.chat.pojo.entity.Conversation">
         SELECT c.*

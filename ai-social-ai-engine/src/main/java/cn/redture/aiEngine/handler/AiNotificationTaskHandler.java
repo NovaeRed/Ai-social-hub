@@ -22,7 +22,7 @@ public class AiNotificationTaskHandler {
 
     private final NotificationExternalService notificationExternalService;
 
-    @EventListener(condition = "#event.domain == 'NOTIFICATION_TASK'")
+    @EventListener(condition = "#a0.domain == 'NOTIFICATION_TASK'")
     public void onAiAsyncTaskEvent(AiAsyncTaskEvent event) {
         AiTaskCompletedEvent payload = JsonUtil.fromJson(
                 event.getTaskJsonPayload(), AiTaskCompletedEvent.class

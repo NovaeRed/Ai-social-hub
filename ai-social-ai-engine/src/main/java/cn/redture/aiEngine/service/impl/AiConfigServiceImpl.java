@@ -322,7 +322,7 @@ public class AiConfigServiceImpl implements AiConfigService {
                 .payload(task)
                 .build();
 
-        streamMessagePublisher.publish("stream:ai-async-tasks", envelope);
+        streamMessagePublisher.publish(cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_STREAM_KEY, envelope);
     }
 
     /**

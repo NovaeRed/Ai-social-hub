@@ -69,7 +69,7 @@ public class ModelRoutingConfigCenter {
             if (candidate == null || !Boolean.TRUE.equals(candidate.getEnabled())) {
                 continue;
             }
-            if (normalizedId.equals(candidate.getId())) {
+            if (normalizedId.equals(candidate.getId()) || normalizedId.equals(candidate.getModel())) {
                 String provider = ModelProviderUtil.normalizeProvider(candidate.getProvider());
                 String model = ModelProviderUtil.trimToNull(candidate.getModel());
                 if (provider.isBlank() || model == null || model.isBlank()) {
@@ -86,7 +86,7 @@ public class ModelRoutingConfigCenter {
 
         if (strict) {
             throw new BaseException(HttpStatus.BAD_REQUEST,
-                    "模型候选 ID=" + normalizedId + " 不存在",
+                    "模型候选及模型名称=" + normalizedId + " 不存在",
                     ErrorCodes.MODEL_OPTION_INVALID);
         }
         return null;

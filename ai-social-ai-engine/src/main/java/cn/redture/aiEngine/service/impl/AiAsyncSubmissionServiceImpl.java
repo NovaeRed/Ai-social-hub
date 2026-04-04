@@ -89,14 +89,14 @@ public class AiAsyncSubmissionServiceImpl implements AiAsyncSubmissionService {
         asyncTask.setTaskType(task.getTaskType().name());
 
         MessageEnvelope<AiAsyncTaskDTO> envelope = MessageEnvelope.<AiAsyncTaskDTO>builder()
-                .domain("PERSONA_TASK")
+                .domain("AI_TASK")
                 .eventType(task.getTaskType().name())
                 .userId(userId)
                 .bizId("ai-task:" + task.getId())
                 .payload(asyncTask)
                 .build();
 
-        streamMessagePublisher.publish("stream:ai-async-tasks", envelope);
+        streamMessagePublisher.publish(cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_STREAM_KEY, envelope);
     }
 
     private int readPendingCount(String pendingKey) {

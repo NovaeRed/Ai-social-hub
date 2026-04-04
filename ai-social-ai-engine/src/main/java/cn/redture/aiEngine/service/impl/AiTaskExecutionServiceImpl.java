@@ -55,7 +55,7 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
     private final StringRedisTemplate stringRedisTemplate;
     private final StreamMessagePublisher streamMessagePublisher;
 
-    @EventListener(condition = "#event.domain == 'AI_TASK'")
+    @EventListener(condition = "#a0.domain == 'AI_TASK'")
     public void onAiAsyncTaskEvent(cn.redture.common.event.internal.AiAsyncTaskEvent event) {
         cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO task = cn.redture.common.util.JsonUtil.fromJson(
             event.getTaskJsonPayload(), cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO.class

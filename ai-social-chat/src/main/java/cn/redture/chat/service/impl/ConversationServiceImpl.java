@@ -3,6 +3,7 @@ package cn.redture.chat.service.impl;
 import cn.redture.chat.mapper.ConversationMapper;
 import cn.redture.chat.mapper.ConversationMemberMapper;
 import cn.redture.chat.mapper.MessageMapper;
+import cn.redture.chat.pojo.dto.ConversationTimelineDTO;
 import cn.redture.chat.pojo.entity.Conversation;
 import cn.redture.chat.pojo.entity.ConversationMember;
 import cn.redture.chat.pojo.entity.Message;
@@ -45,43 +46,25 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     public CursorPageResult<ConversationSummaryVO> listConversations(Long currentUserId, Long cursor, int limit) {
 
-        List<Conversation> conversations = conversationMapper.selectByUserIdAndCursor(currentUserId, cursor, limit + 1);
+        List<ConversationTimelineDTO> dtos = conversationMapper.selectTimelineConversations(currentUserId, cursor, limit + 1);
 
-        boolean hasMore = conversations.size() > limit;
-        List<Conversation> page = hasMore ? conversations.subList(0, limit) : conversations;
+        boolean hasMore = dtos.size() > limit;
+        List<ConversationTimelineDTO> page = hasMore ? dtos.subList(0, limit) : dtos;
 
-        List<ConversationSummaryVO> items = page.stream().map(conv -> {
-            ConversationSummaryVO vo = ConversationConverter.INSTANCE.toConversationSummaryVO(conv);
+        List<ConversationSummaryVO> items = page.stream().map(dto -> {
+            ConversationSummaryVO vo = new ConversationSummaryVO();
+            vo.setPublicId(dto.getPublicId());
+            vo.setType(dto.getType() != null ? dto.getType() : "UNKNOWN");
+            vo.setName(dto.getName());
+            vo.setUnreadCount(dto.getUnreadCount() != null ? dto.getUnreadCount() : 0L);
 
-            log.debug("Processing conversation ID: {}", conv.getId());
-            Message latest = messageMapper.selectOne(new LambdaQueryWrapper<Message>()
-                    .eq(Message::getConversationId, conv.getId())
-                    .orderByDesc(Message::getCreatedAt)
-                    .last("LIMIT 1"));
-            if (latest != null) {
-                vo.setLatestMessage(MessageConverter.INSTANCE.toLatestMessageVO(latest));
+            if (dto.getLatestMessagePublicId() != null) {
+                ConversationSummaryVO.LatestMessageVO msgVo = new ConversationSummaryVO.LatestMessageVO();
+                msgVo.setPublicId(dto.getLatestMessagePublicId());
+                msgVo.setContent(dto.getLatestMessageContent());
+                msgVo.setCreatedAt(dto.getLatestMessageCreatedAt());
+                vo.setLatestMessage(msgVo);
             }
-
-            log.debug("Conversation ID: {}", conv.getId());
-            // TODO 未读数（当前先用 SQL fallback，后续可引入 Redis 缓存）
-            ConversationMember membership = conversationMemberMapper.selectOne(new LambdaQueryWrapper<ConversationMember>()
-                    .eq(ConversationMember::getConversationId, conv.getId())
-                    .eq(ConversationMember::getUserId, currentUserId)
-                    .last("LIMIT 1"));
-            log.debug("Membership for user {} in conversation {}: {}", currentUserId, conv.getId(), membership);
-            long unread = 0L;
-            if (membership != null) {
-                Long lastReadMessageId = membership.getLastReadMessageId();
-                LambdaQueryWrapper<Message> unreadWrapper = new LambdaQueryWrapper<Message>()
-                        .eq(Message::getConversationId, conv.getId())
-                        .isNull(Message::getDeletedAt)
-                        .ne(Message::getSenderId, currentUserId)
-                        .gt(Message::getId, lastReadMessageId);
-                unread = messageMapper.selectCount(unreadWrapper);
-            }
-            log.debug("Unread count for user {} in conversation {}: {}", currentUserId, conv.getId(), unread);
-            vo.setUnreadCount(unread);
-
             return vo;
         }).toList();
 
@@ -89,8 +72,8 @@ public class ConversationServiceImpl implements ConversationService {
         result.setItems(items);
         result.setHasMore(hasMore);
         if (hasMore) {
-            Conversation last = conversations.get(limit);
-            result.setNextCursor(last.getId());
+            ConversationTimelineDTO last = page.get(limit - 1);
+            result.setNextCursor(last.getLatestMessageId() != null ? last.getLatestMessageId() : last.getId());
         }
         return result;
     }
