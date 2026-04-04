@@ -4,7 +4,6 @@ import cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO;
 import cn.redture.aiEngine.pojo.dto.AiPersonaTaskDTO;
 import cn.redture.common.event.AiTaskCompletedEvent;
 import cn.redture.aiEngine.pojo.enums.AsyncTaskDomain;
-import cn.redture.aiEngine.service.AsyncTaskAuditService;
 import cn.redture.aiEngine.service.AiConfigService;
 import cn.redture.aiEngine.service.AiTaskExecutionService;
 import cn.redture.common.event.internal.AiAsyncTaskEvent;
@@ -55,9 +54,6 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
 
     @Resource
     private AiConfigService aiConfigService;
-
-    @Resource
-    private AsyncTaskAuditService asyncTaskAuditService;
 
     @Resource
     private ApplicationEventPublisher eventPublisher;
@@ -223,11 +219,6 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
         try {
             dispatchByDomain(domain, envelopeEventType, envelopeUserId, taskJson, record.getId().getValue());
             acknowledge(record);
-            asyncTaskAuditService.record("CONSUME_SUCCESS", parseDomain(domain), Map.of(
-                    "biz_id", bizId,
-                    "trace_id", traceId,
-                    "stream_record_id", record.getId().getValue()
-            ));
         } catch (Exception e) {
             log.error("处理统一异步任务失败，recordId={}, retryCount={}", record.getId(), retryCount, e);
             retryOrDlq(record, domain, taskJson, retryCount, createdAt, bizId, traceId, e);
@@ -278,13 +269,6 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
             dlq.put("failed_at_epoch", String.valueOf(OffsetDateTime.now().toEpochSecond()));
             stringRedisTemplate.opsForStream().add(StreamRecords.string(dlq).withStreamKey(AI_ASYNC_TASK_DLQ_STREAM_KEY));
             acknowledge(record);
-
-            asyncTaskAuditService.record("DLQ_PUT", parseDomain(domain), Map.of(
-                    "biz_id", bizId,
-                    "trace_id", traceId,
-                    "error_code", errorCode,
-                    "retry_count", nextRetry
-            ));
             return;
         }
 
@@ -303,14 +287,6 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
         retryPayload.put("requeue_at_epoch", String.valueOf(OffsetDateTime.now().toEpochSecond()));
         stringRedisTemplate.opsForStream().add(StreamRecords.string(retryPayload).withStreamKey(AI_ASYNC_TASK_STREAM_KEY));
         acknowledge(record);
-
-        asyncTaskAuditService.record("RETRY_REQUEUE", parseDomain(domain), Map.of(
-                "biz_id", bizId,
-                "trace_id", traceId,
-                "error_code", errorCode,
-                "retry_count", nextRetry,
-                "backoff_ms", backoffMs
-        ));
     }
 
     private void acknowledge(MapRecord<String, Object, Object> record) {
@@ -409,11 +385,6 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
                 }
                 acknowledgeDlq(record);
             } else {
-                asyncTaskAuditService.record("DLQ_UNKNOWN_DOMAIN", AsyncTaskDomain.NOTIFICATION_TASK, Map.of(
-                        "biz_id", firstNonBlank(bizId, "unknown"),
-                        "trace_id", firstNonBlank(traceId, "unknown"),
-                        "domain", firstNonBlank(domain, "unknown")
-                ));
                 acknowledgeDlq(record);
             }
         } catch (Exception e) {
@@ -435,12 +406,6 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
     private void replayDlqNotification(MapRecord<String, Object, Object> record, String domain, String taskJson, String bizId, String traceId, String errorCode, String lastError) {
         int dlqReplay = parseRetryCount(record.getValue().get("dlq_replay_count")) + 1;
         if (dlqReplay > Math.max(notificationMaxDlqReplay, 0)) {
-            asyncTaskAuditService.record("DLQ_REPLAY_EXHAUSTED", AsyncTaskDomain.NOTIFICATION_TASK, Map.of(
-                    "biz_id", firstNonBlank(bizId, "unknown"),
-                    "trace_id", firstNonBlank(traceId, "unknown"),
-                    "error_code", firstNonBlank(errorCode, "UNKNOWN"),
-                    "last_error", firstNonBlank(lastError, "unknown")
-            ));
             acknowledgeDlq(record);
             return;
         }
@@ -455,12 +420,6 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
         payload.put("dlq_replay_count", String.valueOf(dlqReplay));
         stringRedisTemplate.opsForStream().add(StreamRecords.string(payload).withStreamKey(AI_ASYNC_TASK_STREAM_KEY));
         acknowledgeDlq(record);
-
-        asyncTaskAuditService.record("DLQ_REPLAY", AsyncTaskDomain.NOTIFICATION_TASK, Map.of(
-                "biz_id", firstNonBlank(bizId, "unknown"),
-                "trace_id", firstNonBlank(traceId, "unknown"),
-                "dlq_replay_count", dlqReplay
-        ));
     }
 
     /**
@@ -479,12 +438,6 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
         }
 
         aiConfigService.compensatePersonaTaskDrop(task.getUserId(), task.getTaskType().name(), lastError);
-        asyncTaskAuditService.record("DLQ_COMPENSATE_DROP", AsyncTaskDomain.PERSONA_TASK, Map.of(
-                "biz_id", firstNonBlank(bizId, "unknown"),
-                "trace_id", firstNonBlank(traceId, "unknown"),
-                "error_code", firstNonBlank(errorCode, "UNKNOWN"),
-                "persona_task_type", task.getTaskType().name()
-        ));
     }
 
     /**
@@ -502,12 +455,6 @@ public class AiAsyncTaskStreamConsumer implements SmartLifecycle {
             return;
         }
         aiTaskExecutionService.failQueuedAiTask(task.getUserId(), task.getAiTaskId(), firstNonBlank(errorCode, ErrorCodes.AI_TASK_DLQ), lastError);
-        asyncTaskAuditService.record("DLQ_FAIL_VISIBLE", AsyncTaskDomain.PERSONA_TASK, Map.of(
-                "biz_id", firstNonBlank(bizId, "unknown"),
-                "trace_id", firstNonBlank(traceId, "unknown"),
-                "error_code", firstNonBlank(errorCode, "UNKNOWN"),
-                "ai_task_id", task.getAiTaskId()
-        ));
     }
 
     private boolean isAiTaskPayload(String taskJson) {
