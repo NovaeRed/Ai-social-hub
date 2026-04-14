@@ -22,7 +22,8 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
 
     List<Conversation> selectUserGroupsByCursor(@Param("userId") Long userId,
                                                 @Param("cursor") Long cursor,
-                                                @Param("limit") int limit);
+                                                @Param("limit") int limit,
+                                                @Param("keyword") String keyword);
 
     @Update("UPDATE conversations SET member_count = GREATEST(0, member_count + #{delta}) WHERE id = #{conversationId}")
     int incrementMemberCount(@Param("conversationId") Long conversationId, @Param("delta") int delta);

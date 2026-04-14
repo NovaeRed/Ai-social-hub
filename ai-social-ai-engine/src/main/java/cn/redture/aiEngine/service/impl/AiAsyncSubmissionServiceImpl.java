@@ -1,6 +1,7 @@
 package cn.redture.aiEngine.service.impl;
 
 import cn.redture.aiEngine.producer.StreamMessagePublisher;
+import cn.redture.common.constants.RedisConstants;
 import cn.redture.common.event.MessageEnvelope;
 import cn.redture.aiEngine.mapper.UserAiProfileMapper;
 import cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO;
@@ -96,7 +97,7 @@ public class AiAsyncSubmissionServiceImpl implements AiAsyncSubmissionService {
                 .payload(asyncTask)
                 .build();
 
-        streamMessagePublisher.publish(cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_STREAM_KEY, envelope);
+        streamMessagePublisher.publish(RedisConstants.AI_ASYNC_TASK_STREAM_KEY, envelope);
     }
 
     private int readPendingCount(String pendingKey) {

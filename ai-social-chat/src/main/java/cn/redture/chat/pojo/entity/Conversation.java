@@ -27,6 +27,8 @@ public class Conversation {
 
     private String name;
 
+    private String announcement;
+
     @JsonProperty("member_count")
     private Long memberCount;
 

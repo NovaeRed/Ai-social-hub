@@ -14,6 +14,8 @@ public class GroupDetailVO {
     private String publicId;
 
     private String name;
+    
+    private String announcement;
 
     @JsonProperty("member_count")
     private Long memberCount;

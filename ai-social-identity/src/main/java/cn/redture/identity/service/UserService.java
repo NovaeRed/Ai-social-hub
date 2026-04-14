@@ -18,6 +18,14 @@ public interface UserService {
     UserInformation getUserById(Long userId);
 
     /**
+     * 根据公共 ID 获取用户信息
+     *
+     * @param publicId 用户公共 ID
+     * @return 用户信息
+     */
+    UserInformation getUserByPublicId(String publicId);
+
+    /**
      * 更新当前登录用户的信息
      *
      * @param updateUserDTO 包含要更新字段的 DTO

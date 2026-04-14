@@ -10,8 +10,6 @@ import cn.redture.chat.pojo.entity.Message;
 import cn.redture.chat.pojo.enums.ConversationTypeEnum;
 import cn.redture.chat.pojo.vo.ConversationSummaryVO;
 import cn.redture.chat.service.ConversationService;
-import cn.redture.chat.util.converter.ConversationConverter;
-import cn.redture.chat.util.converter.MessageConverter;
 import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.IdUtil;
@@ -83,7 +81,7 @@ public class ConversationServiceImpl implements ConversationService {
         // TODO: 未来可在此处增加好友关系、黑名单等业务约束校验
 
         // 1.1 判断两人是否为好友关系
-        if (friendshipService.listFriends(currentUserId)
+        if (friendshipService.listFriends(currentUserId, null)
                 .stream()
                 .noneMatch(friend -> friend.getPublicId().equals(targetUserPublicId))) {
             throw new InvalidInputException("只能与好友创建私聊会话");

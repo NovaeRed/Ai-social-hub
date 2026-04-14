@@ -22,9 +22,9 @@ public class FriendshipController {
      * 获取好友列表
      */
     @GetMapping("/friends")
-    public RestResult<List<FriendSummaryVO>> getFriends() {
+    public RestResult<List<FriendSummaryVO>> getFriends(@RequestParam(value = "keyword", required = false) String keyword) {
         Long currentUserId = SecurityContextHolderUtil.getUserId();
-        List<FriendSummaryVO> friends = friendshipService.listFriends(currentUserId);
+        List<FriendSummaryVO> friends = friendshipService.listFriends(currentUserId, keyword);
         return RestResult.success(friends);
     }
 
@@ -42,9 +42,9 @@ public class FriendshipController {
      * 获取好友请求列表
      */
     @GetMapping("/friends/requests")
-    public RestResult<FriendRequestListVO> listFriendRequests() {
+    public RestResult<FriendRequestListVO> listFriendRequests(@RequestParam(value = "keyword", required = false) String keyword) {
         Long currentUserId = SecurityContextHolderUtil.getUserId();
-        FriendRequestListVO vo = friendshipService.listFriendRequests(currentUserId);
+        FriendRequestListVO vo = friendshipService.listFriendRequests(currentUserId, keyword);
         return RestResult.success(vo);
     }
 

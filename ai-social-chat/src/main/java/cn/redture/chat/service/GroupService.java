@@ -32,8 +32,10 @@ public interface GroupService {
 
     void leaveGroup(Long currentUserId, String groupPublicId);
 
-    CursorPageResult<GroupSummaryVO> listGroups(Long currentUserId, Long cursor, int limit);
+    CursorPageResult<GroupSummaryVO> listGroups(Long currentUserId, Long cursor, int limit, String keyword);
 
     GroupDetailVO getGroupDetail(Long currentUserId, String groupPublicId);
+    
+    List<GroupDetailVO.MemberVO> listGroupMembers(Long currentUserId, String groupPublicId, String keyword);
 }
 

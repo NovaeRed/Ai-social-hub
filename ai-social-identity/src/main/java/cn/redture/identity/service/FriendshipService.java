@@ -11,7 +11,7 @@ public interface FriendshipService {
     /**
      * 获取当前用户的好友列表。
      */
-    List<FriendSummaryVO> listFriends(Long currentUserId);
+    List<FriendSummaryVO> listFriends(Long currentUserId, String keyword);
 
     /**
      * 发送好友请求。
@@ -21,7 +21,7 @@ public interface FriendshipService {
     /**
      * 获取当前用户相关的好友请求（incoming / outgoing）。
      */
-    FriendRequestListVO listFriendRequests(Long currentUserId);
+    FriendRequestListVO listFriendRequests(Long currentUserId, String keyword);
 
     /**
      * 接受好友请求。

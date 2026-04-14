@@ -14,6 +14,7 @@ import cn.redture.chat.sse.Notification;
 import cn.redture.chat.sse.SseEmitterService;
 import cn.redture.chat.util.converter.MessageConverter;
 import cn.redture.common.event.ai.UserMessageCreatedEvent;
+import cn.redture.common.exception.businessException.AccessDeniedException;
 import cn.redture.common.exception.businessException.ResourceNotFoundException;
 import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.SecurityContextHolderUtil;
@@ -22,6 +23,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -46,6 +48,22 @@ public class MessageServiceImpl implements MessageService {
     private ApplicationEventPublisher eventPublisher;
 
     @Override
+    @Transactional
+    public void clearConversationMessages(Long currentUserId, String conversationPublicId) {
+        Conversation conv = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
+                .eq(Conversation::getPublicId, conversationPublicId));
+        if (conv == null) {
+            throw new ResourceNotFoundException("会话不存在");
+        }
+        ConversationMember member = conversationMemberMapper.selectByConversationIdAndUserId(conv.getId(), currentUserId);
+        if (member == null) {
+            throw new AccessDeniedException("无权操作此会话");
+        }
+        member.setClearedMessageId(conv.getLatestMessageId());
+        conversationMemberMapper.updateById(member);
+    }
+
+    @Override
     public CursorPageResult<MessageItemVO> listMessages(String conversationPublicId, Long beforeMessageId, int limit) {
         Long userId = SecurityContextHolderUtil.getUserId();
 
@@ -63,7 +81,8 @@ public class MessageServiceImpl implements MessageService {
         }
 
         // 2. 查询消息
-        List<Message> messages = messageMapper.selectByCursor(conversationId, beforeMessageId, limit + 1);
+        Long minId = member.getClearedMessageId() != null ? member.getClearedMessageId() : 0L;
+        List<Message> messages = messageMapper.selectByCursor(conversationId, beforeMessageId, minId, limit + 1);
 
         boolean hasMore = messages.size() > limit;
         List<Message> page = hasMore ? messages.subList(0, limit) : messages;

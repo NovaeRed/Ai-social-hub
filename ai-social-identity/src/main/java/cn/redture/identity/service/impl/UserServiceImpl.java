@@ -13,6 +13,7 @@ import cn.redture.identity.pojo.vo.UserInformation;
 import cn.redture.identity.service.UserService;
 import cn.redture.identity.util.TokenManagementUtil;
 import cn.redture.identity.util.converter.UserConverter;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -55,6 +56,18 @@ public class UserServiceImpl implements UserService {
         } catch (NumberFormatException e) {
             throw new InvalidInputException("无效的用户ID格式");
         }
+    }
+
+    @Override
+    public UserInformation getUserByPublicId(String publicId) {
+        if (!StringUtils.hasText(publicId)) {
+            throw new InvalidInputException("用户ID不能为空");
+        }
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(User::getPublicId, publicId);
+        User user = Optional.ofNullable(userMapper.selectOne(wrapper))
+                .orElseThrow(() -> new ResourceNotFoundException("用户"));
+        return UserConverter.INSTANCE.toUserInformation(user);
     }
 
     @Override

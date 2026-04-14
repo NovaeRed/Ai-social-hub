@@ -16,8 +16,8 @@ public interface MessageMapper extends BaseMapper<Message> {
 	 */
 	List<Message> selectByCursor(@Param("conversationId") Long conversationId,
 								 @Param("cursorId") Long cursorId,
-								 @Param("pageSize") int pageSize);
-
+								 @Param("minId") Long minId,
+								 @Param("limit") int limit);
 	/**
 	 * 获取会话的最近N条消息（用于AI上下文）
 	 */

@@ -1,13 +1,12 @@
 package cn.redture.aiEngine.handler;
 
-import cn.redture.common.event.internal.AiAsyncTaskEvent;
 import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.integration.notification.NotificationExternalService;
 import cn.redture.common.event.AiTaskCompletedEvent;
 import cn.redture.common.util.JsonUtil;
+import cn.redture.aiEngine.pojo.enums.AsyncTaskDomain;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -18,19 +17,24 @@ import java.util.Map;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class AiNotificationTaskHandler {
+public class AiNotificationTaskHandler implements AiTaskHandler {
 
     private final NotificationExternalService notificationExternalService;
 
-    @EventListener(condition = "#a0.domain == 'NOTIFICATION_TASK'")
-    public void onAiAsyncTaskEvent(AiAsyncTaskEvent event) {
+    @Override
+    public AsyncTaskDomain getDomain() {
+        return AsyncTaskDomain.NOTIFICATION_TASK;
+    }
+
+    @Override
+    public void executeTask(String taskJson, Long userId, String eventType, String recordId) throws Exception {
         AiTaskCompletedEvent payload = JsonUtil.fromJson(
-                event.getTaskJsonPayload(), AiTaskCompletedEvent.class
+                taskJson, AiTaskCompletedEvent.class
         );
         if (payload == null || payload.getAiTaskId() == null) {
-            throw new InvalidInputException("NOTIFICATION_TASK 载荷不完整: " + event.getRecordId());
+            throw new InvalidInputException("NOTIFICATION_TASK 载荷不完整: " + recordId);
         }
-        handle(event.getUserId(), event.getEventType(), payload);
+        handle(userId, eventType, payload);
     }
 
     /**

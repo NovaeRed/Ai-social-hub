@@ -40,7 +40,7 @@ public class FriendshipServiceImpl implements FriendshipService {
     private UserMapper userMapper;
 
     @Override
-    public List<FriendSummaryVO> listFriends(Long currentUserId) {
+    public List<FriendSummaryVO> listFriends(Long currentUserId, String keyword) {
         // 查询当前用户作为 user_id_1 或 user_id_2 的所有好友关系
         LambdaQueryWrapper<Friendship> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Friendship::getUserId1, currentUserId)
@@ -61,6 +61,9 @@ public class FriendshipServiceImpl implements FriendshipService {
         }
 
         List<User> users = userMapper.selectByIds(friendUserIds);
+        if (org.springframework.util.StringUtils.hasText(keyword)) {
+            users = users.stream().filter(u -> (u.getUsername() != null && u.getUsername().contains(keyword)) || (u.getNickname() != null && u.getNickname().contains(keyword))).collect(java.util.stream.Collectors.toList());
+        }
         return users.stream().map(UserConverter.INSTANCE::toFriendSummaryVO).toList();
     }
 
@@ -114,7 +117,7 @@ public class FriendshipServiceImpl implements FriendshipService {
     }
 
     @Override
-    public FriendRequestListVO listFriendRequests(Long currentUserId) {
+    public FriendRequestListVO listFriendRequests(Long currentUserId, String keyword) {
         // incoming：当前用户是接收者
         List<FriendRequestItemVO> incoming = friendshipRequestMapper.selectList(new LambdaQueryWrapper<FriendshipRequest>()
                         .eq(FriendshipRequest::getReceiverId, currentUserId))
@@ -131,6 +134,10 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .sorted(Comparator.comparing(FriendRequestItemVO::getCreatedAt).reversed())
                 .collect(Collectors.toList());
 
+        if (org.springframework.util.StringUtils.hasText(keyword)) {
+            incoming = incoming.stream().filter(item -> (item.getSender() != null && item.getSender().getNickname() != null && item.getSender().getNickname().contains(keyword)) || (item.getSender() != null && item.getSender().getPublicId() != null && item.getSender().getPublicId().contains(keyword))).collect(java.util.stream.Collectors.toList());
+            outgoing = outgoing.stream().filter(item -> (item.getSender() != null && item.getSender().getNickname() != null && item.getSender().getNickname().contains(keyword)) || (item.getSender() != null && item.getSender().getPublicId() != null && item.getSender().getPublicId().contains(keyword))).collect(java.util.stream.Collectors.toList());
+        }
         FriendRequestListVO vo = new FriendRequestListVO();
         vo.setIncoming(incoming);
         vo.setOutgoing(outgoing);

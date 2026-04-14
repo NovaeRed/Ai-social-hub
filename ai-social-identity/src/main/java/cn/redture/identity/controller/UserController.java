@@ -27,6 +27,12 @@ public class UserController {
         return RestResult.success(userResult);
     }
 
+    @GetMapping("/{user_public_id}")
+    public RestResult<UserInformation> getUserByPublicId(@PathVariable("user_public_id") String userPublicId) {
+        UserInformation userResult = userService.getUserByPublicId(userPublicId);
+        return RestResult.success(userResult);
+    }
+
     @PatchMapping("/me")
     public RestResult<UserInformation> updateUserInformation(@RequestBody UpdateUserDTO updateUserDTO) {
         UserInformation updatedUser = userService.updateUserInfo(updateUserDTO);

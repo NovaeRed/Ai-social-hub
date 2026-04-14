@@ -5,5 +5,6 @@ package cn.redture.aiEngine.pojo.enums;
  */
 public enum AsyncTaskDomain {
     PERSONA_TASK,
-    NOTIFICATION_TASK
+    NOTIFICATION_TASK,
+    AI_TASK
 }

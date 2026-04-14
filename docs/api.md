@@ -9,7 +9,7 @@
 > 文档中的接口路径均为**去前缀后的相对路径**（例如 `/ai/interactions/polish`）。
 > 实际请求地址为：`<Base URL> + <API Prefix> + <Path>`。
 
-**Last Updated:** 2026-03-25
+**Last Updated:** 2026-04-14
 
 **Architecture Overview:**
 
@@ -44,7 +44,10 @@
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "access_token": "<access_token>",
+  "refresh_token": "<refresh_token>",
+  "token_type": "Bearer",
+  "expires_in": 900
 }
 ```
 
@@ -66,7 +69,10 @@
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "access_token": "<access_token>",
+  "refresh_token": "<refresh_token>",
+  "token_type": "Bearer",
+  "expires_in": 900
 }
 ```
 
@@ -175,7 +181,7 @@ Authorization: Bearer <expired_access_token>
   "avatarUrl": "/uploads/avatars/new_avatar.jpg",
   "email": "new.email@example.com",
   "phone": "13800138001",
-  "aiAnalysisEnabled": true
+  "ai_analysis_enabled": true
 }
 ```
 
@@ -205,6 +211,29 @@ Authorization: Bearer <expired_access_token>
 
 ---
 
+### 2.5 `GET /users/{user_public_id}`
+
+**查询指定用户资料**
+
+**Path Parameters:**
+
+- `user_public_id` (string, required): 用户公开 ID。
+
+**Response 200 (Success):**
+
+```json
+{
+  "public_id": "user_a1b2c3d4",
+  "username": "Codetemp1",
+  "nickname": "Copilot Coder",
+  "avatar_url": "/uploads/avatars/default.png",
+  "email": "codetemp1@example.com",
+  "phone": "13800138000",
+  "vip_level": "NORMAL",
+  "ai_analysis_enabled": true
+}
+```
+
 ## 3.0 好友关系模块 (Friendship Service)
 
 * **Implementation:** `ai-social-identity`
@@ -213,6 +242,10 @@ Authorization: Bearer <expired_access_token>
 ### 3.1 `GET /friends`
 
 **获取当前用户的好友列表**
+
+**Query Parameters:**
+
+- `keyword` (string, optional): 按好友 `username` 或 `nickname` 模糊搜索。
 
 **Response 200 (Success):**
 
@@ -239,11 +272,15 @@ Authorization: Bearer <expired_access_token>
 }
 ```
 
-**Response 202 (Accepted):** 请求已发送。
+**Response 204 (No Content):** 请求已发送。
 
 ### 3.3 `GET /friends/requests`
 
 **获取好友请求列表（收到的和发出的）**
+
+**Query Parameters:**
+
+- `keyword` (string, optional): 按请求发起人昵称或 public_id 模糊搜索。
 
 **Response 200 (Success):**
 
@@ -296,7 +333,7 @@ Authorization: Bearer <expired_access_token>
 
 **Query Parameters:**
 
-- `cursor` (string, optional): 预留的游标参数，当前实现通常一次性返回最近会话，客户端可忽略。
+- `cursor` (long, optional): 游标（会话时间线锚点）。
 - `limit` (int, optional, default: 200): 返回的最大会话数量，通常足以覆盖近期会话列表。
 
 **Response 200 (Success):**
@@ -313,8 +350,6 @@ Authorization: Bearer <expired_access_token>
         "content": "好的，明天见！",
         "created_at": "2025-11-23T10:00:00Z"
       },
-      "member_count": 10,
-      // 仅群组会话返回
       "unread_count": 3
     }
   ],
@@ -340,12 +375,10 @@ Authorization: Bearer <expired_access_token>
 - 如果当前用户与目标用户之间已存在 `type = "PRIVATE"` 的会话，则直接返回该会话；
 - 否则新建一个 `type = "PRIVATE"` 的会话，并插入两条 `conversation_members` 记录。
 
-**Response 201 (Created):**
+**Response 200 (Success):**
 
 ```json
-{
-  "public_id": "conv_c1d2e3f4"
-}
+"conv_c1d2e3f4"
 ```
 
 ### 4.2.1 `GET /conversations/{conversation_public_id}/messages`
@@ -380,13 +413,10 @@ Authorization: Bearer <expired_access_token>
       },
       "content": "今天下午的会，你准备得怎么样了？",
       "media_type": "TEXT",
-      "source_type": "SPEECH_TRANSCRIPT",
-      "parent_message_public_id": "msg_voice_123"
+      "source_type": "SPEECH_TRANSCRIPT"
     }
   ],
-  "next_cursor": {
-    "before_message_id": 1234
-  },
+  "next_cursor": 1234,
   "has_more": true
 }
 ```
@@ -400,7 +430,7 @@ Authorization: Bearer <expired_access_token>
 ```json
 {
   "content": "明天的会议确认一下时间。",
-  "media_type": "TEXT"
+  "temp_id": "local-1715068800"
 }
 ```
 
@@ -417,7 +447,6 @@ Authorization: Bearer <expired_access_token>
   "media_type": "TEXT",
   "media_url": null,
   "source_type": null,
-  "parent_message_public_id": null,
   "created_at": "2025-11-23T10:05:00Z"
 }
 ```
@@ -432,28 +461,16 @@ Authorization: Bearer <expired_access_token>
 
 ---
 
-### 4.3.1 `POST /conversations/typing`
+### 4.2.3 `DELETE /conversations/{conversation_public_id}/messages`
 
-**Request Body**
+**清空当前用户在该会话中的消息视图（软清空）**
 
-```json
-{
-  "conversation_public_id": "conv_a1b2c3d4",
-  "target_user_public_id": "user_u1v2w3e4"
-}
-```
+**说明：**
 
-**上报当前用户在指定会话中的“正在输入”状态**
+- 该操作不会物理删除会话消息。
+- 仅影响当前用户后续拉取消息时的可见范围。
 
-**行为说明：**
-
-- 仅当目标会话为**私聊会话**（`type = "PRIVATE"`）时才会生效，群组会话不会产生任何实时事件；
-- 客户端在用户开始输入时，按一定频率（例如每 500ms 以上）调用此接口；停止输入时可调用 `DELETE /conversations/typing` 主动结束状态；
-- 服务端不落库，只在内存或缓存中短暂记录状态，并通过 SSE 向会话内**其他成员**广播 `TYPING` 事件（事件类型为 `TYPING`，详见
-  4.6.3），当前上报用户自身不会收到该事件；
-- 前端可以在收到一条 `TYPING` 事件后，显示“对方正在输入...”，并在若干秒内未再收到新的 `TYPING` 事件时自动隐藏提示。
-
-**Response 204 (No Content):** 上报成功。
+**Response 204 (No Content):** 清空成功。
 
 ---
 
@@ -597,14 +614,36 @@ Authorization: Bearer <expired_access_token>
 
 ---
 
+### 4.4.11 `GET /groups/{group_public_id}/members`
+
+**获取群成员列表**
+
+**Query Parameters:**
+
+- `keyword` (string, optional): 按成员昵称模糊筛选。
+
+**Response 200 (Success):**
+
+```json
+[
+  {
+    "public_id": "user_u1v2w3e4",
+    "nickname": "张三",
+    "role": "MEMBER",
+    "joined_at": "2025-11-26T10:05:00Z"
+  }
+]
+```
+
 ### 4.5.1 `GET /groups`
 
 **获取当前用户所在的群组列表**
 
 **Query Parameters:**
 
-- `cursor` (string, optional): 游标，用于翻页，后端可基于 `conversations.id` 或 `created_at` 实现；
+- `cursor` (long, optional): 游标（群组 ID 锚点）；
 - `limit` (int, optional, default: 20): 每页数量，最大 100。
+- `keyword` (string, optional): 按群名称模糊搜索。
 
 **Response 200 (Success):**
 
@@ -633,13 +672,14 @@ Authorization: Bearer <expired_access_token>
 {
   "public_id": "group_c1d2e3f4",
   "name": "新项目组",
+  "announcement": "本周五前完成接口联调。",
   "member_count": 5,
   "created_at": "2025-11-26T10:00:00Z",
   "members": [
     {
       "public_id": "user_u1v2w3e4",
       "nickname": "张三",
-      "is_admin": true,
+      "role": "ADMIN",
       "joined_at": "2025-11-26T10:05:00Z"
     }
   ]
@@ -650,79 +690,55 @@ Authorization: Bearer <expired_access_token>
 
 **Implementation:** `ai-social-chat`
 
-**Description:** 通过 Server-Sent Events (SSE) 将新消息、正在输入等事件实时推送给在线客户端。
+**Description:** 通过 Server-Sent Events (SSE) 向在线客户端推送通知。
 
 #### 4.6.1 `GET /sse/subscribe`
 
 **建立 SSE 订阅连接**
 
-- 建立一个与当前登录用户绑定的 SSE 长连接，用于接收后台推送的各种通知事件。
-- 浏览器场景统一使用 Cookie 鉴权（`HttpOnly` + `Secure` + `SameSite`），并通过 `withCredentials: true` 建立连接。
-- 非浏览器客户端（如服务端或移动端自定义 SSE 客户端）可使用 `Authorization: Bearer <access_token>` 进行鉴权。
-- 支持可选查询参数 `client_id`，用于区分同一用户的不同终端连接（如 web / ios / android）。
-
-**鉴权约定（统一口径）：**
-
-- 前端 Web：使用 Cookie 鉴权，不在 `EventSource` 中传 Authorization Header。
-- 原生 `EventSource` 不支持自定义请求头；若必须 Header 鉴权，请使用支持自定义 Header 的 SSE 客户端实现。
-
-**Query Parameters:**
-
-- `client_id` (string, optional): 客户端实例标识。建议前端持久化后复用；不传时服务端会自动生成。
+- 建立与当前登录用户绑定的长连接。
+- 服务端会自动为每条连接分配内部 `clientId` 并管理多端广播。
 
 **Request:**
 
 ```http
-GET /sse/subscribe?client_id=web-3f9d6d7e HTTP/1.1
+GET /sse/subscribe HTTP/1.1
 Accept: text/event-stream
 Cookie: access_token=<access_token>
 ```
 
-**多端语义说明：**
-
-- 同一用户可同时建立多个 SSE 连接（按 `client_id` 区分）；
-- 服务端会向该用户全部活跃连接广播事件，避免多端互相覆盖。
-
 **Response 200:**
 
 - Header: `Content-Type: text/event-stream;charset=UTF-8`
-- Body: 持续的 SSE 事件流，每条事件的数据部分是一个 JSON 对象：
+- Body: 持续事件流，事件体为统一 `Notification` 结构。
 
-```json5
+```json
 {
-  "type": "MESSAGE_CREATED",
-  "payload": {
-    // ...
-  }
+  "type": "CONNECTION_ESTABLISHED",
+  "payload": "SSE connection successful"
 }
 ```
 
-**客户端接入示例（浏览器）：**
-
-```js
-const es = new EventSource('/sse/subscribe', {withCredentials: true});
-
-es.onmessage = (event) => {
-    const notification = JSON.parse(event.data);
-    switch (notification.type) {
-        case 'MESSAGE_CREATED':
-            handleMessageCreated(notification.payload);
-            break;
-        case 'TYPING':
-            handleTyping(notification.payload);
-            break;
-        default:
-            console.warn('Unknown SSE event type', notification.type);
-    }
-};
-```
-
-#### 4.6.2 事件：`MESSAGE_CREATED`
+#### 4.6.2 事件：`CONNECTION_ESTABLISHED`
 
 **触发时机：**
 
-- 当任意用户调用 `POST /conversations/{conversation_public_id}/messages` 发送新消息且写入成功后，
-- 服务器会异步地向该会话中所有**其他成员**推送一条 `MESSAGE_CREATED` 事件。
+- SSE 连接建立成功后，服务端会立即推送该事件。
+
+**事件格式：**
+
+```json
+{
+  "type": "CONNECTION_ESTABLISHED",
+  "payload": "SSE connection successful"
+}
+```
+
+#### 4.6.3 事件：`MESSAGE_CREATED`
+
+**触发时机：**
+
+- 当任意用户发送消息成功后，服务端会向同会话其他成员推送。
 
 **事件格式：**
 
@@ -739,81 +755,7 @@ es.onmessage = (event) => {
     "media_type": "TEXT",
     "media_url": null,
     "source_type": null,
-    "parent_message_public_id": null,
     "created_at": "2025-11-23T10:05:00Z"
-  }
-}
-```
-
-> 注：`payload` 的结构与 `GET /conversations/{conversation_public_id}/messages` 返回的 `MessageItemVO`
-> 完全一致，前端可直接复用同一套类型定义。
-
-**前端建议处理逻辑：**
-
-- **聊天窗口：**
-    - 如果 `payload` 所属会话正是当前打开的会话：
-        - 将该消息 append 到本地消息数组末尾；
-        - 如果当前处于底部，可自动滚动到底部 / 播放提示音。
-- **会话列表：**
-    - 在本地找到对应会话条目，更新：
-        - `latest_message` 字段为该条消息的 `public_id` / `content` / `created_at`；
-        - 若该会话当前不在前台聊天窗口，则 `unread_count += 1`；
-    - 将该会话移动到列表顶部，以模拟微信的“最近会话置顶”效果。
-
---- 
-
-#### 4.6.3 事件：`TYPING`
-
-**适用范围：**
-
-- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `POST /conversations/typing` 将不会产生任何
-  SSE 事件。
-
-**触发时机：**
-
-- 当某个用户在私聊会话中调用 `POST /conversations/typing` 上报输入状态时；
-- 服务端会向该会话中的**另一方用户**推送 `TYPING` 事件，上报方自己不会收到该事件。
-
-**事件格式：**
-
-```json
-{
-  "type": "TYPING",
-  "payload": {
-    "conversation_public_id": "conv_a1b2c3d4",
-    "user_id": 123
-  }
-}
-```
-
-**前端建议处理逻辑：**
-
-- 在对应会话窗口中收到 `TYPING` 后显示“正在输入...”提示；
-- 在收到 `STOP_TYPING` 事件（见 4.6.4）后，或本地超时后，隐藏“正在输入...”提示；
-- 可以对同一用户、同一会话的 `TYPING` 事件做简单节流/去抖，避免频繁刷新 UI。
-
----
-
-### 4.6.4 事件：`STOP_TYPING`
-
-**适用范围：**
-
-- 仅在私聊会话中生效（`type = "PRIVATE"`）。群组会话调用 `DELETE /conversations/typing` 将不会产生任何
-  SSE 事件。
-
-**触发时机：**
-
-- 当某个用户在私聊会话中调用 `DELETE /conversations/typing` 上报停止输入状态时；
-- 服务端会向该会话中的**另一方用户**推送 `STOP_TYPING` 事件，上报方自己不会收到该事件。
-
-**事件格式：**
-
-```json
-{
-  "type": "STOP_TYPING",
-  "payload": {
-    "conversation_public_id": "conv_a1b2c3d4",
-    "user_id": 123
   }
 }
 ```
@@ -875,21 +817,14 @@ es.onmessage = (event) => {
 
 ```json
 {
-  "title": "项目复盘会议",
   "schedules": [
     {
       "title": "项目复盘会议",
-      "start_time": "2025-12-03T14:00:00+08:00",
-      "end_time": "2025-12-03T15:00:00+08:00",
+      "time": "后天下午2点",
       "location": "会议室A",
-      "participants": [
-        "user1",
-        "user2"
-      ],
-      "confidence": 0.92
+      "participants": ["user1", "user2"]
     }
-  ],
-  "raw_result": "..."
+  ]
 }
 ```
 
@@ -1074,9 +1009,8 @@ PROCESSING -> CANCELLED (可选，取决于执行器是否支持中断)
 `Content-Type: text/event-stream`
 
 ```text
-data: {"type":"STREAM","content":"我会参加的"}
-data: {"type":"STREAM","content":"，需要准备什么材料吗？"}
-data: {"type":"COMPLETE"}
+data: {"output":"我会参加的"}
+data: {"output":"，需要准备什么材料吗？"}
 ```
 
 ### 5.7 `POST /ai/interactions/summarize`
@@ -1118,9 +1052,8 @@ data: {"type":"COMPLETE"}
 `Content-Type: text/event-stream`
 
 ```text
-data: {"type":"STREAM","content":"会议主要内容总结..."}
-data: {"type":"STREAM","content":"要点1: ..."}
-data: {"type":"COMPLETE"}
+data: {"output":"会议主要内容总结..."}
+data: {"output":"要点1: ..."}
 ```
 
 ### 5.8 `POST /ai/interactions/translate`
@@ -1130,8 +1063,8 @@ data: {"type":"COMPLETE"}
 ```json5
 {
   "text": "Hello, how are you?",
-  "source_lang": "en",
-  "target_lang": "zh",
+  "source_language": "en",
+  "target_language": "zh",
   "domain": "business",
   // business, casual, technical, academic
   "model_option_code": "dashscope:qwen-max"
@@ -1143,9 +1076,8 @@ data: {"type":"COMPLETE"}
 `Content-Type: text/event-stream`
 
 ```text
-data: {"type":"STREAM","content":"你好"}
-data: {"type":"STREAM","content":"，你怎么样？"}
-data: {"type":"COMPLETE"}
+data: {"output":"你好"}
+data: {"output":"，你怎么样？"}
 ```
 
 ### 5.9 `GET /ai/models`
@@ -1158,16 +1090,18 @@ data: {"type":"COMPLETE"}
 {
   "models": [
     {
-      "name": "gpt-4o",
-      "provider": "openai",
+      "option_code": "dashscope:qwen-max",
+      "display_name": "通义千问 Max",
+      "name": "qwen-max",
+      "provider": "dashscope",
       "capabilities": [
         "text",
-        "image",
-        "code",
         "reasoning"
       ]
     },
     {
+      "option_code": "anthropic:claude-3-opus",
+      "display_name": "Claude 3 Opus",
       "name": "claude-3-opus",
       "provider": "anthropic",
       "capabilities": [
@@ -1202,6 +1136,8 @@ data: {"type":"COMPLETE"}
           "解决问题导向"
         ]
       },
+      "model_name": "qwen-max",
+      "provider": "dashscope",
       "updated_at": "2025-12-01T10:00:00Z"
     }
   ]
@@ -1222,12 +1158,25 @@ data: {"type":"COMPLETE"}
 
 ```json
 {
-  "total_tokens": 15000,
-  "total_cost": 0.25,
-  "usage_by_model": [
+  "summary": {
+    "total_tokens": 15000,
+    "input_tokens": 9000,
+    "output_tokens": 6000,
+    "total_cost": 0.25,
+    "date_from": "2025-12-01",
+    "date_to": "2025-12-31"
+  },
+  "daily_breakdown": [
     {
-      "model_name": "gpt-4o",
-      "tokens": 10000,
+      "date": "2025-12-01",
+      "tokens_used": 10000,
+      "cost": 0.15
+    }
+  ],
+  "by_provider": [
+    {
+      "provider": "openai",
+      "tokens_used": 10000,
       "cost": 0.15
     }
   ]
@@ -1291,7 +1240,13 @@ data: {"type":"COMPLETE"}
 ```json
 {
   "public_id": "sch_s1t2u3v4",
-  "title": "团队会议"
+  "title": "团队会议",
+  "description": "周会",
+  "start_time": "2025-12-05T14:00:00Z",
+  "end_time": "2025-12-05T15:00:00Z",
+  "location": "线上",
+  "is_ai_extracted": false,
+  "source_message_id": null
 }
 ```
 
@@ -1316,7 +1271,13 @@ data: {"type":"COMPLETE"}
 ```json
 {
   "public_id": "sch_s1t2u3v4",
-  "title": "更新后的会议标题"
+  "title": "更新后的会议标题",
+  "description": "更新后的描述",
+  "start_time": "2025-12-05T15:00:00Z",
+  "end_time": "2025-12-05T16:00:00Z",
+  "location": "会议室B",
+  "is_ai_extracted": false,
+  "source_message_id": null
 }
 ```
 
@@ -1332,6 +1293,8 @@ data: {"type":"COMPLETE"}
 
 * **Implementation:** `ai-social-gateway`
 * **Description:** 系统统一入口，提供文件上传等通用功能。
+
+> 当前仓库中未包含 `POST /uploads` 的业务控制器实现；若网关后续接入该能力，请以网关模块实际实现为准。
 
 ### 7.1 `POST /uploads`
 
@@ -1393,3 +1356,4 @@ data: {"type":"COMPLETE"}
 | 429         | `RATE_LIMITED`              | 请求过于频繁，请稍后再试。                                 |
 | 500         | `INTERNAL_ERROR`            | 服务器内部发生未知错误。                                  |
 | 503         | `UPSTREAM_UNAVAILABLE`      | 上游依赖服务（如 AI 模型）暂时不可用。                         |
+

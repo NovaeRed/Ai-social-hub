@@ -35,4 +35,11 @@ public class MessageController {
         MessageItemVO vo = messageWriteGuardService.createMessage(conversationPublicId, currentUserId, dto);
         return RestResult.created(vo);
     }
+
+    @DeleteMapping
+    public RestResult<Void> clearMessages(@PathVariable("conversation_public_id") String conversationPublicId) {
+        Long currentUserId = SecurityContextHolderUtil.getUserId();
+        messageService.clearConversationMessages(currentUserId, conversationPublicId);
+        return RestResult.noContent();
+    }
 }

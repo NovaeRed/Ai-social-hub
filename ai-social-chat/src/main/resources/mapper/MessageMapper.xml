@@ -12,6 +12,9 @@
         <if test="cursorId != null">
             AND id &lt; #{cursorId}
         </if>
+        <if test="minId != null and minId > 0">
+            AND id > #{minId}
+        </if>
         ORDER BY id DESC
         LIMIT #{pageSize}
     </select>

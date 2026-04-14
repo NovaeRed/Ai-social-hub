@@ -76,6 +76,9 @@
         <if test="cursor != null">
             AND c.id > #{cursor}
         </if>
+        <if test="keyword != null and keyword != ''">
+            AND c.name LIKE concat('%', #{keyword}, '%')
+        </if>
         ORDER BY c.id ASC
         LIMIT #{limit}
     </select>

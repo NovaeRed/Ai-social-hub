@@ -4,10 +4,11 @@ import cn.redture.aiEngine.facade.orchestrator.AiFacadeHandler;
 import cn.redture.aiEngine.llm.core.routing.ModelRouteDecision;
 import cn.redture.aiEngine.mapper.AiTaskMapper;
 import cn.redture.aiEngine.mapper.UserAiProfileMapper;
+import cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO;
+import cn.redture.aiEngine.pojo.dto.MessageItem;
 import cn.redture.aiEngine.producer.StreamMessagePublisher;
 import cn.redture.common.event.MessageEnvelope;
 import cn.redture.common.event.AiTaskCompletedEvent;
-import cn.redture.aiEngine.pojo.dto.MessageItem;
 import cn.redture.aiEngine.pojo.entity.AiTask;
 import cn.redture.aiEngine.pojo.entity.UserAiProfile;
 import cn.redture.aiEngine.pojo.enums.AsyncTaskDomain;
@@ -17,14 +18,13 @@ import cn.redture.aiEngine.pojo.model.ModelConfig;
 import cn.redture.aiEngine.pojo.vo.PersonaAnalysisResultVO;
 import cn.redture.aiEngine.service.AiTaskExecutionService;
 import cn.redture.aiEngine.service.AiTaskService;
+import cn.redture.aiEngine.handler.AiTaskHandler;
 import cn.redture.common.constants.ErrorCodes;
 import cn.redture.common.util.JsonUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -34,7 +34,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 import static cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_STREAM_KEY;
 
@@ -44,7 +43,7 @@ import static cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_STREAM_KE
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
+public class AiTaskExecutionServiceImpl implements AiTaskExecutionService, AiTaskHandler {
 
     private static final String PERSONA_TIMELINE_COUNTER_KEY_PREFIX = "ai:persona:timeline:pending:";
 
@@ -55,10 +54,15 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
     private final StringRedisTemplate stringRedisTemplate;
     private final StreamMessagePublisher streamMessagePublisher;
 
-    @EventListener(condition = "#a0.domain == 'AI_TASK'")
-    public void onAiAsyncTaskEvent(cn.redture.common.event.internal.AiAsyncTaskEvent event) {
-        cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO task = cn.redture.common.util.JsonUtil.fromJson(
-            event.getTaskJsonPayload(), cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO.class
+    @Override
+    public AsyncTaskDomain getDomain() {
+        return AsyncTaskDomain.AI_TASK;
+    }
+
+    @Override
+    public void executeTask(String taskJson, Long userId, String eventType, String recordId) {
+        AiAsyncTaskDTO task = JsonUtil.fromJson(
+                taskJson, AiAsyncTaskDTO.class
         );
         if (task != null && task.getUserId() != null && task.getAiTaskId() != null) {
             executeQueuedAiTask(task.getUserId(), task.getAiTaskId());
@@ -73,17 +77,17 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
 
         AiTask task = aiTaskMapper.selectById(aiTaskId);
         if (task == null || !Objects.equals(task.getUserId(), userId)) {
-            log.warn("Skip queued AI task because task not found or user mismatch, userId={}, aiTaskId={}", userId, aiTaskId);
+            log.warn("跳过队列中的 AI 任务：任务不存在或用户不匹配，userId={}, aiTaskId={}", userId, aiTaskId);
             return;
         }
 
         if (task.getTaskStatus() == AiTaskStatus.COMPLETED || task.getTaskStatus() == AiTaskStatus.FAILED) {
-            log.debug("Skip queued AI task because it is already terminal, aiTaskId={}, status={}", aiTaskId, task.getTaskStatus());
+            log.debug("跳过队列中的 AI 任务：任务已处于终态，aiTaskId={}, status={}", aiTaskId, task.getTaskStatus());
             return;
         }
 
         if (task.getTaskType() != AiTaskType.PERSONA_ANALYSIS) {
-            log.debug("Skip queued AI task because task type {} is not handled yet, aiTaskId={}", task.getTaskType(), aiTaskId);
+            log.debug("跳过队列中的 AI 任务：任务类型 {} 暂未处理，aiTaskId={}", task.getTaskType(), aiTaskId);
             return;
         }
 
@@ -93,9 +97,8 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
         try {
             ModelRouteDecision route = aiFacadeHandler.resolveSystemDefaultRoute(task.getTaskType());
             attachRequestedModelOptionCode(params, route);
-            persistTaskRouting(aiTaskId, params, route);
+            updateTaskAndStatus(aiTaskId, params, route);
 
-            aiTaskService.updateTaskStatus(aiTaskId, AiTaskStatus.PROCESSING);
             String result = aiFacadeHandler.executeTask(userId, task.getTaskType(), params, route);
 
             String jsonStr = extractJson(result);
@@ -112,9 +115,9 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
             consumePendingMessages(userId, messages.size());
             enqueueNotificationTask(userId, task);
 
-            log.info("Queued AI task executed successfully, aiTaskId={}, publicId={}", aiTaskId, task.getPublicId());
+            log.info("队列中的 AI 任务执行成功，aiTaskId={}, publicId={}", aiTaskId, task.getPublicId());
         } catch (Exception e) {
-            log.error("Queued AI task execution failed, aiTaskId={}", aiTaskId, e);
+            log.error("队列中的 AI 任务执行失败，aiTaskId={}", aiTaskId, e);
             aiTaskService.updateTaskResult(aiTaskId, AiTaskStatus.FAILED, null, e.getMessage());
         }
     }
@@ -157,7 +160,7 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
             }
             return Arrays.asList(items);
         } catch (Exception e) {
-            log.warn("Failed to parse message items from task input payload", e);
+            log.warn("从任务输入载荷解析消息列表失败", e);
             return List.of();
         }
     }
@@ -259,7 +262,7 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
             userAiProfileMapper.updateById(profile);
         }
 
-        log.info("Saved persona analysis for user: {}", userId);
+        log.info("已保存用户画像分析结果，userId={}", userId);
     }
 
     /**
@@ -279,13 +282,13 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
     }
 
     /**
-     * 将模型路由结果持久化到任务记录，便于后续查询展示。
+     * 将模型路由结果持久化到任务记录，并更新状态
      *
      * @param taskId       任务主键 ID
      * @param inputPayload 任务输入参数
      * @param route        模型路由决策
      */
-    private void persistTaskRouting(Long taskId, Map<String, Object> inputPayload, ModelRouteDecision route) {
+    private void updateTaskAndStatus(Long taskId, Map<String, Object> inputPayload, ModelRouteDecision route) {
         if (taskId == null || route == null) {
             return;
         }
@@ -294,6 +297,8 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService {
         patch.setInputPayload(inputPayload);
         patch.setProvider(route.resolvedProvider());
         patch.setModelConfig(new ModelConfig(route.resolvedModelName(), null, null, null, null, null));
+        patch.setTaskStatus(AiTaskStatus.PROCESSING);
+        patch.setStartedAt(OffsetDateTime.now());
         aiTaskMapper.updateById(patch);
     }
 

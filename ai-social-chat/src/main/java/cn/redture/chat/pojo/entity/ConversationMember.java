@@ -29,4 +29,6 @@ public class ConversationMember {
     private Long lastReadMessageId;
 
     private OffsetDateTime lastReadAt;
+
+    private Long clearedMessageId;
 }

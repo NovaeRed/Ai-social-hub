@@ -58,6 +58,7 @@ CREATE TABLE conversations
     public_id         VARCHAR(50) UNIQUE     NOT NULL,
     type              conversation_type_enum NOT NULL,
     name              VARCHAR(100),
+    announcement      TEXT,
     member_count      INTEGER                         DEFAULT 0,
     latest_message_id BIGINT                          DEFAULT 0,
     created_at        TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
@@ -80,7 +81,8 @@ CREATE TABLE conversation_members
     -- 角色：OWNER（创建者），ADMIN（管理员），MEMBER（普通成员）
     role                 conversation_member_role_enum NOT NULL DEFAULT 'MEMBER',
     last_read_message_id BIGINT                                 DEFAULT 0,
-    last_read_at         TIMESTAMPTZ                            DEFAULT NOW()
+    last_read_at         TIMESTAMPTZ                            DEFAULT NOW(),
+    cleared_message_id   BIGINT                                 DEFAULT 0
 );
 COMMENT
     ON TABLE conversation_members IS '会话成员关系表';

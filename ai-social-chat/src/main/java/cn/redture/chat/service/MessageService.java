@@ -9,6 +9,11 @@ import java.util.List;
 public interface MessageService {
 
     /**
+     * 清空当前用户的会话聊天记录可见性。
+     */
+    void clearConversationMessages(Long currentUserId, String conversationPublicId);
+
+    /**
      * 获取指定会话的消息（按时间倒序，基于游标）。
      */
     CursorPageResult<MessageItemVO> listMessages(String conversationPublicId, Long beforeMessageId, int limit);

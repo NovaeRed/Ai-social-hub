@@ -21,6 +21,7 @@ import jakarta.annotation.Resource;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
 import java.util.*;
@@ -453,13 +454,13 @@ public class GroupServiceImpl implements GroupService {
     }
 
     @Override
-    public CursorPageResult<GroupSummaryVO> listGroups(Long currentUserId, Long cursor, int limit) {
+    public CursorPageResult<GroupSummaryVO> listGroups(Long currentUserId, Long cursor, int limit, String keyword) {
         if (currentUserId == null) {
             return new CursorPageResult<>();
         }
 
         limit = Math.min(limit, 100);
-        List<Conversation> groups = conversationMapper.selectUserGroupsByCursor(currentUserId, cursor, limit + 1);
+        List<Conversation> groups = conversationMapper.selectUserGroupsByCursor(currentUserId, cursor, limit + 1, keyword);
 
         boolean hasMore = groups.size() > limit;
         if (hasMore) {
@@ -503,6 +504,7 @@ public class GroupServiceImpl implements GroupService {
         GroupDetailVO detail = new GroupDetailVO();
         detail.setPublicId(group.getPublicId());
         detail.setName(group.getName());
+        detail.setAnnouncement(group.getAnnouncement());
         detail.setCreatedAt(group.getCreatedAt());
         detail.setMemberCount(group.getMemberCount());
 
@@ -519,6 +521,18 @@ public class GroupServiceImpl implements GroupService {
         detail.setMembers(memberVOList);
 
         return detail;
+    }
+
+    @Override
+    public List<GroupDetailVO.MemberVO> listGroupMembers(Long currentUserId, String groupPublicId, String keyword) {
+        GroupDetailVO detail = getGroupDetail(currentUserId, groupPublicId);
+        List<GroupDetailVO.MemberVO> members = detail.getMembers();
+        if (StringUtils.hasText(keyword)) {
+            members = members.stream()
+                    .filter(m -> m.getNickname() != null && m.getNickname().contains(keyword))
+                    .collect(Collectors.toList());
+        }
+        return members;
     }
 
     private Conversation getConversationByPublicId(String groupPublicId) {

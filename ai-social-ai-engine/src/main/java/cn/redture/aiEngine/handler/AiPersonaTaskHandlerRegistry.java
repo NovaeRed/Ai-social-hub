@@ -2,11 +2,11 @@ package cn.redture.aiEngine.handler;
 
 import cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO;
 import cn.redture.aiEngine.pojo.dto.AiPersonaTaskDTO;
-import cn.redture.common.event.internal.AiAsyncTaskEvent;
+import cn.redture.aiEngine.pojo.enums.AiPersonaTaskType;
+import cn.redture.aiEngine.pojo.enums.AsyncTaskDomain;
 import cn.redture.common.util.JsonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -16,7 +16,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-public class AiPersonaTaskHandlerRegistry {
+public class AiPersonaTaskHandlerRegistry implements AiTaskHandler {
 
     private final Map<String, AiPersonaTaskHandler> handlerMap;
 
@@ -25,18 +25,24 @@ public class AiPersonaTaskHandlerRegistry {
         this.handlerMap = handlerMap;
     }
 
-    @EventListener(condition = "#a0.domain == 'PERSONA_TASK'")
-    public void onAiAsyncTaskEvent(AiAsyncTaskEvent event) {
+    @Override
+    public AsyncTaskDomain getDomain() {
+        return AsyncTaskDomain.PERSONA_TASK;
+    }
+
+    @Override
+    public void executeTask(String taskJson, Long userId, String eventType, String recordId) throws Exception {
         AiAsyncTaskDTO taskDTO = JsonUtil.fromJson(
-            event.getTaskJsonPayload(), AiAsyncTaskDTO.class
+            taskJson, AiAsyncTaskDTO.class
         );
         AiPersonaTaskDTO task = new AiPersonaTaskDTO();
         if (taskDTO != null && taskDTO.getTaskType() != null) {
             String typeStr = taskDTO.getTaskType();
+            // TODO 语义统一
             if ("PERSONA_ANALYSIS".equals(typeStr)) {
                 typeStr = "AI_PERSONA_ANALYSIS";
             }
-            task.setTaskType(cn.redture.aiEngine.pojo.enums.AiPersonaTaskType.valueOf(typeStr));
+            task.setTaskType(AiPersonaTaskType.valueOf(typeStr));
             task.setUserId(taskDTO.getUserId());
         }
         dispatch(task);

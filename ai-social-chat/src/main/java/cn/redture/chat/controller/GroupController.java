@@ -58,6 +58,14 @@ public class GroupController {
         return RestResult.noContent();
     }
 
+    @GetMapping("/{group_public_id}/members")
+    public RestResult<List<GroupDetailVO.MemberVO>> listGroupMembers(@PathVariable("group_public_id") String groupPublicId,
+                                                            @RequestParam(value = "keyword", required = false) String keyword) {
+        Long currentUserId = SecurityContextHolderUtil.getUserId();
+        List<GroupDetailVO.MemberVO> members = groupService.listGroupMembers(currentUserId, groupPublicId, keyword);
+        return RestResult.success(members);
+    }
+
     @GetMapping("/{group_public_id}/members/admins")
     public RestResult<List<GroupAdminVO>> listGroupAdmins(@PathVariable("group_public_id") String groupPublicId) {
         Long currentUserId = SecurityContextHolderUtil.getUserId();
@@ -113,9 +121,10 @@ public class GroupController {
 
     @GetMapping
     public RestResult<CursorPageResult<GroupSummaryVO>> listGroups(@RequestParam(value = "cursor", required = false) Long cursor,
-                                                                   @RequestParam(value = "limit", defaultValue = "20") int limit) {
+                                                                   @RequestParam(value = "limit", defaultValue = "20") int limit,
+                                                                   @RequestParam(value = "keyword", required = false) String keyword) {
         Long currentUserId = SecurityContextHolderUtil.getUserId();
-        CursorPageResult<GroupSummaryVO> page = groupService.listGroups(currentUserId, cursor, limit);
+        CursorPageResult<GroupSummaryVO> page = groupService.listGroups(currentUserId, cursor, limit, keyword);
         return RestResult.success(page);
     }
 
