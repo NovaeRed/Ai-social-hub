@@ -30,6 +30,8 @@ mybatis-plus:
 logging:
   level:
     cn.redture: debug
+  file:
+    path: ./logs
 
 ai:
   async:
