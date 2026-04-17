@@ -9,7 +9,7 @@ ENV JAVA_OPTS=""
 
 WORKDIR ${APP_DIR}
 
-COPY ./target/Ai-social-hub.jar ${APP_DIR}/app.jar
+COPY ./target/ai-social-app-1.0-SNAPSHOT.jar ${APP_DIR}/app.jar
 
 RUN mkdir -p ${APP_DIR}/log
 VOLUME ${APP_DIR}/log
