@@ -1,11 +1,9 @@
 package cn.redture.aiEngine.facade.orchestrator;
 
 import cn.redture.aiEngine.llm.core.routing.ModelRouteDecision;
-import cn.redture.aiEngine.mapper.AiTaskMapper;
 import cn.redture.aiEngine.pojo.entity.AiTask;
 import cn.redture.aiEngine.pojo.enums.AiTaskStatus;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
-import cn.redture.aiEngine.pojo.model.ModelConfig;
 import cn.redture.aiEngine.pojo.vo.StreamOutputVO;
 import cn.redture.aiEngine.service.AiTaskService;
 import cn.redture.common.exception.BaseException;
@@ -20,22 +18,37 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
+/**
+ * AI 任务编排器。
+ * <p>
+ * 负责统一执行在线任务的路由决策、任务落库、状态流转与结果写回。
+ * </p>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class AiTaskOrchestrator {
 
     private final AiTaskService aiTaskService;
-    private final AiTaskMapper aiTaskMapper;
     private final AiFacadeHandler aiFacadeHandler;
+    private final TaskRoutingAuditService taskRoutingAuditService;
 
+    /**
+     * 提交并执行流式 AI 任务。
+     *
+     * @param userId 用户 ID
+     * @param taskType 任务类型
+     * @param params 任务输入参数
+     * @param resultKey 结果字段名
+     * @return 流式输出片段
+     */
     public Flux<StreamOutputVO> submitAndExecuteStream(Long userId, AiTaskType taskType, Map<String, Object> params, String resultKey) {
         return Flux.defer(() -> {
             ModelRouteDecision route = aiFacadeHandler.resolveModelRoute(taskType, params);
-            attachRequestedModelOptionCode(params, route);
+            taskRoutingAuditService.ensureRequestedModelOptionCode(params, route);
 
             AiTask task = aiTaskService.createTask(userId, taskType, params);
-            persistTaskRouting(task.getId(), params, route);
+            taskRoutingAuditService.persistRouting(task.getId(), params, route);
 
             StringBuilder fullContent = new StringBuilder();
 
@@ -67,12 +80,22 @@ public class AiTaskOrchestrator {
         });
     }
 
+    /**
+     * 提交并执行同步 AI 任务。
+     *
+     * @param userId 用户 ID
+     * @param taskType 任务类型
+     * @param params 任务输入参数
+     * @param resultParser 结果解析函数
+     * @param <T> 解析后的结果类型
+     * @return 解析后的结果对象
+     */
     public <T> T submitAndExecuteSync(Long userId, AiTaskType taskType, Map<String, Object> params, Function<String, T> resultParser) {
         ModelRouteDecision route = aiFacadeHandler.resolveModelRoute(taskType, params);
-        attachRequestedModelOptionCode(params, route);
+        taskRoutingAuditService.ensureRequestedModelOptionCode(params, route);
 
         AiTask task = aiTaskService.createTask(userId, taskType, params);
-        persistTaskRouting(task.getId(), params, route);
+        taskRoutingAuditService.persistRouting(task.getId(), params, route);
 
         try {
             aiTaskService.updateTaskStatus(task.getId(), AiTaskStatus.PROCESSING);
@@ -89,28 +112,6 @@ public class AiTaskOrchestrator {
             log.error("Sync AI task execution failed: taskType={}, taskId={}", taskType, task.getId(), e);
             aiTaskService.updateTaskResult(task.getId(), AiTaskStatus.FAILED, null, e.getMessage());
             throw new BaseException(HttpStatus.INTERNAL_SERVER_ERROR, "任务执行失败: " + e.getMessage(), "TASK_EXECUTION_FAILED");
-        }
-    }
-
-    private void persistTaskRouting(Long taskId, Map<String, Object> inputPayload, ModelRouteDecision route) {
-        if (taskId == null || route == null) {
-            return;
-        }
-        AiTask patch = new AiTask();
-        patch.setId(taskId);
-        patch.setInputPayload(inputPayload);
-        patch.setProvider(route.resolvedProvider());
-        patch.setModelConfig(new ModelConfig(route.resolvedModelName(), null, null, null, null, null));
-        aiTaskMapper.updateById(patch);
-    }
-
-    private void attachRequestedModelOptionCode(Map<String, Object> params, ModelRouteDecision route) {
-        if (params == null || route == null) {
-            return;
-        }
-        Object value = params.get("model_option_code");
-        if (value == null || String.valueOf(value).isBlank()) {
-            params.put("model_option_code", route.requestedModelOptionCode());
         }
     }
 }

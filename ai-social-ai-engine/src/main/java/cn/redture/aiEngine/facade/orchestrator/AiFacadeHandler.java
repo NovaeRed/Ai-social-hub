@@ -1,136 +1,165 @@
 package cn.redture.aiEngine.facade.orchestrator;
 
-import cn.redture.aiEngine.llm.core.execution.ModelProviderExecutor;
+import cn.redture.aiEngine.facade.prompt.ModelOutputSecurityValidator;
+import cn.redture.aiEngine.facade.prompt.PromptComposer;
+import cn.redture.aiEngine.llm.core.execution.ModelExecutionContext;
+import cn.redture.aiEngine.llm.factory.ModelProviderStrategyFactory;
 import cn.redture.aiEngine.llm.core.routing.ModelSelector;
 import cn.redture.aiEngine.llm.core.routing.ModelRouteDecision;
-import cn.redture.aiEngine.pojo.dto.SmartReplyRequest;
+import cn.redture.aiEngine.llm.strategy.ModelProviderStrategy;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
-import cn.redture.common.util.JsonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.util.StreamUtils;
-import jakarta.annotation.PostConstruct;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
 
+/**
+ * AI 门面处理器。
+ * <p>
+ * 负责组装 Prompt、解析路由并将调用分发到具体模型策略。
+ * </p>
+ */
 @Slf4j
 @Component
 public class AiFacadeHandler {
 
-    private final ModelSelector modelModelSelector;
-    private final ModelProviderExecutor modelProviderExecutor;
-    private final Map<String, String> promptTemplates = new ConcurrentHashMap<>();
+    private final ModelSelector modelSelector;
+    private final ModelProviderStrategyFactory modelProviderStrategyFactory;
+    private final PromptComposer promptComposer;
+    private final ModelOutputSecurityValidator modelOutputSecurityValidator;
 
-    public AiFacadeHandler(ModelSelector modelModelSelector,
-                           ModelProviderExecutor modelProviderExecutor) {
-        this.modelModelSelector = modelModelSelector;
-        this.modelProviderExecutor = modelProviderExecutor;
+    public AiFacadeHandler(ModelSelector modelSelector,
+                           ModelProviderStrategyFactory modelProviderStrategyFactory,
+                           PromptComposer promptComposer,
+                           ModelOutputSecurityValidator modelOutputSecurityValidator) {
+        this.modelSelector = modelSelector;
+        this.modelProviderStrategyFactory = modelProviderStrategyFactory;
+        this.promptComposer = promptComposer;
+        this.modelOutputSecurityValidator = modelOutputSecurityValidator;
     }
 
-    @PostConstruct
-    public void init() {
-        loadPrompt("polish.txt", "POLISH");
-        loadPrompt("schedule_extraction.txt", "SCHEDULE_EXTRACTION");
-        loadPrompt("translation.txt", "TRANSLATION");
-        loadPrompt("translation_domain.txt", "TRANSLATION_DOMAIN");
-        loadPrompt("smart_reply.txt", "SMART_REPLY");
-        loadPrompt("chat_summary.txt", "CHAT_SUMMARY");
-        loadPrompt("persona_analysis.txt", "PERSONA_ANALYSIS");
-    }
-
-    private void loadPrompt(String filename, String key) {
-        try {
-            ClassPathResource resource = new ClassPathResource("prompts/" + filename);
-            String content = StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
-            promptTemplates.put(key, content);
-        } catch (Exception e) {
-            log.error("Failed to load prompt template: " + filename, e);
-        }
-    }
-
+    /**
+     * 执行流式任务并返回模型输出流。
+     *
+     * @param userId 用户 ID
+     * @param taskType 任务类型
+     * @param params 任务参数
+     * @param route 模型路由决策
+     * @return 模型流式输出
+     */
     public Flux<String> executeTaskStream(Long userId, AiTaskType taskType, Map<String, Object> params, ModelRouteDecision route) {
-        log.debug("Execute stream task: userId={}, taskType={}, provider={}, model={}", userId, taskType, route.resolvedProvider(), route.resolvedModelName());
+        DispatchTarget dispatch = resolveDispatchTarget(route, "stream");
+        log.debug("Execute stream task: userId={}, taskType={}, provider={}, model={}", userId, taskType, dispatch.context().provider(), dispatch.context().modelName());
         String prompt = buildPrompt(taskType, params);
-        return modelProviderExecutor.stream(route, prompt);
+        StringBuilder outputBuffer = new StringBuilder();
+
+        return dispatch.strategy().stream(prompt, dispatch.context())
+            .<String>handle((chunk, sink) -> {
+                    outputBuffer.append(chunk);
+                    modelOutputSecurityValidator.validateChunk(outputBuffer);
+                    sink.next(chunk);
+                })
+                .doOnError(error -> log.error("Error in stream task", error))
+                .doOnComplete(() -> log.debug("Stream task completed"));
     }
 
+    /**
+     * 执行同步任务并返回文本结果。
+     *
+     * @param userId 用户 ID
+     * @param taskType 任务类型
+     * @param params 任务参数
+     * @param route 模型路由决策
+     * @return 同步文本结果
+     */
     public String executeTask(Long userId, AiTaskType taskType, Map<String, Object> params, ModelRouteDecision route) {
-        log.debug("Execute task: userId={}, taskType={}, provider={}, model={}", userId, taskType, route.resolvedProvider(), route.resolvedModelName());
+        DispatchTarget dispatch = resolveDispatchTarget(route, "call");
+        log.debug("Execute task: userId={}, taskType={}, provider={}, model={}", userId, taskType, dispatch.context().provider(), dispatch.context().modelName());
         String prompt = buildPrompt(taskType, params);
-        return modelProviderExecutor.call(route, prompt);
+        String result = dispatch.strategy().call(prompt, dispatch.context());
+        modelOutputSecurityValidator.validateFinal(result);
+        return result;
     }
 
+    /**
+     * 执行带工具调用的同步任务。
+     *
+     * @param userId 用户 ID
+     * @param taskType 任务类型
+     * @param params 任务参数
+     * @param route 模型路由决策
+     * @return 模型返回结果
+     */
     public String executeTaskWithTools(Long userId, AiTaskType taskType, Map<String, Object> params, ModelRouteDecision route) {
-        log.debug("Execute task with tools: userId={}, taskType={}, provider={}, model={}", userId, taskType, route.resolvedProvider(), route.resolvedModelName());
+        DispatchTarget dispatch = resolveDispatchTarget(route, "callWithTools");
+        log.debug("Execute task with tools: userId={}, taskType={}, provider={}, model={}", userId, taskType, dispatch.context().provider(), dispatch.context().modelName());
         String prompt = buildPrompt(taskType, params);
-        return modelProviderExecutor.callWithTools(route, prompt);
+        String result = dispatch.strategy().callWithTools(prompt, dispatch.context());
+        modelOutputSecurityValidator.validateFinal(result);
+        return result;
     }
 
+    /**
+     * 将路由决策解析为可执行分发目标。
+     *
+     * @param route 模型路由决策
+     * @param operation 操作名称（用于错误上下文）
+     * @return 分发目标（执行上下文 + 策略实现）
+     */
+    private DispatchTarget resolveDispatchTarget(ModelRouteDecision route, String operation) {
+        if (route == null) {
+            throw new IllegalStateException("模型路由决策为空，无法执行操作: " + operation);
+        }
+
+        ModelExecutionContext context = ModelExecutionContext.fromRoute(route);
+        if (context == null || context.provider() == null || context.provider().isBlank()
+                || context.modelName() == null || context.modelName().isBlank()) {
+            throw new IllegalStateException("模型执行上下文无效，无法执行操作: " + operation);
+        }
+
+        ModelProviderStrategy strategy = modelProviderStrategyFactory.getProviderStrategy(context.provider());
+        return new DispatchTarget(context, strategy);
+    }
+
+    /**
+     * 分发目标结构。
+     *
+     * @param context 执行上下文
+     * @param strategy 供应商策略
+     */
+    private record DispatchTarget(ModelExecutionContext context, ModelProviderStrategy strategy) {
+    }
+
+    /**
+     * 按请求参数解析模型路由。
+     *
+     * @param taskType 任务类型
+     * @param params 输入参数
+     * @return 路由决策
+     */
     public ModelRouteDecision resolveModelRoute(AiTaskType taskType, Map<String, Object> params) {
-        return modelModelSelector.resolveModelRoute(taskType, params);
+        return modelSelector.resolveModelRoute(taskType, params);
     }
 
+    /**
+     * 解析系统默认模型路由。
+     *
+     * @param taskType 任务类型
+     * @return 默认路由决策
+     */
     public ModelRouteDecision resolveSystemDefaultRoute(AiTaskType taskType) {
-        return modelModelSelector.resolveSystemDefaultRoute(taskType);
+        return modelSelector.resolveSystemDefaultRoute(taskType);
     }
 
+    /**
+     * 构建模型调用 Prompt。
+     *
+     * @param taskType 任务类型
+     * @param params 原始参数
+     * @return 渲染后的 Prompt 文本
+     */
     public String buildPrompt(AiTaskType taskType, Map<String, Object> params) {
-        if (taskType == AiTaskType.SPEECH_TO_TEXT) return null;
-
-        String templateKey = taskType.name();
-
-        if (taskType == AiTaskType.TRANSLATION) {
-            String domain = (String) params.get("domain");
-            if (domain != null && !domain.trim().isEmpty()) {
-                templateKey = "TRANSLATION_DOMAIN";
-            }
-        } else if (taskType == AiTaskType.SMART_REPLY) {
-            String historyStr = params.get("conversation_history") != null ? JsonUtil.toJson(params.get("conversation_history")) : "无";
-            params.put("historyStr", historyStr);
-            String profileHint = "";
-            if (params.get("user_profile") != null) {
-                SmartReplyRequest.UserProfile profile = (SmartReplyRequest.UserProfile) params.get("user_profile");
-                String name = profile.getName() != null ? profile.getName() : "用户";
-                String role = profile.getRole() != null ? profile.getRole() : "未知身份";
-                String style = profile.getCommunicationStyle() != null ? profile.getCommunicationStyle() : "无特殊风格";
-                profileHint = "你是" + name + "，身份是" + role + "，沟通风格是" + style + "。";
-            } else {
-                profileHint = "你是用户本人，沟通风格自然得体。";
-            }
-            params.put("profileHint", profileHint);
-        } else if (taskType == AiTaskType.CHAT_SUMMARY) {
-            String summaryType = (String) params.getOrDefault("summary_type", "general");
-            String targetLength = (String) params.getOrDefault("target_length", "medium");
-            Object keywordsObj = params.get("keywords");
-            String keywords = keywordsObj != null ? keywordsObj.toString() : "无";
-            params.put("summary_type", summaryType);
-            params.put("target_length", targetLength);
-            params.put("keywords", keywords);
-        } else if (taskType == AiTaskType.SCHEDULE_EXTRACTION || taskType == AiTaskType.PERSONA_ANALYSIS) {
-            Object msgObj = params.get("messages");
-            if (msgObj != null) {
-                params.put("messages", msgObj.toString());
-            }
-        }
-
-        String template = promptTemplates.getOrDefault(templateKey, "");
-        return renderTemplate(template, params);
-    }
-
-    private String renderTemplate(String template, Map<String, Object> params) {
-        if (template == null || template.isEmpty() || params == null) return template;
-        String rendered = template;
-        for (Map.Entry<String, Object> entry : params.entrySet()) {
-            if (entry.getValue() == null) continue;
-            String key = "\\$\\{" + entry.getKey() + "\\}";
-            String value = Matcher.quoteReplacement(entry.getValue().toString());
-            rendered = rendered.replaceAll(key, value);
-        }
-        return rendered;
+        return promptComposer.compose(taskType, params);
     }
 }

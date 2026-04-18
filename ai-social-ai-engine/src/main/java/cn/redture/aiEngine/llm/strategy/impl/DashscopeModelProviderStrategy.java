@@ -1,6 +1,7 @@
 package cn.redture.aiEngine.llm.strategy.impl;
 
 import cn.redture.aiEngine.llm.provider.dashscope.DashscopeModelConfigResolver;
+import cn.redture.aiEngine.llm.core.execution.ModelExecutionContext;
 import cn.redture.aiEngine.llm.strategy.ModelProvider;
 import cn.redture.aiEngine.llm.strategy.ModelProviderStrategy;
 import cn.redture.aiEngine.llm.util.ModelProviderUtil;
@@ -56,8 +57,8 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
     }
 
     @Override
-    public Flux<String> stream(String prompt, String modelName) {
-        DashscopeModelConfigResolver.ResolvedModelConfig config = resolveConfig(modelName);
+    public Flux<String> stream(String prompt, ModelExecutionContext context) {
+        DashscopeModelConfigResolver.ResolvedModelConfig config = resolveConfig(context);
         return Flux.<String>create(sink -> {
             String endpoint = normalizeChatCompletionsUrl(config.chatCompletionsUrl());
             String payload = buildPayload(config.modelName(), prompt, true);
@@ -110,8 +111,8 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
     }
 
     @Override
-    public String call(String prompt, String modelName) {
-        DashscopeModelConfigResolver.ResolvedModelConfig config = resolveConfig(modelName);
+    public String call(String prompt, ModelExecutionContext context) {
+        DashscopeModelConfigResolver.ResolvedModelConfig config = resolveConfig(context);
         String endpoint = normalizeChatCompletionsUrl(config.chatCompletionsUrl());
         String payload = buildPayload(config.modelName(), prompt, false);
 
@@ -137,12 +138,12 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
     }
 
     @Override
-    public String callWithTools(String prompt, String modelName) {
+    public String callWithTools(String prompt, ModelExecutionContext context) {
         if (!aiToolRegistry.hasTools()) {
-            return call(prompt, modelName);
+            return call(prompt, context);
         }
 
-        DashscopeModelConfigResolver.ResolvedModelConfig config = resolveConfig(modelName);
+        DashscopeModelConfigResolver.ResolvedModelConfig config = resolveConfig(context);
         String endpoint = normalizeChatCompletionsUrl(config.chatCompletionsUrl());
 
         List<Map<String, Object>> messages = new ArrayList<>();
@@ -181,13 +182,22 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
         return lastAssistantContent;
     }
 
-    private DashscopeModelConfigResolver.ResolvedModelConfig resolveConfig(String modelName) {
-        String resolvedModel = ModelProviderUtil.normalizeModelName(modelName);
+    private DashscopeModelConfigResolver.ResolvedModelConfig resolveConfig(ModelExecutionContext context) {
+        if (context == null) {
+            throw new BaseException(HttpStatus.BAD_REQUEST, "模型执行上下文不能为空", ErrorCodes.MODEL_OPTION_INVALID);
+        }
+
+        String resolvedModel = ModelProviderUtil.normalizeModelName(context.modelName());
         if (resolvedModel.isBlank()) {
             throw new BaseException(HttpStatus.BAD_REQUEST, "模型名称不能为空，请检查模型路由配置", ErrorCodes.MODEL_OPTION_INVALID);
         }
 
-        DashscopeModelConfigResolver.ResolvedModelConfig config = configResolver.resolveByModelName(providerCode(), resolvedModel);
+        String resolvedProvider = ModelProviderUtil.normalizeProvider(context.provider());
+        if (resolvedProvider.isBlank()) {
+            resolvedProvider = providerCode();
+        }
+
+        DashscopeModelConfigResolver.ResolvedModelConfig config = configResolver.resolveByModelName(resolvedProvider, resolvedModel);
         if (config.apiKey().isBlank()) {
             throw new BaseException(HttpStatus.BAD_REQUEST, "模型 " + resolvedModel + " 缺少 DashScope apiKey 配置", ErrorCodes.MODEL_OPTION_INVALID);
         }

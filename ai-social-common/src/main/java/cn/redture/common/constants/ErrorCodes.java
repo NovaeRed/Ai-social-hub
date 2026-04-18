@@ -34,4 +34,6 @@ public final class ErrorCodes {
     public static final String MODEL_OPTION_INVALID = "MODEL_OPTION_INVALID";
     public static final String MODEL_NOT_ENABLED = "MODEL_NOT_ENABLED";
     public static final String MODEL_CAPABILITY_MISMATCH = "MODEL_CAPABILITY_MISMATCH";
+    public static final String PROMPT_INJECTION_BLOCKED = "PROMPT_INJECTION_BLOCKED";
+    public static final String MODEL_OUTPUT_SECURITY_BLOCKED = "MODEL_OUTPUT_SECURITY_BLOCKED";
 }

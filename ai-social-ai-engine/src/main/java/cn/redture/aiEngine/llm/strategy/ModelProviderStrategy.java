@@ -1,5 +1,6 @@
 package cn.redture.aiEngine.llm.strategy;
 
+import cn.redture.aiEngine.llm.core.execution.ModelExecutionContext;
 import reactor.core.publisher.Flux;
 
 /**
@@ -15,15 +16,15 @@ public interface ModelProviderStrategy {
     /**
      * 流式调用。
      */
-    Flux<String> stream(String prompt, String modelName);
+    Flux<String> stream(String prompt, ModelExecutionContext context);
 
     /**
      * 同步调用。
      */
-    String call(String prompt, String modelName);
+    String call(String prompt, ModelExecutionContext context);
 
     /**
      * 同步工具调用。
      */
-    String callWithTools(String prompt, String modelName);
+    String callWithTools(String prompt, ModelExecutionContext context);
 }

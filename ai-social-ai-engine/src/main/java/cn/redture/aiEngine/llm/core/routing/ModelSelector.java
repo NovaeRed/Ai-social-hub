@@ -1,6 +1,6 @@
 package cn.redture.aiEngine.llm.core.routing;
 
-import cn.redture.aiEngine.llm.config.ModelRoutingConfigCenter;
+import cn.redture.aiEngine.llm.config.ModelCatalog;
 import cn.redture.aiEngine.llm.util.ModelProviderUtil;
 import cn.redture.aiEngine.mapper.AiModelCapabilityMapper;
 import cn.redture.aiEngine.pojo.entity.AiModelCapability;
@@ -23,11 +23,15 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ModelSelector {
 
-    private final ModelRoutingConfigCenter llmRoutingConfigCenter;
+    private final ModelCatalog modelCatalog;
     private final AiModelCapabilityMapper aiModelCapabilityMapper;
 
     /**
      * 在线任务路由：请求参数 > 默认配置。
+        *
+        * @param taskType 任务类型
+        * @param params 请求参数
+        * @return 路由决策结果
      */
     public ModelRouteDecision resolveModelRoute(AiTaskType taskType, Map<String, Object> params) {
         String explicitOptionCode = readOptionCode(params);
@@ -41,7 +45,7 @@ public class ModelSelector {
             provider = parsed.provider();
             modelName = parsed.modelName();
         } else {
-            ModelRoutingConfigCenter.ModelSpec defaultSpec = llmRoutingConfigCenter.getDefaultModelSpec();
+            ModelCatalog.ModelSpec defaultSpec = modelCatalog.getDefaultModelSpec();
             requestedCode = defaultSpec.modelCode();
             provider = defaultSpec.provider();
             modelName = defaultSpec.modelName();
@@ -59,9 +63,12 @@ public class ModelSelector {
 
     /**
      * 异步任务固定默认路由。
+        *
+        * @param taskType 任务类型
+        * @return 默认路由决策结果
      */
     public ModelRouteDecision resolveSystemDefaultRoute(AiTaskType taskType) {
-        ModelRoutingConfigCenter.ModelSpec defaultSpec = llmRoutingConfigCenter.getDefaultModelSpec();
+        ModelCatalog.ModelSpec defaultSpec = modelCatalog.getDefaultModelSpec();
         String requestedCode = defaultSpec.modelCode();
 
         AiModelCapability capability = findEnabledCapability(defaultSpec.provider(), defaultSpec.modelName(), taskType);
@@ -74,6 +81,12 @@ public class ModelSelector {
                 capability.getModelName());
     }
 
+    /**
+     * 从输入参数中读取模型选项编码。
+     *
+     * @param params 请求参数
+     * @return 模型选项编码
+     */
     private String readOptionCode(Map<String, Object> params) {
         if (params == null) {
             return null;
@@ -86,6 +99,13 @@ public class ModelSelector {
         return optionCode.trim();
     }
 
+    /**
+     * 解析 model_option_code。
+     *
+     * @param optionCode 模型选项编码
+     * @param strict 是否严格模式
+     * @return 解析后的 provider/model
+     */
     private ParsedOptionCode parseOptionCode(String optionCode, boolean strict) {
         String normalized = optionCode == null ? "" : optionCode.trim();
 
@@ -97,7 +117,7 @@ public class ModelSelector {
         }
 
         if (!normalized.contains(":")) {
-            ModelRoutingConfigCenter.ModelSpec modelSpec = llmRoutingConfigCenter.resolveModelCode(normalized);
+            ModelCatalog.ModelSpec modelSpec = modelCatalog.resolveModelCode(normalized);
             if (modelSpec != null) {
                 return new ParsedOptionCode(ModelProviderUtil.normalizeProvider(modelSpec.provider()), modelSpec.modelName());
             }
@@ -125,6 +145,14 @@ public class ModelSelector {
         return new ParsedOptionCode(provider, modelName);
     }
 
+    /**
+     * 按任务类型校验模型能力是否可用。
+     *
+     * @param provider 厂商编码
+     * @param modelName 模型名
+     * @param taskType 任务类型
+     * @return 匹配到的能力记录
+     */
     private AiModelCapability findEnabledCapability(String provider, String modelName, AiTaskType taskType) {
         String normalizedProvider = ModelProviderUtil.normalizeProvider(provider);
         AiModelCapability capability = aiModelCapabilityMapper.selectOne(
@@ -154,6 +182,12 @@ public class ModelSelector {
         return null;
     }
 
+    /**
+     * 解析后的模型选项结构。
+     *
+     * @param provider 厂商编码
+     * @param modelName 模型名
+     */
     private record ParsedOptionCode(String provider, String modelName) {
     }
 }

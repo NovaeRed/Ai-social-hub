@@ -1,6 +1,7 @@
 package cn.redture.aiEngine.service.impl;
 
 import cn.redture.aiEngine.facade.orchestrator.AiFacadeHandler;
+import cn.redture.aiEngine.facade.orchestrator.TaskRoutingAuditService;
 import cn.redture.aiEngine.llm.core.routing.ModelRouteDecision;
 import cn.redture.aiEngine.mapper.AiTaskMapper;
 import cn.redture.aiEngine.mapper.UserAiProfileMapper;
@@ -14,7 +15,6 @@ import cn.redture.aiEngine.pojo.entity.UserAiProfile;
 import cn.redture.aiEngine.pojo.enums.AsyncTaskDomain;
 import cn.redture.aiEngine.pojo.enums.AiTaskStatus;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
-import cn.redture.aiEngine.pojo.model.ModelConfig;
 import cn.redture.aiEngine.pojo.vo.PersonaAnalysisResultVO;
 import cn.redture.aiEngine.service.AiTaskExecutionService;
 import cn.redture.aiEngine.service.AiTaskService;
@@ -50,6 +50,7 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService, AiTas
     private final AiTaskService aiTaskService;
     private final AiTaskMapper aiTaskMapper;
     private final AiFacadeHandler aiFacadeHandler;
+    private final TaskRoutingAuditService taskRoutingAuditService;
     private final UserAiProfileMapper userAiProfileMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final StreamMessagePublisher streamMessagePublisher;
@@ -96,8 +97,8 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService, AiTas
 
         try {
             ModelRouteDecision route = aiFacadeHandler.resolveSystemDefaultRoute(task.getTaskType());
-            attachRequestedModelOptionCode(params, route);
-            updateTaskAndStatus(aiTaskId, params, route);
+            taskRoutingAuditService.ensureRequestedModelOptionCode(params, route);
+            taskRoutingAuditService.persistRoutingAndMarkProcessing(aiTaskId, params, route);
 
             String result = aiFacadeHandler.executeTask(userId, task.getTaskType(), params, route);
 
@@ -263,43 +264,6 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService, AiTas
         }
 
         log.info("已保存用户画像分析结果，userId={}", userId);
-    }
-
-    /**
-     * 确保任务输入中包含用于审计展示的请求模型编码。
-     *
-     * @param params 任务参数
-     * @param route  模型路由决策
-     */
-    private void attachRequestedModelOptionCode(Map<String, Object> params, ModelRouteDecision route) {
-        if (params == null || route == null) {
-            return;
-        }
-        Object value = params.get("model_option_code");
-        if (value == null || String.valueOf(value).isBlank()) {
-            params.put("model_option_code", route.requestedModelOptionCode());
-        }
-    }
-
-    /**
-     * 将模型路由结果持久化到任务记录，并更新状态
-     *
-     * @param taskId       任务主键 ID
-     * @param inputPayload 任务输入参数
-     * @param route        模型路由决策
-     */
-    private void updateTaskAndStatus(Long taskId, Map<String, Object> inputPayload, ModelRouteDecision route) {
-        if (taskId == null || route == null) {
-            return;
-        }
-        AiTask patch = new AiTask();
-        patch.setId(taskId);
-        patch.setInputPayload(inputPayload);
-        patch.setProvider(route.resolvedProvider());
-        patch.setModelConfig(new ModelConfig(route.resolvedModelName(), null, null, null, null, null));
-        patch.setTaskStatus(AiTaskStatus.PROCESSING);
-        patch.setStartedAt(OffsetDateTime.now());
-        aiTaskMapper.updateById(patch);
     }
 
     /**
