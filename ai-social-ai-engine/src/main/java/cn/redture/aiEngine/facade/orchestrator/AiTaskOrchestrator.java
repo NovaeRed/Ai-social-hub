@@ -31,7 +31,6 @@ public class AiTaskOrchestrator {
 
     private final AiTaskService aiTaskService;
     private final AiFacadeHandler aiFacadeHandler;
-    private final TaskRoutingAuditService taskRoutingAuditService;
 
     /**
      * 提交并执行流式 AI 任务。
@@ -45,10 +44,9 @@ public class AiTaskOrchestrator {
     public Flux<StreamOutputVO> submitAndExecuteStream(Long userId, AiTaskType taskType, Map<String, Object> params, String resultKey) {
         return Flux.defer(() -> {
             ModelRouteDecision route = aiFacadeHandler.resolveModelRoute(taskType, params);
-            taskRoutingAuditService.ensureRequestedModelOptionCode(params, route);
+            ensureRequestedModelOptionCode(params, route);
 
-            AiTask task = aiTaskService.createTask(userId, taskType, params);
-            taskRoutingAuditService.persistRouting(task.getId(), params, route);
+            AiTask task = aiTaskService.createTaskAndMarkProcessing(userId, taskType, params, route.resolvedProvider(), route.resolvedModelName());
 
             StringBuilder fullContent = new StringBuilder();
 
@@ -56,9 +54,6 @@ public class AiTaskOrchestrator {
                     .map(chunk -> {
                         fullContent.append(chunk);
                         return new StreamOutputVO(chunk);
-                    })
-                    .doOnSubscribe(subscription -> {
-                        aiTaskService.updateTaskStatus(task.getId(), AiTaskStatus.PROCESSING);
                     })
                     .doOnComplete(() -> {
                         try {
@@ -92,13 +87,17 @@ public class AiTaskOrchestrator {
      */
     public <T> T submitAndExecuteSync(Long userId, AiTaskType taskType, Map<String, Object> params, Function<String, T> resultParser) {
         ModelRouteDecision route = aiFacadeHandler.resolveModelRoute(taskType, params);
-        taskRoutingAuditService.ensureRequestedModelOptionCode(params, route);
+        ensureRequestedModelOptionCode(params, route);
 
-        AiTask task = aiTaskService.createTask(userId, taskType, params);
-        taskRoutingAuditService.persistRouting(task.getId(), params, route);
+        AiTask task = aiTaskService.createTaskAndMarkProcessing(
+                userId,
+                taskType,
+                params,
+                route.resolvedProvider(),
+                route.resolvedModelName()
+        );
 
         try {
-            aiTaskService.updateTaskStatus(task.getId(), AiTaskStatus.PROCESSING);
             String rawResult = aiFacadeHandler.executeTaskWithTools(userId, taskType, params, route);
             T parsedVo = resultParser.apply(rawResult);
 
@@ -112,6 +111,16 @@ public class AiTaskOrchestrator {
             log.error("Sync AI task execution failed: taskType={}, taskId={}", taskType, task.getId(), e);
             aiTaskService.updateTaskResult(task.getId(), AiTaskStatus.FAILED, null, e.getMessage());
             throw new BaseException(HttpStatus.INTERNAL_SERVER_ERROR, "任务执行失败: " + e.getMessage(), "TASK_EXECUTION_FAILED");
+        }
+    }
+
+    private void ensureRequestedModelOptionCode(Map<String, Object> params, ModelRouteDecision route) {
+        if (params == null || route == null) {
+            return;
+        }
+        Object value = params.get("model_option_code");
+        if (value == null || String.valueOf(value).isBlank()) {
+            params.put("model_option_code", route.requestedModelOptionCode());
         }
     }
 }

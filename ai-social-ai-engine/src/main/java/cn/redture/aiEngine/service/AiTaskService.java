@@ -18,6 +18,11 @@ public interface AiTaskService {
      * 创建任务
      */
     AiTask createTask(Long userId, AiTaskType taskType, Map<String, Object> inputData);
+
+    /**
+     * 创建任务并直接写入路由审计信息，同时标记为处理中。
+     */
+    AiTask createTaskAndMarkProcessing(Long userId, AiTaskType taskType, Map<String, Object> inputData, String provider, String modelName);
     
     /**
      * 更新任务状态
@@ -28,6 +33,16 @@ public interface AiTaskService {
      * 更新任务结果
      */
     void updateTaskResult(Long taskId, AiTaskStatus status, Map<String, Object> result, String errorMessage);
+
+    /**
+     * 更新任务路由审计信息。
+     */
+    void updateTaskRouting(Long taskId, Map<String, Object> inputPayload, String provider, String modelName);
+
+    /**
+     * 更新任务路由审计信息并标记任务为处理中。
+     */
+    void updateTaskRoutingAndMarkProcessing(Long taskId, Map<String, Object> inputPayload, String provider, String modelName);
     
     /**
      * 根据公开ID查询任务

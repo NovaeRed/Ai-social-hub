@@ -1,6 +1,7 @@
 package cn.redture.aiEngine.llm.strategy.impl;
 
-import cn.redture.aiEngine.llm.provider.dashscope.DashscopeModelConfigResolver;
+import cn.redture.aiEngine.llm.config.AiProviderProperties;
+import cn.redture.aiEngine.llm.config.ModelCatalog;
 import cn.redture.aiEngine.llm.core.execution.ModelExecutionContext;
 import cn.redture.aiEngine.llm.strategy.ModelProvider;
 import cn.redture.aiEngine.llm.strategy.ModelProviderStrategy;
@@ -42,7 +43,7 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
 
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
-    private final DashscopeModelConfigResolver configResolver;
+    private final ModelCatalog modelCatalog;
     private final AiToolRegistry aiToolRegistry;
     private final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -58,7 +59,7 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
 
     @Override
     public Flux<String> stream(String prompt, ModelExecutionContext context) {
-        DashscopeModelConfigResolver.ResolvedModelConfig config = resolveConfig(context);
+        ResolvedModelConfig config = resolveConfig(context);
         return Flux.<String>create(sink -> {
             String endpoint = normalizeChatCompletionsUrl(config.chatCompletionsUrl());
             String payload = buildPayload(config.modelName(), prompt, true);
@@ -112,7 +113,7 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
 
     @Override
     public String call(String prompt, ModelExecutionContext context) {
-        DashscopeModelConfigResolver.ResolvedModelConfig config = resolveConfig(context);
+        ResolvedModelConfig config = resolveConfig(context);
         String endpoint = normalizeChatCompletionsUrl(config.chatCompletionsUrl());
         String payload = buildPayload(config.modelName(), prompt, false);
 
@@ -143,7 +144,7 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
             return call(prompt, context);
         }
 
-        DashscopeModelConfigResolver.ResolvedModelConfig config = resolveConfig(context);
+        ResolvedModelConfig config = resolveConfig(context);
         String endpoint = normalizeChatCompletionsUrl(config.chatCompletionsUrl());
 
         List<Map<String, Object>> messages = new ArrayList<>();
@@ -182,7 +183,7 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
         return lastAssistantContent;
     }
 
-    private DashscopeModelConfigResolver.ResolvedModelConfig resolveConfig(ModelExecutionContext context) {
+    private ResolvedModelConfig resolveConfig(ModelExecutionContext context) {
         if (context == null) {
             throw new BaseException(HttpStatus.BAD_REQUEST, "模型执行上下文不能为空", ErrorCodes.MODEL_OPTION_INVALID);
         }
@@ -197,14 +198,50 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
             resolvedProvider = providerCode();
         }
 
-        DashscopeModelConfigResolver.ResolvedModelConfig config = configResolver.resolveByModelName(resolvedProvider, resolvedModel);
-        if (config.apiKey().isBlank()) {
+        AiProviderProperties.ProviderConfig providerConfig = modelCatalog.findEnabledProviderConfig(resolvedProvider);
+        if (providerConfig == null) {
+            throw new BaseException(HttpStatus.BAD_REQUEST, "未找到 provider 配置: provider=" + resolvedProvider, ErrorCodes.MODEL_OPTION_INVALID);
+        }
+
+        if (modelCatalog.findEnabledCandidateByProviderAndModel(resolvedProvider, resolvedModel) == null) {
+            throw new BaseException(HttpStatus.BAD_REQUEST, "未找到候选模型配置: provider=" + resolvedProvider + ", modelName=" + resolvedModel, ErrorCodes.MODEL_OPTION_INVALID);
+        }
+
+        String apiKey = safe(providerConfig.getApiKey());
+        if (apiKey.isBlank()) {
             throw new BaseException(HttpStatus.BAD_REQUEST, "模型 " + resolvedModel + " 缺少 DashScope apiKey 配置", ErrorCodes.MODEL_OPTION_INVALID);
         }
-        if (config.chatCompletionsUrl().isBlank()) {
+
+        String chatCompletionsUrl = buildChatCompletionsUrl(providerConfig);
+        if (chatCompletionsUrl.isBlank()) {
             throw new BaseException(HttpStatus.BAD_REQUEST, "模型 " + resolvedModel + " 缺少 DashScope chat endpoint 配置", ErrorCodes.MODEL_OPTION_INVALID);
         }
-        return config;
+        return new ResolvedModelConfig(resolvedProvider, resolvedModel, apiKey, chatCompletionsUrl);
+    }
+
+    private String buildChatCompletionsUrl(AiProviderProperties.ProviderConfig providerConfig) {
+        String baseUrl = safe(providerConfig.getUrl());
+        if (baseUrl.isBlank()) {
+            return "";
+        }
+
+        Map<String, String> endpoints = providerConfig.getEndpoints();
+        String chatPath = endpoints == null ? "" : safe(endpoints.get("chat"));
+        if (chatPath.isBlank()) {
+            return "";
+        }
+
+        if (!baseUrl.endsWith("/") && !chatPath.startsWith("/")) {
+            return baseUrl + "/" + chatPath;
+        }
+        if (baseUrl.endsWith("/") && chatPath.startsWith("/")) {
+            return baseUrl + chatPath.substring(1);
+        }
+        return baseUrl + chatPath;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private String buildPayload(String modelName, String prompt, boolean stream) {
@@ -351,8 +388,9 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
             // ignore
         }
 
-        return new BaseException(HttpStatus.SERVICE_UNAVAILABLE,
-                prefix + ": httpStatus=" + response.code() + ", body=" + detail,
-                ErrorCodes.UPSTREAM_UNAVAILABLE);
+        return new BaseException(HttpStatus.SERVICE_UNAVAILABLE, prefix + ": httpStatus=" + response.code() + ", body=" + detail, ErrorCodes.UPSTREAM_UNAVAILABLE);
+    }
+
+    private record ResolvedModelConfig(String provider, String modelName, String apiKey, String chatCompletionsUrl) {
     }
 }

@@ -1,7 +1,6 @@
 package cn.redture.aiEngine.service.impl;
 
 import cn.redture.aiEngine.facade.orchestrator.AiFacadeHandler;
-import cn.redture.aiEngine.facade.orchestrator.TaskRoutingAuditService;
 import cn.redture.aiEngine.llm.core.routing.ModelRouteDecision;
 import cn.redture.aiEngine.mapper.AiTaskMapper;
 import cn.redture.aiEngine.mapper.UserAiProfileMapper;
@@ -50,7 +49,6 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService, AiTas
     private final AiTaskService aiTaskService;
     private final AiTaskMapper aiTaskMapper;
     private final AiFacadeHandler aiFacadeHandler;
-    private final TaskRoutingAuditService taskRoutingAuditService;
     private final UserAiProfileMapper userAiProfileMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final StreamMessagePublisher streamMessagePublisher;
@@ -97,8 +95,13 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService, AiTas
 
         try {
             ModelRouteDecision route = aiFacadeHandler.resolveSystemDefaultRoute(task.getTaskType());
-            taskRoutingAuditService.ensureRequestedModelOptionCode(params, route);
-            taskRoutingAuditService.persistRoutingAndMarkProcessing(aiTaskId, params, route);
+            ensureRequestedModelOptionCode(params, route);
+            aiTaskService.updateTaskRoutingAndMarkProcessing(
+                    aiTaskId,
+                    params,
+                    route.resolvedProvider(),
+                    route.resolvedModelName()
+            );
 
             String result = aiFacadeHandler.executeTask(userId, task.getTaskType(), params, route);
 
@@ -120,6 +123,16 @@ public class AiTaskExecutionServiceImpl implements AiTaskExecutionService, AiTas
         } catch (Exception e) {
             log.error("队列中的 AI 任务执行失败，aiTaskId={}", aiTaskId, e);
             aiTaskService.updateTaskResult(aiTaskId, AiTaskStatus.FAILED, null, e.getMessage());
+        }
+    }
+
+    private void ensureRequestedModelOptionCode(Map<String, Object> params, ModelRouteDecision route) {
+        if (params == null || route == null) {
+            return;
+        }
+        Object value = params.get("model_option_code");
+        if (value == null || String.valueOf(value).isBlank()) {
+            params.put("model_option_code", route.requestedModelOptionCode());
         }
     }
 

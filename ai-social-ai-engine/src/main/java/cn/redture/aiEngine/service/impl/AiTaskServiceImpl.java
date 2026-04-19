@@ -7,6 +7,7 @@ import cn.redture.aiEngine.pojo.entity.AiTask;
 import cn.redture.aiEngine.pojo.enums.AiTaskStatus;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
 import cn.redture.aiEngine.mapper.AiTaskMapper;
+import cn.redture.aiEngine.pojo.model.ModelConfig;
 import cn.redture.aiEngine.service.AiTaskService;
 import cn.redture.common.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -54,6 +55,38 @@ public class AiTaskServiceImpl implements AiTaskService {
     }
 
     /**
+     * 创建任务并一次性写入路由审计信息，状态初始化为处理中。
+     *
+     * @param userId 调用方用户 ID
+     * @param taskType 任务类型
+     * @param inputData 任务输入参数
+     * @param provider 路由解析出的模型提供商
+     * @param modelName 路由解析出的模型名称
+     * @return 持久化后的任务实体
+     */
+    @Override
+    public AiTask createTaskAndMarkProcessing(Long userId, AiTaskType taskType, Map<String, Object> inputData, String provider, String modelName) {
+        AiTask task = new AiTask();
+        task.setPublicId(IdUtil.nextId());
+        task.setUserId(userId);
+        task.setTaskType(taskType);
+        task.setTaskStatus(AiTaskStatus.PROCESSING);
+        task.setInputPayload(inputData);
+        task.setProvider(provider);
+        task.setModelConfig(new ModelConfig(modelName, null, null, null, null, null));
+
+        OffsetDateTime now = OffsetDateTime.now();
+        task.setCreatedAt(now);
+        task.setStartedAt(now);
+
+        aiTaskMapper.insert(task);
+        log.info("Created AI task and marked processing: id={}, publicId={}, type={}, provider={}, model={}",
+                task.getId(), task.getPublicId(), taskType, provider, modelName);
+
+        return task;
+    }
+
+    /**
      * 更新任务状态，并根据状态自动记录开始或结束时间。
      *
      * @param taskId 任务主键 ID
@@ -94,6 +127,32 @@ public class AiTaskServiceImpl implements AiTaskService {
 
         aiTaskMapper.updateById(task);
         log.info("Updated task result: id={}, status={}", taskId, status);
+    }
+
+    /**
+     * 更新任务路由审计信息。
+     *
+     * @param taskId 任务主键 ID
+     * @param inputPayload 任务输入参数
+     * @param provider 解析后的模型提供商
+     * @param modelName 解析后的模型名称
+     */
+    @Override
+    public void updateTaskRouting(Long taskId, Map<String, Object> inputPayload, String provider, String modelName) {
+        patchTaskRouting(taskId, inputPayload, provider, modelName, false);
+    }
+
+    /**
+     * 更新任务路由审计信息并将任务置为处理中。
+     *
+     * @param taskId 任务主键 ID
+     * @param inputPayload 任务输入参数
+     * @param provider 解析后的模型提供商
+     * @param modelName 解析后的模型名称
+     */
+    @Override
+    public void updateTaskRoutingAndMarkProcessing(Long taskId, Map<String, Object> inputPayload, String provider, String modelName) {
+        patchTaskRouting(taskId, inputPayload, provider, modelName, true);
     }
 
     /**
@@ -215,5 +274,25 @@ public class AiTaskServiceImpl implements AiTaskService {
             return null;
         }
         return optionCode.trim();
+    }
+
+    private void patchTaskRouting(Long taskId, Map<String, Object> inputPayload, String provider, String modelName, boolean markProcessing) {
+        if (taskId == null) {
+            return;
+        }
+
+        AiTask patch = new AiTask();
+        patch.setId(taskId);
+        patch.setInputPayload(inputPayload);
+        patch.setProvider(provider);
+        patch.setModelConfig(new ModelConfig(modelName, null, null, null, null, null));
+
+        if (markProcessing) {
+            patch.setTaskStatus(AiTaskStatus.PROCESSING);
+            patch.setStartedAt(OffsetDateTime.now());
+        }
+
+        aiTaskMapper.updateById(patch);
+        log.info("Updated task routing: id={}, provider={}, model={}, markProcessing={}", taskId, provider, modelName, markProcessing);
     }
 }
