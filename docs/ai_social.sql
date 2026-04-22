@@ -125,15 +125,41 @@ CREATE INDEX idx_friendships_user2 ON friendships (user_id_2);
 
 
 -- 7. 消息表 (messages)
+-- 7.1 聊天文件表 (chat_files)
+CREATE TABLE chat_files
+(
+    id                BIGSERIAL PRIMARY KEY,
+    public_id         VARCHAR(50) UNIQUE NOT NULL,
+    uploader_id       BIGINT             NOT NULL REFERENCES users (id),
+    conversation_id   BIGINT REFERENCES conversations (id) ON DELETE SET NULL,
+    access_url        TEXT               NOT NULL,
+    original_filename VARCHAR(255)       NOT NULL,
+    file_ext          VARCHAR(20)        NOT NULL,
+    content_type      VARCHAR(127)       NOT NULL,
+    size_bytes        BIGINT             NOT NULL CHECK (size_bytes >= 0),
+    created_at        TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+    deleted_at        TIMESTAMPTZ                 DEFAULT NULL
+);
+COMMENT
+    ON TABLE chat_files IS '聊天文件表，用于消息中的文件上传与引用';
+COMMENT
+    ON COLUMN chat_files.file_ext IS '文件扩展名（不含.，如pdf/docx/png）';
+CREATE INDEX idx_chat_files_public_id ON chat_files (public_id);
+CREATE INDEX idx_chat_files_conversation_created ON chat_files (conversation_id, created_at DESC);
+CREATE INDEX idx_chat_files_uploader_created ON chat_files (uploader_id, created_at DESC);
+CREATE INDEX idx_chat_files_active ON chat_files (id) WHERE deleted_at IS NULL;
+
+-- 7.2 消息表 (messages)
 CREATE TABLE messages
 (
     id              BIGSERIAL PRIMARY KEY,
-    public_id       UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+    public_id       VARCHAR(50) UNIQUE NOT NULL,
     conversation_id BIGINT      NOT NULL REFERENCES conversations (id),
     sender_id       BIGINT      NOT NULL REFERENCES users (id),
     content         TEXT,
     media_type      media_type_enum      DEFAULT 'TEXT',
     media_url       TEXT,
+    file_id         BIGINT REFERENCES chat_files (id) ON DELETE SET NULL,
     source_type     VARCHAR(30), -- 例如 'AI_POLISHED', 'SPEECH_TRANSCRIPT'
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at      TIMESTAMPTZ          DEFAULT NULL
@@ -142,8 +168,11 @@ COMMENT
     ON TABLE messages IS '消息表';
 COMMENT
     ON COLUMN messages.source_type IS '表明此消息的来源，用于UI区分展示';
+COMMENT
+    ON COLUMN messages.file_id IS '文件消息关联的文件资产ID（media_type=FILE时应有值）';
 CREATE INDEX idx_messages_conv_created ON messages (conversation_id, created_at DESC);
 CREATE INDEX idx_messages_active ON messages (id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_messages_file_id ON messages (file_id);
 
 
 -- 8. 日程事件表 (schedules)

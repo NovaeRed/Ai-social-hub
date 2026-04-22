@@ -1,39 +1,37 @@
 package cn.redture.chat.pojo.entity;
 
-import cn.redture.chat.pojo.enums.MediaTypeEnum;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import cn.redture.common.annotation.PgEnum;
 import lombok.Data;
 
 import java.time.OffsetDateTime;
 
 /**
- * 对应 ai_social.sql 中的 messages 表。
+ * 对应 ai_social.sql 中的 chat_files 表。
  */
 @Data
-@TableName("messages")
-public class Message {
+@TableName("chat_files")
+public class ChatFile {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
     private String publicId;
 
+    private Long uploaderId;
+
     private Long conversationId;
 
-    private Long senderId;
+    private String accessUrl;
 
-    private String content;
+    private String originalFilename;
 
-    private MediaTypeEnum mediaType;
+    private String fileExt;
 
-    private String mediaUrl;
+    private String contentType;
 
-    private Long fileId;
-
-    private String sourceType;
+    private Long sizeBytes;
 
     private OffsetDateTime createdAt;
 

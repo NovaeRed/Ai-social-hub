@@ -4,19 +4,23 @@ import cn.redture.chat.mapper.ConversationMapper;
 import cn.redture.chat.mapper.ConversationMemberMapper;
 import cn.redture.chat.mapper.MessageMapper;
 import cn.redture.chat.pojo.dto.CreateMessageDTO;
+import cn.redture.chat.pojo.entity.ChatFile;
 import cn.redture.chat.pojo.entity.Conversation;
 import cn.redture.chat.pojo.entity.ConversationMember;
 import cn.redture.chat.pojo.entity.Message;
 import cn.redture.chat.pojo.enums.MediaTypeEnum;
 import cn.redture.chat.pojo.vo.MessageItemVO;
+import cn.redture.chat.service.ChatFileService;
 import cn.redture.chat.service.MessageService;
 import cn.redture.chat.sse.Notification;
 import cn.redture.chat.sse.SseEmitterService;
 import cn.redture.chat.util.converter.MessageConverter;
 import cn.redture.common.event.ai.UserMessageCreatedEvent;
 import cn.redture.common.exception.businessException.AccessDeniedException;
+import cn.redture.common.exception.businessException.InvalidInputException;
 import cn.redture.common.exception.businessException.ResourceNotFoundException;
 import cn.redture.common.pojo.vo.CursorPageResult;
+import cn.redture.common.util.IdUtil;
 import cn.redture.common.util.SecurityContextHolderUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
@@ -24,9 +28,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -46,6 +55,9 @@ public class MessageServiceImpl implements MessageService {
 
     @Resource
     private ApplicationEventPublisher eventPublisher;
+
+    @Resource
+    private ChatFileService chatFileService;
 
     @Override
     @Transactional
@@ -87,8 +99,7 @@ public class MessageServiceImpl implements MessageService {
         boolean hasMore = messages.size() > limit;
         List<Message> page = hasMore ? messages.subList(0, limit) : messages;
 
-        // sender 信息后续可通过联表/批量查询用户表填充
-        List<MessageItemVO> items = page.stream().map(MessageConverter.INSTANCE::toMessageItemVO).toList();
+        List<MessageItemVO> items = toMessageItemVOList(page);
 
         CursorPageResult<MessageItemVO> result = new CursorPageResult<>();
         result.setItems(items);
@@ -102,7 +113,7 @@ public class MessageServiceImpl implements MessageService {
 
         // 3. 更新已读消息位置 - 使用最新消息的 ID（列表头部）
         if (!page.isEmpty()) {
-            Long lastReadMessageId = member.getLastReadMessageId();
+            Long lastReadMessageId = member.getLastReadMessageId() == null ? 0L : member.getLastReadMessageId();
             Long latestMessageId = page.getFirst().getId();
 
             if (latestMessageId > lastReadMessageId) {
@@ -127,11 +138,29 @@ public class MessageServiceImpl implements MessageService {
             throw new ResourceNotFoundException("会话不存在或无权限发送消息");
         }
 
+        MediaTypeEnum mediaType = dto.getMediaType() == null ? MediaTypeEnum.TEXT : dto.getMediaType();
+        ChatFile chatFile = null;
+
+        if (mediaType == MediaTypeEnum.TEXT) {
+            if (!StringUtils.hasText(dto.getContent())) {
+                throw new InvalidInputException("文本消息内容不能为空");
+            }
+        } else if (mediaType == MediaTypeEnum.FILE) {
+            chatFile = chatFileService.getFileForMessage(dto.getFilePublicId(), conv.getId(), senderUserId);
+        } else {
+            throw new InvalidInputException("当前仅支持 TEXT 和 FILE 类型消息");
+        }
+
         Message message = new Message();
         message.setConversationId(conv.getId());
         message.setSenderId(senderUserId);
         message.setContent(dto.getContent());
-        message.setMediaType(MediaTypeEnum.TEXT);
+        message.setMediaType(mediaType);
+        message.setPublicId(IdUtil.nextId());
+        if (chatFile != null) {
+            message.setFileId(chatFile.getId());
+            message.setMediaUrl(chatFile.getAccessUrl());
+        }
         message.setCreatedAt(OffsetDateTime.now());
         messageMapper.insert(message);
 
@@ -140,6 +169,7 @@ public class MessageServiceImpl implements MessageService {
         conversationMapper.updateById(conv);
 
         MessageItemVO vo = MessageConverter.INSTANCE.toMessageItemVO(message);
+        attachSingleFileInfo(message, vo, chatFile);
 
         // 3. 推送 SSE 事件给会话中的其他成员
         List<ConversationMember> members = conversationMemberMapper.selectList(
@@ -172,9 +202,7 @@ public class MessageServiceImpl implements MessageService {
                 .orderByDesc(Message::getCreatedAt)
                 .last("LIMIT " + limit));
 
-        return messages.stream()
-                .map(MessageConverter.INSTANCE::toMessageItemVO)
-                .toList();
+        return toMessageItemVOList(messages);
     }
 
     /**
@@ -198,9 +226,7 @@ public class MessageServiceImpl implements MessageService {
                 return List.of();
             }
             
-            return messages.stream()
-                    .map(MessageConverter.INSTANCE::toMessageItemVO)
-                    .toList();
+            return toMessageItemVOList(messages);
         } catch (Exception e) {
             log.error("获取上下文消息时出错，会话ID: {}", conversationId, e);
             return List.of();
@@ -259,9 +285,7 @@ public class MessageServiceImpl implements MessageService {
             List<Message> messages = messageMapper.selectByIds(ids);
             log.info("查询 {} 条指定消息，实际获取 {} 条", messageIds.size(), messages.size());
             
-            return messages.stream()
-                    .map(MessageConverter.INSTANCE::toMessageItemVO)
-                    .toList();
+            return toMessageItemVOList(messages);
         } catch (Exception e) {
             log.error("查询指定消息时出错，消息IDs: {}", messageIds, e);
             return List.of();
@@ -291,9 +315,7 @@ public class MessageServiceImpl implements MessageService {
             List<Message> messages = messageMapper.selectByConversationAndUser(conv.getId(), userId, limit);
             log.info("获取用户 {} 在会话 {} 中的 {} 条消息，实际获取 {} 条", userId, conv.getId(), limit, messages.size());
 
-            return messages.stream()
-                    .map(MessageConverter.INSTANCE::toMessageItemVO)
-                    .toList();
+            return toMessageItemVOList(messages);
         } catch (Exception e) {
             log.error("获取用户消息时出错，用户ID: {}，会话公开ID: {}", userId, conversationPublicId, e);
             return List.of();
@@ -314,12 +336,62 @@ public class MessageServiceImpl implements MessageService {
             List<Message> messages = messageMapper.selectByUserId(userId, limit);
             log.info("获取用户 {} 的最近 {} 条消息用于分析，实际获取 {} 条", userId, limit, messages.size());
             
-            return messages.stream()
-                    .map(MessageConverter.INSTANCE::toMessageItemVO)
-                    .toList();
+            return toMessageItemVOList(messages);
         } catch (Exception e) {
             log.error("获取用户最近消息时出错，用户ID: {}", userId, e);
             return List.of();
         }
+    }
+
+    private List<MessageItemVO> toMessageItemVOList(List<Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+        List<MessageItemVO> items = messages.stream()
+                .map(MessageConverter.INSTANCE::toMessageItemVO)
+                .toList();
+        attachBatchFileInfo(messages, items);
+        return items;
+    }
+
+    private void attachBatchFileInfo(List<Message> messages, List<MessageItemVO> items) {
+        List<Long> fileIds = messages.stream()
+                .map(Message::getFileId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (fileIds.isEmpty()) {
+            return;
+        }
+
+        Map<Long, ChatFile> fileMap = chatFileService.getActiveFilesByIds(fileIds).stream()
+                .collect(Collectors.toMap(ChatFile::getId, f -> f, (a, b) -> a, HashMap::new));
+
+        for (int i = 0; i < messages.size(); i++) {
+            Message message = messages.get(i);
+            MessageItemVO item = items.get(i);
+            if (message.getFileId() == null) {
+                continue;
+            }
+            ChatFile chatFile = fileMap.get(message.getFileId());
+            attachSingleFileInfo(message, item, chatFile);
+        }
+    }
+
+    private void attachSingleFileInfo(Message message, MessageItemVO item, ChatFile chatFile) {
+        if (chatFile == null) {
+            return;
+        }
+        if (!StringUtils.hasText(item.getMediaUrl())) {
+            item.setMediaUrl(chatFile.getAccessUrl());
+        }
+
+        MessageItemVO.FileVO fileVO = new MessageItemVO.FileVO();
+        fileVO.setPublicId(chatFile.getPublicId());
+        fileVO.setOriginalFilename(chatFile.getOriginalFilename());
+        fileVO.setContentType(chatFile.getContentType());
+        fileVO.setSizeBytes(chatFile.getSizeBytes());
+        fileVO.setAccessUrl(chatFile.getAccessUrl());
+        item.setFile(fileVO);
     }
 }

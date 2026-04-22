@@ -9,7 +9,7 @@
 > 文档中的接口路径均为**去前缀后的相对路径**（例如 `/ai/interactions/polish`）。
 > 实际请求地址为：`<Base URL> + <API Prefix> + <Path>`。
 
-**Last Updated:** 2026-04-14
+**Last Updated:** 2026-04-22
 
 **Architecture Overview:**
 
@@ -425,12 +425,34 @@ Authorization: Bearer <expired_access_token>
 
 **发送消息**
 
+**重要说明：**
+
+- 所有 `public_id`（消息/文件）均由后端生成，客户端不应自行构造。
+- 文件消息中的 `file_public_id` 不是“新建ID”，而是上传接口 `POST /files` 返回的文件标识，用于消息与已上传文件建立关联。
+
+支持发送文本消息与文件消息：
+
+- 文本消息：`media_type = TEXT`（默认）
+- 文件消息：`media_type = FILE`，并传 `file_public_id`
+
 **Request Body:**
 
 ```json
 {
   "content": "明天的会议确认一下时间。",
+  "media_type": "TEXT",
   "temp_id": "local-1715068800"
+}
+```
+
+**文件消息 Request Body 示例：**
+
+```json
+{
+  "content": "请看这份需求文档",
+  "media_type": "FILE",
+  "file_public_id": "file_f1a2b3c4",
+  "temp_id": "local-1715068801"
 }
 ```
 
@@ -446,6 +468,31 @@ Authorization: Bearer <expired_access_token>
   "content": "明天的会议确认一下时间。",
   "media_type": "TEXT",
   "media_url": null,
+  "file": null,
+  "source_type": null,
+  "created_at": "2025-11-23T10:05:00Z"
+}
+```
+
+**文件消息 Response 示例：**
+
+```json
+{
+  "public_id": "msg_file_001",
+  "sender": {
+    "public_id": "user_me",
+    "nickname": "我自己"
+  },
+  "content": "请看这份需求文档",
+  "media_type": "FILE",
+  "media_url": "https://cdn.ai-social.com/chat/group-001/req-v1.docx",
+  "file": {
+    "public_id": "file_f1a2b3c4",
+    "original_filename": "req-v1.docx",
+    "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "size_bytes": 128430,
+    "access_url": "https://cdn.ai-social.com/chat/group-001/req-v1.docx"
+  },
   "source_type": null,
   "created_at": "2025-11-23T10:05:00Z"
 }
@@ -471,6 +518,91 @@ Authorization: Bearer <expired_access_token>
 - 仅影响当前用户后续拉取消息时的可见范围。
 
 **Response 204 (No Content):** 清空成功。
+
+---
+
+### 4.2.4 `POST /files`
+
+**上传聊天文件（用于文件消息发送与后续文档总结）**
+
+**说明：** 文件 `public_id` 由后端生成并在响应中返回；客户端只需在后续发送文件消息时回传该 `file_public_id`。
+
+**Request:** `multipart/form-data`
+
+- `file`: 二进制文件（必填）
+- `conversation_public_id`: 会话公开 ID（可选，群聊文件建议传）
+
+**Response 201 (Created):**
+
+```json
+{
+  "public_id": "file_f1a2b3c4",
+  "original_filename": "req-v1.docx",
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "size_bytes": 128430,
+  "access_url": "https://cdn.ai-social.com/chat/group-001/req-v1.docx",
+  "created_at": "2025-11-23T10:04:30Z"
+}
+```
+
+---
+
+### 4.2.5 `GET /files/{file_public_id}`
+
+**获取聊天文件元数据**
+
+**Response 200 (Success):**
+
+```json
+{
+  "public_id": "file_f1a2b3c4",
+  "original_filename": "req-v1.docx",
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "size_bytes": 128430,
+  "access_url": "https://cdn.ai-social.com/chat/group-001/req-v1.docx",
+  "created_at": "2025-11-23T10:04:30Z"
+}
+```
+
+---
+
+### 4.2.6 `POST /files/metadata/batch`
+
+**批量获取文件摘要（用于消息分页后批量补齐 FILE 卡片信息）**
+
+**Request Body:**
+
+```json
+{
+  "file_public_ids": [
+    "file_f1a2b3c4",
+    "file_z9y8x7w6"
+  ]
+}
+```
+
+**Response 200 (Success):**
+
+```json
+[
+  {
+    "public_id": "file_f1a2b3c4",
+    "original_filename": "req-v1.docx",
+    "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "size_bytes": 128430,
+    "access_url": "https://cdn.ai-social.com/chat/group-001/req-v1.docx",
+    "created_at": "2025-11-23T10:04:30Z"
+  },
+  {
+    "public_id": "file_z9y8x7w6",
+    "original_filename": "方案评审.pdf",
+    "content_type": "application/pdf",
+    "size_bytes": 523001,
+    "access_url": "https://cdn.ai-social.com/chat/group-001/review.pdf",
+    "created_at": "2025-11-24T08:31:10Z"
+  }
+]
+```
 
 ---
 

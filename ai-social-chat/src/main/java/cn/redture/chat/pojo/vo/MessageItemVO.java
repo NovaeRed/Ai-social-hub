@@ -22,6 +22,8 @@ public class MessageItemVO {
     @JsonProperty("media_url")
     private String mediaUrl;
 
+    private FileVO file;
+
     @JsonProperty("source_type")
     private String sourceType;
 
@@ -34,5 +36,23 @@ public class MessageItemVO {
         private String publicId;
 
         private String nickname;
+    }
+
+    @Data
+    public static class FileVO {
+        @JsonProperty("public_id")
+        private String publicId;
+
+        @JsonProperty("original_filename")
+        private String originalFilename;
+
+        @JsonProperty("content_type")
+        private String contentType;
+
+        @JsonProperty("size_bytes")
+        private Long sizeBytes;
+
+        @JsonProperty("access_url")
+        private String accessUrl;
     }
 }

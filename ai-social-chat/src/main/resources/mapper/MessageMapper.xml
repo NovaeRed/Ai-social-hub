@@ -9,6 +9,7 @@
         SELECT *
         FROM messages
         WHERE conversation_id = #{conversationId}
+        AND deleted_at IS NULL
         <if test="cursorId != null">
             AND id &lt; #{cursorId}
         </if>
@@ -16,7 +17,7 @@
             AND id > #{minId}
         </if>
         ORDER BY id DESC
-        LIMIT #{pageSize}
+        LIMIT #{limit}
     </select>
 
 </mapper>
