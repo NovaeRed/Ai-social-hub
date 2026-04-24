@@ -1,5 +1,6 @@
 package cn.redture.common.pojo.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import org.springframework.http.HttpStatus;
 
@@ -29,6 +30,7 @@ public class RestResult<T> {
     /**
      * 业务错误码，例如 REFRESH_TOKEN_EXPIRED，可选
      */
+    @JsonProperty("error_code")
     private String errorCode;
 
     /**
