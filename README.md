@@ -1,5 +1,3 @@
-AI Social Hub — 项目说明
-
 简介
 ----
 AI Social Hub 是一个基于 Java 21 与 Spring Boot 的多模块 AI 平台样例，目标是提供可扩展的对话代理能力：融合短期会话窗口与长期记忆、可插拔的模型路由与工具调用（Agent 风格）、以及通过 Redis / PostgreSQL 持久化与扩展的工程化实现。
