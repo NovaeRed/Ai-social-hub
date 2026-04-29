@@ -50,6 +50,7 @@ public class PromptContextFactory {
                         : "无";
                 renderParams.put("historyStr", historyStr);
                 renderParams.put("profileHint", buildProfileHint(renderParams.get("user_profile")));
+                renderParams.put("longTermMemory", toDefault(renderParams.get("long_term_memory"), "无"));
             }
             case CHAT_SUMMARY -> {
                 String summaryType = toDefault(renderParams.get("summary_type"), "general");
@@ -59,6 +60,7 @@ public class PromptContextFactory {
                 renderParams.put("summary_type", summaryType);
                 renderParams.put("target_length", targetLength);
                 renderParams.put("keywords", keywords);
+                renderParams.put("longTermMemory", toDefault(renderParams.get("long_term_memory"), "无"));
             }
             case SCHEDULE_EXTRACTION, PERSONA_ANALYSIS -> {
                 Object messages = renderParams.get("messages");

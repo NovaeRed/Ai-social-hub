@@ -1,7 +1,6 @@
 package cn.redture.aiEngine.service.impl;
 
 import cn.redture.aiEngine.facade.orchestrator.AiTaskOrchestrator;
-import cn.redture.aiEngine.mapper.AiTaskMapper;
 import cn.redture.aiEngine.pojo.dto.PolishRequest;
 import cn.redture.aiEngine.pojo.dto.ScheduleRequest;
 import cn.redture.aiEngine.pojo.dto.SmartReplyRequest;
@@ -11,7 +10,7 @@ import cn.redture.aiEngine.pojo.enums.AiTaskType;
 import cn.redture.aiEngine.pojo.vo.ScheduleExtractionVO;
 import cn.redture.aiEngine.pojo.vo.StreamOutputVO;
 import cn.redture.aiEngine.service.AiOnlineInteractionService;
-import cn.redture.aiEngine.service.AiTaskService;
+import cn.redture.aiEngine.service.agent.ConversationAgentMemoryService;
 import cn.redture.common.exception.JsonException;
 import cn.redture.common.util.JsonUtil;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +31,7 @@ import java.util.Map;
 public class AiOnlineInteractionServiceImpl implements AiOnlineInteractionService {
 
     private final AiTaskOrchestrator aiTaskOrchestrator;
+    private final ConversationAgentMemoryService conversationAgentMemoryService;
 
     /**
      * 执行文本润色流式任务
@@ -94,6 +94,14 @@ public class AiOnlineInteractionServiceImpl implements AiOnlineInteractionServic
             params.put("conversation_public_id", request.getConversationPublicId());
         }
 
+        if (request.getConversationPublicId() != null && !request.getConversationPublicId().isBlank()) {
+            params.put("conversation_public_id", request.getConversationPublicId());
+            params.put(
+                    "long_term_memory",
+                    conversationAgentMemoryService.getMemory(userId, request.getConversationPublicId())
+            );
+        }
+
         if (request.getUserProfile() != null) {
             params.put("user_profile", request.getUserProfile());
         }
@@ -121,6 +129,13 @@ public class AiOnlineInteractionServiceImpl implements AiOnlineInteractionServic
 
         if (request.getKeywords() != null && !request.getKeywords().isEmpty()) {
             params.put("keywords", request.getKeywords());
+        }
+        if (request.getConversationPublicId() != null && !request.getConversationPublicId().isBlank()) {
+            params.put("conversation_public_id", request.getConversationPublicId());
+            params.put(
+                    "long_term_memory",
+                    conversationAgentMemoryService.getMemory(userId, request.getConversationPublicId())
+            );
         }
         if (request.getModelOptionCode() != null && !request.getModelOptionCode().isBlank()) {
             params.put("model_option_code", request.getModelOptionCode().trim());

@@ -6,13 +6,14 @@ import cn.redture.aiEngine.pojo.enums.AiTaskStatus;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
 import cn.redture.aiEngine.pojo.vo.StreamOutputVO;
 import cn.redture.aiEngine.service.AiTaskService;
+import cn.redture.aiEngine.service.agent.ConversationAgentMemoryService;
 import cn.redture.common.exception.BaseException;
-import cn.redture.common.util.JsonUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -31,6 +32,7 @@ public class AiTaskOrchestrator {
 
     private final AiTaskService aiTaskService;
     private final AiFacadeHandler aiFacadeHandler;
+    private final ConversationAgentMemoryService conversationAgentMemoryService;
 
     /**
      * 提交并执行流式 AI 任务。
@@ -58,8 +60,10 @@ public class AiTaskOrchestrator {
                     .doOnComplete(() -> {
                         try {
                             Map<String, Object> resultData = new HashMap<>();
-                            resultData.put(resultKey, fullContent.toString());
+                            String finalOutput = fullContent.toString();
+                            resultData.put(resultKey, finalOutput);
                             aiTaskService.updateTaskResult(task.getId(), AiTaskStatus.COMPLETED, resultData, null);
+                            updateConversationMemory(userId, taskType, params, finalOutput);
                         } catch (Exception e) {
                             log.error("Failed to update task result", e);
                         }
@@ -72,7 +76,7 @@ public class AiTaskOrchestrator {
                              log.error("Failed to update task status to FAILED", ex);
                         }
                     });
-        });
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     /**
@@ -122,5 +126,36 @@ public class AiTaskOrchestrator {
         if (value == null || String.valueOf(value).isBlank()) {
             params.put("model_option_code", route.requestedModelOptionCode());
         }
+    }
+
+    private void updateConversationMemory(Long userId, AiTaskType taskType, Map<String, Object> params, String output) {
+        if (taskType != AiTaskType.SMART_REPLY && taskType != AiTaskType.CHAT_SUMMARY) {
+            return;
+        }
+        if (params == null) {
+            return;
+        }
+
+        String conversationPublicId = stringValue(params.get("conversation_public_id"));
+        if (conversationPublicId.isBlank()) {
+            return;
+        }
+
+        Object history = params.get("conversation_history");
+        String userInput = taskType == AiTaskType.SMART_REPLY
+                ? stringValue(params.get("message"))
+                : stringValue(params.get("content"));
+
+        conversationAgentMemoryService.updateMemory(
+                userId,
+                conversationPublicId,
+                history,
+                userInput,
+                output
+        );
+    }
+
+    private String stringValue(Object source) {
+        return source == null ? "" : String.valueOf(source);
     }
 }

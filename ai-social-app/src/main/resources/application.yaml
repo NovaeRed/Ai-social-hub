@@ -6,14 +6,15 @@ spring:
   application:
     name: ai-social-app
   datasource:
-    url: jdbc:postgresql://192.168.80.128/ai_social_hub
-    username: postgres
+    url: jdbc:postgresql://192.168.123.128/ai_social_hub
+    username: root
     password: 123456
     driver-class-name: org.postgresql.Driver
   data:
     redis:
-      host: 192.168.80.128
+      host: 192.168.123.128
       port: 6379
+      password: 123456
       lettuce:
         pool:
           max-active: 10

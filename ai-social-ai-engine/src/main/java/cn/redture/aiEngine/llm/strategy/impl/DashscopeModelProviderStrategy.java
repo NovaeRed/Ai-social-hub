@@ -27,10 +27,12 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * DashScope 供应商策略实现
@@ -149,9 +151,10 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
 
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(userMessage(prompt));
+        Set<String> executedToolCalls = new HashSet<>();
 
         String lastAssistantContent = "";
-        for (int round = 0; round < 3; round++) {
+        for (int round = 0; round < 6; round++) {
             String payload = buildToolPayload(config.modelName(), messages);
             String body = postJson(endpoint, config.apiKey(), payload, "DashScope 工具调用失败");
 
@@ -175,7 +178,25 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
                 JsonNode functionNode = toolCall.path("function");
                 String toolName = functionNode.path("name").asText("");
                 String arguments = functionNode.path("arguments").asText("{}");
-                String toolResult = aiToolRegistry.executeTool(toolName, arguments);
+                if (toolName.isBlank()) {
+                    continue;
+                }
+                String dedupKey = toolName + "|" + arguments;
+                if (!executedToolCalls.add(dedupKey)) {
+                    log.warn("检测到重复工具调用，跳过: {}", dedupKey);
+                    continue;
+                }
+
+                String toolResult;
+                try {
+                    toolResult = aiToolRegistry.executeTool(toolName, arguments);
+                } catch (Exception e) {
+                    toolResult = "{\"error\":\"tool execution failed: " + e.getMessage() + "\"}";
+                }
+
+                if (toolCallId.isBlank()) {
+                    toolCallId = "auto-tool-call-" + round + "-" + toolName;
+                }
                 messages.add(toolMessage(toolCallId, toolName, toolResult));
             }
         }

@@ -63,7 +63,7 @@ public class AiInteractionController {
         if ((request.getConversationHistory() == null || request.getConversationHistory().isEmpty())
                 && request.getConversationPublicId() != null
                 && !request.getConversationPublicId().isBlank()) {
-            List<AiExternalMessageItem> contextMessages = aiExternalService.getRecentContextMessages(request.getConversationPublicId(), 10);
+            List<AiExternalMessageItem> contextMessages = aiExternalService.getRecentContextMessages(request.getConversationPublicId(), 20);
             request.setConversationHistory(toHistoryMessages(contextMessages));
         }
 
@@ -106,7 +106,8 @@ public class AiInteractionController {
         for (AiExternalMessageItem msg : messages) {
             String sender = msg.getSender() == null || msg.getSender().isBlank() ? "未知用户" : msg.getSender();
             String content = msg.getContent() == null ? "" : msg.getContent();
-            sb.append(sender).append(": ").append(content).append("\n");
+            String ts = msg.getTimestamp() == null || msg.getTimestamp().isBlank() ? "" : ("[" + msg.getTimestamp() + "] ");
+            sb.append(ts).append(sender).append(": ").append(content).append("\n");
         }
         return sb.toString();
     }

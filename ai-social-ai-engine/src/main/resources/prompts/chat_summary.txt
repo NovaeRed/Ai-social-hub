@@ -4,6 +4,9 @@
 目标长度：${target_length}
 关注关键词：${keywords}
 
+历史长期记忆：
+${longTermMemory}
+
 内容：
 ${content}
 
