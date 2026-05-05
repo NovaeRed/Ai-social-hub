@@ -44,33 +44,27 @@ public class EmitterContext {
         switch (event.getPriority()) {
             case CRITICAL -> {
                 try {
-                    // 阻塞上限控制在2秒，避免过多占用
-                    if (!queue.offer(event, 2, TimeUnit.SECONDS)) {
-                        log.error("[警报] 丢弃关键事件 (队列已满): 用户ID={}, 客户端ID={}, 类型={}",
-                                userId, clientId, event.getNotification().getType());
+                    if (!queue.offer(event, 100, TimeUnit.MILLISECONDS)) {
+                        log.error("[警报] 丢弃关键事件 (队列已满): 用户ID={}, 类型={}",
+                                userId, event.getNotification().getType());
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    log.error("关键事件入队操作被中断", e);
                 }
             }
             case NORMAL -> {
                 if (!queue.offer(event)) {
-                    log.warn("丢弃普通事件 (队列已满): 用户ID={}, 客户端ID={}, 类型={}",
-                            userId, clientId, event.getNotification().getType());
+                    log.warn("丢弃普通事件 (队列已满): 用户ID={}, 类型={}",
+                            userId, event.getNotification().getType());
                 }
             }
             case LOW -> {
-                // 如果剩余空间极小，开始限流丢弃
                 int remaining = queue.remainingCapacity();
                 int total = remaining + queue.size();
                 if (remaining < total * 0.2) {
-                    log.debug("丢弃低优事件 (降载): 用户ID={}, 客户端ID={}, 类型={}",
-                            userId, clientId, event.getNotification().getType());
+                    log.debug("丢弃低优事件 (降载): 用户ID={}, 类型={}", userId, event.getNotification().getType());
                 } else {
-                    if (!queue.offer(event)) {
-                        log.debug("丢弃低优事件 (队列刚满): 用户ID={}", userId);
-                    }
+                    queue.offer(event);
                 }
             }
         }

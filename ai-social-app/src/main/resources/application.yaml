@@ -2,6 +2,9 @@ server:
   port: 8080
   servlet:
     context-path: ${app.api-prefix:/api/v1}
+  tomcat:
+    threads:
+      max: 500
 spring:
   application:
     name: ai-social-app
