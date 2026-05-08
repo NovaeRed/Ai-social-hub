@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 /**
  * SSE 推送通知的通用载体.
  *
- * @param <T> a T object.
+ * @param <T> payload 数据类型
  */
 @Data
 @Builder
