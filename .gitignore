@@ -47,3 +47,6 @@ nbbuild/
 .cache/
 .generated/
 nbattrs/
+
+# Codex specific files
+.codex/
