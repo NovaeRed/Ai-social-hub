@@ -5,8 +5,10 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -21,9 +23,16 @@ public class EmitterContext {
     private final String clientId;
     @Getter
     private final SseEmitter emitter;
-    @Getter
-    private final BlockingQueue<QueuedEvent> queue;
     private final int queueCapacity;
+    /**
+     * 三个队列共享这一组许可，因此任意时刻单个连接的待发送事件总数不会超过 queueCapacity。
+     */
+    private final Semaphore capacityPermits;
+    private final Semaphore availableEvents = new Semaphore(0);
+    private final Map<EventPriority, ArrayBlockingQueue<QueuedEvent>> priorityQueues =
+            new EnumMap<>(EventPriority.class);
+    private int consecutiveCritical;
+    private int consecutiveNormal;
 
     public enum State {ACTIVE, DRAINING, CLOSED}
 
@@ -88,7 +97,13 @@ public class EmitterContext {
         this.clientId = clientId;
         this.emitter = emitter;
         this.queueCapacity = queueCapacity;
-        this.queue = new ArrayBlockingQueue<>(queueCapacity);
+        if (queueCapacity <= 0) {
+            throw new IllegalArgumentException("queueCapacity must be positive");
+        }
+        this.capacityPermits = new Semaphore(queueCapacity, true);
+        for (EventPriority priority : EventPriority.values()) {
+            priorityQueues.put(priority, new ArrayBlockingQueue<>(queueCapacity));
+        }
     }
 
     public boolean enqueue(QueuedEvent event, PushConfig config) {
@@ -105,15 +120,15 @@ public class EmitterContext {
                 try {
                     long timeout = strategy.getCriticalBlockTimeoutMs();
                     if (timeout <= 0) {
-                        queue.put(event); // 无限阻塞
-                        yield true;
+                        capacityPermits.acquire(); // 无限阻塞
+                        yield offerAfterCapacityReserved(event);
                     } else {
-                        boolean success = queue.offer(event, timeout, TimeUnit.MILLISECONDS);
+                        boolean success = capacityPermits.tryAcquire(timeout, TimeUnit.MILLISECONDS);
                         if (!success) {
                             log.error("[警报] 丢弃关键事件(队列超时): 用户ID={}, 类型={}, traceId={}",
                                     userId, event.getNotification().getType(), event.getTraceId());
                         }
-                        yield success;
+                        yield success && offerAfterCapacityReserved(event);
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -125,28 +140,93 @@ public class EmitterContext {
                 if (shouldDiscardByThreshold(threshold)) {
                     log.debug("丢弃普通事件(队列负载高): 用户ID={}, 类型={}, remaining={}/{}",
                             userId, event.getNotification().getType(),
-                            queue.remainingCapacity(), queueCapacity());
+                            capacityPermits.availablePermits(), queueCapacity());
                     yield false;
                 }
-                yield queue.offer(event);
+                yield tryOffer(event);
             }
             case LOW -> {
                 double threshold = strategy.getLowDiscardThreshold();
                 if (shouldDiscardByThreshold(threshold)) {
                     log.debug("丢弃低优事件(降载): 用户ID={}, 类型={}, remaining={}/{}",
                             userId, event.getNotification().getType(),
-                            queue.remainingCapacity(), queueCapacity());
+                            capacityPermits.availablePermits(), queueCapacity());
                     yield false;
                 }
-                yield queue.offer(event);
+                yield tryOffer(event);
             }
         };
     }
 
     private boolean shouldDiscardByThreshold(double threshold) {
-        int remaining = queue.remainingCapacity();
-        int total = remaining + queue.size();
-        return total > 0 && ((double) remaining / total) < threshold;
+        return ((double) capacityPermits.availablePermits() / queueCapacity) < threshold;
+    }
+
+    private boolean tryOffer(QueuedEvent event) {
+        return capacityPermits.tryAcquire() && offerAfterCapacityReserved(event);
+    }
+
+    private boolean offerAfterCapacityReserved(QueuedEvent event) {
+        boolean offered = priorityQueues.get(event.getPriority()).offer(event);
+        if (offered) {
+            availableEvents.release();
+        } else {
+            capacityPermits.release();
+        }
+        return offered;
+    }
+
+    /**
+     * 以有界优先级轮转取事件：连续发送有限条高优事件后，已积压的较低优事件必定获得一次机会。
+     */
+    public QueuedEvent pollNext(long timeout, TimeUnit unit, PushConfig.PriorityStrategy strategy)
+            throws InterruptedException {
+        if (!availableEvents.tryAcquire(timeout, unit)) {
+            return null;
+        }
+        QueuedEvent event = selectNext(strategy);
+        if (event == null) {
+            // 理论上不会发生；释放许可，避免异常状态永久占用容量。
+            capacityPermits.release();
+            return null;
+        }
+        capacityPermits.release();
+        return event;
+    }
+
+    private QueuedEvent selectNext(PushConfig.PriorityStrategy strategy) {
+        ArrayBlockingQueue<QueuedEvent> critical = priorityQueues.get(EventPriority.CRITICAL);
+        ArrayBlockingQueue<QueuedEvent> normal = priorityQueues.get(EventPriority.NORMAL);
+        ArrayBlockingQueue<QueuedEvent> low = priorityQueues.get(EventPriority.LOW);
+
+        if (!critical.isEmpty()
+                && (consecutiveCritical < strategy.getMaxConsecutiveCritical() || (normal.isEmpty() && low.isEmpty()))) {
+            consecutiveCritical++;
+            return critical.poll();
+        }
+        if (!normal.isEmpty()
+                && (consecutiveNormal < strategy.getMaxConsecutiveNormal() || low.isEmpty())) {
+            consecutiveCritical = 0;
+            consecutiveNormal++;
+            return normal.poll();
+        }
+        if (!low.isEmpty()) {
+            consecutiveCritical = 0;
+            consecutiveNormal = 0;
+            return low.poll();
+        }
+        // 高优队列为空时，重置对应配额，避免下一轮无谓让步。
+        consecutiveCritical = 0;
+        consecutiveNormal = 0;
+        return critical.poll();
+    }
+
+    public int getQueueSize() {
+        return queueCapacity - capacityPermits.availablePermits();
+    }
+
+    public boolean isQueueEmpty() {
+        return getQueueSize() == 0;
     }
 
     public int queueCapacity() {

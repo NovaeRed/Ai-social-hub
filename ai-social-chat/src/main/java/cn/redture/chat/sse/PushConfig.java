@@ -34,6 +34,10 @@ public class PushConfig {
 
         // LOW: 队列剩余容量低于此比例时开始丢弃
         private double lowDiscardThreshold = 0.2;     // 剩余<20%时丢弃低优事件
+
+        // 公平调度：达到连续配额后，若较低优队列有积压，必须让出一个发送机会
+        private int maxConsecutiveCritical = 5;
+        private int maxConsecutiveNormal = 3;
     }
 
     // 心跳与监控

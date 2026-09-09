@@ -156,7 +156,7 @@ public class SseEmitterServiceImpl implements SseEmitterService {
                         // 1. 优先淘汰非活跃连接（最后活跃时间最早）
                         .comparingLong((Map.Entry<String, EmitterContext> e) -> e.getValue().getLastActivityTime().get())
                         // 2. 其次淘汰队列积压多的（消费能力差）
-                        .thenComparingInt(e -> e.getValue().getQueue().size())
+                        .thenComparingInt(e -> e.getValue().getQueueSize())
                         // 3. 最后淘汰创建时间早的（老连接）
                         .thenComparingLong(e -> e.getValue().getCreateTime())
                 )
@@ -221,7 +221,7 @@ public class SseEmitterServiceImpl implements SseEmitterService {
                 context.checkAndResetSlowCount(resetInterval);
 
                 // 2. 尝试获取事件（带超时，便于心跳和状态检查）
-                QueuedEvent event = context.getQueue().poll(pollTimeout, TimeUnit.MILLISECONDS);
+                QueuedEvent event = context.pollNext(pollTimeout, TimeUnit.MILLISECONDS, pushConfig.getPriorityStrategy());
 
                 if (event != null) {
                     // 3. 发送事件
@@ -240,7 +240,7 @@ public class SseEmitterServiceImpl implements SseEmitterService {
                 }
 
                 // 5. 如果处于DRAINING状态且队列为空，优雅退出
-                if (context.getState() == EmitterContext.State.DRAINING && context.getQueue().isEmpty()) {
+                if (context.getState() == EmitterContext.State.DRAINING && context.isQueueEmpty()) {
                     log.debug("连接处于DRAINING状态且队列已空，优雅退出: 用户ID={}", context.getUserId());
                     break;
                 }
@@ -345,19 +345,27 @@ public class SseEmitterServiceImpl implements SseEmitterService {
      * 尝试快速消费队列中的关键事件，减少消息丢失
      */
     private void drainCriticalEvents(EmitterContext context) {
-        QueuedEvent event;
         int drained = 0;
-        while ((event = context.getQueue().poll()) != null && drained < 10) {
-            if (event.getPriority() == EventPriority.CRITICAL) {
-                try {
-                    context.getEmitter().send(SseEmitter.event()
-                            .name(event.getNotification().getType())
-                            .data(event.getNotification()));
-                    drained++;
-                } catch (Exception ignore) {
-                    break; // 发送失败则停止
+        QueuedEvent event;
+        try {
+            while (drained < 10 && (event = context.pollNext(0, TimeUnit.MILLISECONDS, pushConfig.getPriorityStrategy())) != null) {
+                if (event.getPriority() == EventPriority.CRITICAL) {
+                    try {
+                        context.getEmitter().send(SseEmitter.event()
+                                .name(event.getNotification().getType())
+                                .data(event.getNotification()));
+                        drained++;
+                    } catch (Exception ignore) {
+                        break; // 发送失败则停止
+                    }
+                } else {
+                    // 熔断期间不发送普通事件；重新入队，避免它被“排水”逻辑静默丢弃。
+                    context.enqueue(event, pushConfig);
+                    break;
                 }
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         if (drained > 0) {
             log.info("熔断前排水关键事件{}条: 用户ID={}", drained, context.getUserId());
