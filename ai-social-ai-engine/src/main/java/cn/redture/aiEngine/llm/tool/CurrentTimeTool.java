@@ -7,6 +7,8 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import cn.redture.aiEngine.pojo.enums.AiTaskType;
 
 /**
  * 获取当前时间工具。
@@ -37,7 +39,12 @@ public class CurrentTimeTool implements AiTool {
     }
 
     @Override
-    public ToolResult execute(Map<String, Object> arguments) {
+    public Set<AiTaskType> supportedTaskTypes() {
+        return Set.of(AiTaskType.SCHEDULE_EXTRACTION);
+    }
+
+    @Override
+    public ToolResult execute(ToolExecutionContext context, Map<String, Object> arguments) {
         String timezone = "Asia/Shanghai";
         try {
             if (arguments != null && arguments.containsKey("timezone")) {

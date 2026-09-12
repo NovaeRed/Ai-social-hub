@@ -2,6 +2,8 @@ package cn.redture.aiEngine.llm.tool;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import cn.redture.aiEngine.pojo.enums.AiTaskType;
 
 /**
  * 统一的大模型工具接口。
@@ -24,11 +26,16 @@ public interface AiTool {
      * @return 工具参数列表
      */
     List<ToolArgument> getArguments();
+
+    /**
+     * 工具允许被哪些业务任务发现和调用。空集合表示不对任何任务暴露。
+     */
+    Set<AiTaskType> supportedTaskTypes();
     
     /**
      * 执行具体工具逻辑。
      * @param arguments 大模型侧提取出的参数
      * @return 工具执行结果，会被统一序列化包装回送给大模型
      */
-    ToolResult execute(Map<String, Object> arguments);
+    ToolResult execute(ToolExecutionContext context, Map<String, Object> arguments);
 }

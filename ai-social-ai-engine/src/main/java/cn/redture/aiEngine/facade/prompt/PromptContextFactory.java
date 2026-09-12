@@ -67,6 +67,9 @@ public class PromptContextFactory {
                 if (messages != null) {
                     renderParams.put("messages", toPlainText(messages));
                 }
+                if (taskType == AiTaskType.SCHEDULE_EXTRACTION) {
+                    renderParams.put("filePublicIds", toDefault(renderParams.get("file_public_ids"), "无"));
+                }
             }
             default -> {
                 // no-op
@@ -96,7 +99,12 @@ public class PromptContextFactory {
                 putRiskInput(riskInputs, "content", renderParams.get("content"));
                 putRiskInput(riskInputs, "keywords", renderParams.get("keywords"));
             }
-            case SCHEDULE_EXTRACTION, PERSONA_ANALYSIS -> putRiskInput(riskInputs, "messages", renderParams.get("messages"));
+            case SCHEDULE_EXTRACTION, PERSONA_ANALYSIS -> {
+                putRiskInput(riskInputs, "messages", renderParams.get("messages"));
+                if (taskType == AiTaskType.SCHEDULE_EXTRACTION) {
+                    putRiskInput(riskInputs, "filePublicIds", renderParams.get("filePublicIds"));
+                }
+            }
             default -> {
                 // no-op
             }
@@ -116,7 +124,12 @@ public class PromptContextFactory {
                 wrapValue(renderParams, "content");
                 wrapValue(renderParams, "keywords");
             }
-            case SCHEDULE_EXTRACTION, PERSONA_ANALYSIS -> wrapValue(renderParams, "messages");
+            case SCHEDULE_EXTRACTION, PERSONA_ANALYSIS -> {
+                wrapValue(renderParams, "messages");
+                if (taskType == AiTaskType.SCHEDULE_EXTRACTION) {
+                    wrapValue(renderParams, "filePublicIds");
+                }
+            }
             default -> {
                 // no-op
             }

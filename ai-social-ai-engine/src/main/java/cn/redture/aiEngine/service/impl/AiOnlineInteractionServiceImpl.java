@@ -157,6 +157,9 @@ public class AiOnlineInteractionServiceImpl implements AiOnlineInteractionServic
 
         Map<String, Object> params = new HashMap<>();
         params.put("messages", request.getMessages());
+        if (request.getFilePublicIds() != null && !request.getFilePublicIds().isEmpty()) {
+            params.put("file_public_ids", request.getFilePublicIds());
+        }
         if (request.getModelOptionCode() != null && !request.getModelOptionCode().isBlank()) {
             params.put("model_option_code", request.getModelOptionCode().trim());
         }

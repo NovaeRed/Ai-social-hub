@@ -1,6 +1,7 @@
 package cn.redture.aiEngine.llm.strategy;
 
 import cn.redture.aiEngine.llm.core.execution.ModelExecutionContext;
+import cn.redture.aiEngine.llm.tool.ToolExecutionContext;
 import reactor.core.publisher.Flux;
 
 /**
@@ -26,5 +27,5 @@ public interface ModelProviderStrategy {
     /**
      * 同步工具调用。
      */
-    String callWithTools(String prompt, ModelExecutionContext context);
+    String callWithTools(String prompt, ModelExecutionContext context, ToolExecutionContext toolContext);
 }

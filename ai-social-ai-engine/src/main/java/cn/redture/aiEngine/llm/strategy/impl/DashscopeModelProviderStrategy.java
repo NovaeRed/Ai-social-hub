@@ -7,6 +7,7 @@ import cn.redture.aiEngine.llm.strategy.ModelProvider;
 import cn.redture.aiEngine.llm.strategy.ModelProviderStrategy;
 import cn.redture.aiEngine.llm.util.ModelProviderUtil;
 import cn.redture.aiEngine.llm.tool.AiToolRegistry;
+import cn.redture.aiEngine.llm.tool.ToolExecutionContext;
 import cn.redture.common.constants.ErrorCodes;
 import cn.redture.common.exception.BaseException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -141,8 +142,8 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
     }
 
     @Override
-    public String callWithTools(String prompt, ModelExecutionContext context) {
-        if (!aiToolRegistry.hasTools()) {
+    public String callWithTools(String prompt, ModelExecutionContext context, ToolExecutionContext toolContext) {
+        if (!aiToolRegistry.hasTools(toolContext)) {
             return call(prompt, context);
         }
 
@@ -155,7 +156,7 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
 
         String lastAssistantContent = "";
         for (int round = 0; round < 6; round++) {
-            String payload = buildToolPayload(config.modelName(), messages);
+            String payload = buildToolPayload(config.modelName(), messages, toolContext);
             String body = postJson(endpoint, config.apiKey(), payload, "DashScope 工具调用失败");
 
             JsonNode messageNode = extractMessageNode(body);
@@ -189,7 +190,7 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
 
                 String toolResult;
                 try {
-                    toolResult = aiToolRegistry.executeTool(toolName, arguments);
+                    toolResult = aiToolRegistry.executeTool(toolContext, toolName, arguments);
                 } catch (Exception e) {
                     toolResult = "{\"error\":\"tool execution failed: " + e.getMessage() + "\"}";
                 }
@@ -283,13 +284,13 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
         }
     }
 
-    private String buildToolPayload(String modelName, List<Map<String, Object>> messages) {
+    private String buildToolPayload(String modelName, List<Map<String, Object>> messages, ToolExecutionContext toolContext) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", modelName);
         payload.put("messages", messages);
         payload.put("stream", false);
         payload.put("tool_choice", "auto");
-        payload.put("tools", aiToolRegistry.listToolDefinitions());
+        payload.put("tools", aiToolRegistry.listToolDefinitions(toolContext));
 
         try {
             return objectMapper.writeValueAsString(payload);

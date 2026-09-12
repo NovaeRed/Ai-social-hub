@@ -7,12 +7,14 @@ import cn.redture.aiEngine.llm.factory.ModelProviderStrategyFactory;
 import cn.redture.aiEngine.llm.core.routing.ModelSelector;
 import cn.redture.aiEngine.llm.core.routing.ModelRouteDecision;
 import cn.redture.aiEngine.llm.strategy.ModelProviderStrategy;
+import cn.redture.aiEngine.llm.tool.ToolExecutionContext;
 import cn.redture.aiEngine.pojo.enums.AiTaskType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * AI 门面处理器。
@@ -95,7 +97,13 @@ public class AiFacadeHandler {
         DispatchTarget dispatch = resolveDispatchTarget(route, "callWithTools");
         log.debug("Execute task with tools: userId={}, taskType={}, provider={}, model={}", userId, taskType, dispatch.context().provider(), dispatch.context().modelName());
         String prompt = buildPrompt(taskType, params);
-        String result = dispatch.strategy().callWithTools(prompt, dispatch.context());
+        ToolExecutionContext toolContext = new ToolExecutionContext(
+                userId,
+                taskType,
+                stringValue(params.get("conversation_public_id")),
+                UUID.randomUUID().toString()
+        );
+        String result = dispatch.strategy().callWithTools(prompt, dispatch.context(), toolContext);
         modelOutputSecurityValidator.validateFinal(result);
         return result;
     }
@@ -161,5 +169,9 @@ public class AiFacadeHandler {
      */
     public String buildPrompt(AiTaskType taskType, Map<String, Object> params) {
         return promptComposer.compose(taskType, params);
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value);
     }
 }

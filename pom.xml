@@ -46,6 +46,8 @@
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
         <!-- Sentinel -->
         <sentinel.version>1.8.8</sentinel.version>
+        <!-- Apache Tika -->
+        <tika.version>2.9.2</tika.version>
     </properties>
 
     <dependencyManagement>

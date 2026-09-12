@@ -1,6 +1,7 @@
 package cn.redture.common.integration.ai;
 
 import cn.redture.common.integration.ai.dto.AiExternalMessageItem;
+import cn.redture.common.integration.ai.dto.AiExternalFileContent;
 
 import java.util.List;
 
@@ -18,4 +19,9 @@ public interface AiExternalService {
     List<AiExternalMessageItem> getUserMessagesInConversation(String conversationPublicId, Long userId, int limit);
 
     List<AiExternalMessageItem> getUserRecentMessagesForAnalysis(Long userId, int limit);
+
+    /**
+     * 读取当前用户有权限访问的聊天附件，并返回已提取、限长的纯文本。
+     */
+    AiExternalFileContent resolveChatFileContent(String filePublicId, Long userId);
 }
