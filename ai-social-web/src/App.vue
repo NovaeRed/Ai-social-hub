@@ -108,9 +108,18 @@ const matchingContacts = computed(() =>
   ),
 );
 const contactMode = ref('lookup'),
+  lookupType = ref('USERNAME'),
   userCode = ref(''),
   lookupBusy = ref(false);
 let lookupSequence = 0;
+watch(lookupType, () => {
+  lookupSequence++;
+  lookupBusy.value = false;
+  userCode.value = '';
+  lookupUser.value = null;
+  friendForm.value.target_user_public_id = '';
+  error.value = '';
+});
 async function lookupAccount() {
   const code = userCode.value.trim(),
     sequence = ++lookupSequence,
@@ -119,18 +128,22 @@ async function lookupAccount() {
   friendForm.value.target_user_public_id = '';
   error.value = '';
   if (!code) {
-    error.value = '请输入对方提供的用户 ID';
+    error.value = '请输入需要查找的账号';
     return;
   }
-  if (/^1[3-9]\d{9}$/.test(code)) {
-    error.value = '当前服务暂不支持手机号查找，请使用对方提供的用户 ID。';
+  if (lookupType.value === 'PHONE' && !/^1[3-9]\d{9}$/.test(code)) {
+    error.value = '请填写有效的中国大陆手机号';
     return;
   }
   lookupBusy.value = true;
   try {
     const person = demo
       ? { public_id: 'demo-new-friend', nickname: '顾星河', username: 'xinghe' }
-      : await request(`/users/${encodeURIComponent(code)}`);
+      : await request(
+          lookupType.value === 'PUBLIC_ID'
+            ? `/users/${encodeURIComponent(code)}`
+            : '/users/lookup?' + new URLSearchParams({ type: lookupType.value, value: code }),
+        );
     if (
       sequence !== lookupSequence ||
       generation !== sessionGeneration ||
@@ -462,6 +475,7 @@ let lastFocus: HTMLElement | null = null;
 watch(modal, async (value) => {
   if (value === 'friend') {
     switchContacts('lookup');
+    lookupType.value = 'USERNAME';
     userCode.value = '';
   }
   if (value) {
@@ -1936,9 +1950,29 @@ onUnmounted(() => {
           </div>
           <form v-if="contactMode === 'lookup'" @submit.prevent="lookupAccount">
             <label
-              >用户 ID<input
+              >查找方式<select v-model="lookupType" aria-label="查找方式">
+                <option value="USERNAME">用户名</option>
+                <option value="PHONE">手机号</option>
+                <option value="PUBLIC_ID">用户 ID</option>
+              </select></label
+            >
+            <label
+              >{{
+                lookupType === 'PHONE'
+                  ? '对方手机号'
+                  : lookupType === 'PUBLIC_ID'
+                    ? '用户 ID'
+                    : '对方用户名'
+              }}<input
                 v-model="userCode"
-                placeholder="输入对方提供的用户 ID"
+                :placeholder="
+                  lookupType === 'PHONE'
+                    ? '输入完整手机号'
+                    : lookupType === 'PUBLIC_ID'
+                      ? '输入对方提供的用户 ID'
+                      : '输入对方的注册用户名'
+                "
+                :type="lookupType === 'PHONE' ? 'tel' : 'text'"
                 autocomplete="off"
                 maxlength="100"
                 @input="
@@ -1948,7 +1982,7 @@ onUnmounted(() => {
                   lookupBusy = false;
                 "
             /></label>
-            <p class="field-note">当前支持用户 ID 精确查找，手机号查找尚待服务端支持。</p>
+            <p class="field-note">精确查找后请核对昵称；联系方式不会展示在查找结果中。</p>
             <button class="secondary" :disabled="lookupBusy || !userCode.trim()">
               {{ lookupBusy ? '查找中…' : '查找用户' }}
             </button>

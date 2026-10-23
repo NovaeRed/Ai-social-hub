@@ -46,6 +46,54 @@ async function login(page: Page, index = 0) {
   await expect(page.locator('.error')).toHaveCount(0);
 }
 
+test('stranger lookup verifies usernames and phones before sending an application', async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto('/#/friends');
+  const hiddenId = '01M5KHE3Y3H8WT63RSJYE63CFJ';
+  const lookups: string[] = [];
+  await page.route('**/users/lookup?*', async (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    lookups.push(query.get('type') + ':' + query.get('value'));
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 200,
+        data: { public_id: hiddenId, username: 'xiawan', nickname: '夏晚' },
+      }),
+    });
+  });
+  let requestedUser = '';
+  await page.route('**/friends/requests', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    requestedUser = route.request().postDataJSON().target_user_public_id;
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 201, data: { request_public_id: 'lookup-request' } }),
+    });
+  });
+  await page.getByRole('button', { name: '添加好友', exact: true }).click();
+  await page.getByLabel('对方用户名', { exact: true }).fill('xiawan');
+  await page.getByRole('button', { name: '查找用户', exact: true }).last().click();
+  await expect(page.getByRole('dialog')).toContainText('已选择：夏晚');
+  expect(lookups).toEqual(['USERNAME:xiawan']);
+  await expect(page.getByRole('dialog')).not.toContainText(hiddenId);
+  await page.getByLabel('查找方式', { exact: true }).selectOption('PHONE');
+  await expect(page.getByRole('button', { name: '发送申请', exact: true })).toBeDisabled();
+  await page.getByLabel('对方手机号', { exact: true }).fill('123');
+  await page.getByRole('button', { name: '查找用户', exact: true }).last().click();
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('有效的中国大陆手机号');
+  expect(lookups).toHaveLength(1);
+  await page.getByLabel('对方手机号', { exact: true }).fill('13800138001');
+  await page.getByRole('button', { name: '查找用户', exact: true }).last().click();
+  await expect(page.getByRole('dialog')).toContainText('已选择：夏晚');
+  expect(lookups[1]).toBe('PHONE:13800138001');
+  await page.getByRole('button', { name: '发送申请', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('好友申请已发送');
+  expect(requestedUser).toBe(hiddenId);
+});
+
 test('file selection previews before upload and retains the file for a safe retry', async ({
   page,
 }) => {
@@ -206,6 +254,7 @@ test('contacts and AI details use names while keeping identifiers inside API cal
   });
   await page.goto('/#/friends');
   await page.getByRole('button', { name: '添加好友', exact: true }).click();
+  await page.getByRole('button', { name: '同群联系人', exact: true }).click();
   await page.getByLabel('搜索联系人').fill('夏晚');
   await page.locator('.contact-option').filter({ hasText: '夏晚' }).click();
   await expect(page.getByRole('dialog')).not.toContainText(hiddenId);

@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 const a = JSON.parse(
     await readFile(new URL('../.local/accounts.json', import.meta.url), 'utf8'),
   )[0],
-  base = 'http://127.0.0.1:8082/api/v1';
+  base = process.env.AUDIT_API_BASE || 'http://127.0.0.1:8082/api/v1';
 const auth = await (
   await fetch(base + '/auth/login', {
     method: 'POST',
