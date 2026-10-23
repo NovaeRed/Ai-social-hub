@@ -13,7 +13,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 /**
- * PostgreSQL JSONB TypeHandler
+ * PostgreSQL 的 JSONB 类型处理器
  */
 @MappedTypes({Object.class})
 public class JsonbTypeHandler extends JacksonTypeHandler {

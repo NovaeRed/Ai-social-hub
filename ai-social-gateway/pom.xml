@@ -19,33 +19,33 @@
 
     <dependencies>
 
-        <!-- Local modules -->
+        <!-- 本地模块依赖 -->
         <dependency>
             <groupId>cn.redture</groupId>
             <artifactId>ai-social-common</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
-        <!-- SpringBoot -->
+        <!-- Spring Boot 核心依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Spring Boot Test -->
+        <!-- Spring Boot 测试依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <!-- Spring Security -->
+        <!-- Spring Security 安全依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
-        <!-- JWT Implementation -->
+        <!-- JWT 令牌实现依赖 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
@@ -64,7 +64,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- JDBC && Postgres -->
+        <!-- 数据库连接与 PostgreSQL 驱动依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -76,7 +76,7 @@
             <version>${postgresql.version}</version>
         </dependency>
 
-        <!-- Redis -->
+        <!-- Redis 缓存依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>

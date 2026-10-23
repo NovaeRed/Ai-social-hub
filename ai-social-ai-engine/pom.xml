@@ -18,14 +18,14 @@
     </properties>
 
     <dependencies>
-        <!-- ai-social-common -->
+        <!-- 公共模块依赖 -->
         <dependency>
             <groupId>cn.redture</groupId>
             <artifactId>ai-social-common</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
-        <!-- MapStruct for automatic DTO mapping -->
+        <!-- 使用 MapStruct 自动映射数据传输对象 -->
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
@@ -43,7 +43,7 @@
             <version>${lombok-mapstruct-binding.version}</version>
         </dependency>
 
-        <!-- JDBC & JPA (optional) -->
+        <!-- 可选的数据库连接与持久化依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -54,19 +54,19 @@
             <artifactId>postgresql</artifactId>
         </dependency>
 
-        <!-- MyBatis-Plus for ORM mapping -->
+        <!-- 使用 MyBatis-Plus 进行对象关系映射 -->
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
         </dependency>
 
-        <!-- Redis -->
+        <!-- Redis 缓存依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- Lombok -->
+        <!-- Lombok 代码生成依赖 -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -74,33 +74,33 @@
         </dependency>
 
 
-        <!-- Spring Web -->
+        <!-- Spring Web 网络依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Spring WebFlux -->
+        <!-- Spring WebFlux 响应式网络依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
-        <!-- PgVector -->
+        <!-- PostgreSQL 向量扩展依赖 -->
         <dependency>
             <groupId>com.pgvector</groupId>
             <artifactId>pgvector</artifactId>
             <version>0.1.4</version>
         </dependency>
 
-        <!-- OkHttp for provider HTTP clients -->
+        <!-- 使用 OkHttp 调用供应商接口 -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>
             <version>4.12.0</version>
         </dependency>
 
-        <!-- Test -->
+        <!-- 测试依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

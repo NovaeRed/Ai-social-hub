@@ -97,8 +97,8 @@ public class FriendshipServiceImpl implements FriendshipService {
                 // 幂等：已有待处理请求则直接返回
                 return;
             }
-            // The current friendship was checked above. An old ACCEPTED request
-            // can remain after the friendship is removed; reuse it like REJECTED.
+            // 前面已经检查过当前好友关系。删除好友后，历史已接受的申请
+            // 可能仍然保留，可与已拒绝的申请一样复用。
             existing.setStatus(FriendshipRequestStatus.PENDING);
             existing.setMessage(dto.getMessage());
             friendshipRequestMapper.updateById(existing);

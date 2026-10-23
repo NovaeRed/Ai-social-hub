@@ -407,7 +407,7 @@ public class DashscopeModelProviderStrategy implements ModelProviderStrategy {
                 detail = body.string();
             }
         } catch (Exception ignored) {
-            // ignore
+            // 忽略读取上游错误详情时的异常。
         }
 
         return new BaseException(HttpStatus.SERVICE_UNAVAILABLE, prefix + ": httpStatus=" + response.code() + ", body=" + detail, ErrorCodes.UPSTREAM_UNAVAILABLE);

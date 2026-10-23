@@ -230,7 +230,7 @@ export async function subscribe(onEvent: (event: any) => void, signal: AbortSign
         try {
           onEvent(JSON.parse(text));
         } catch {
-          /* heartbeat */
+          /* 心跳事件 */
         }
       }
     }

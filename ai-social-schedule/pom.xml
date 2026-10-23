@@ -18,14 +18,14 @@
     </properties>
 
     <dependencies>
-        <!-- Local modules -->
+        <!-- 本地模块依赖 -->
         <dependency>
             <groupId>cn.redture</groupId>
             <artifactId>ai-social-common</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
-        <!-- MapStruct for automatic DTO mapping -->
+        <!-- 使用 MapStruct 自动映射数据传输对象 -->
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
@@ -44,19 +44,19 @@
         </dependency>
 
 
-        <!-- Spring Web -->
+        <!-- Spring Web 网络依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Spring Security -->
+        <!-- Spring Security 安全依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
-        <!-- JDBC & JPA (optional) -->
+        <!-- 可选的数据库连接与持久化依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -67,19 +67,19 @@
             <artifactId>postgresql</artifactId>
         </dependency>
 
-        <!-- MyBatis-Plus for ORM mapping -->
+        <!-- 使用 MyBatis-Plus 进行对象关系映射 -->
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
         </dependency>
 
-        <!-- Redis for refresh token store -->
+        <!-- 使用 Redis 保存刷新令牌 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- Lombok -->
+        <!-- Lombok 代码生成依赖 -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

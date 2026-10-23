@@ -1,8 +1,8 @@
 import { ref, watch, type Ref } from 'vue';
 import type { User } from './api';
 
-// Until server-side conversation preferences and per-message hiding exist,
-// these explicitly local choices are isolated by account and browser.
+// 在服务端支持会话偏好与逐条消息隐藏之前，
+// 这些本机设置按账号和浏览器分别保存。
 export function useChatPreferences(user: Ref<User>) {
   const pinned = ref<string[]>([]),
     removed = ref<Record<string, string>>({}),

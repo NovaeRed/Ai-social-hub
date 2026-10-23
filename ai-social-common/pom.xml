@@ -19,7 +19,7 @@
     </properties>
 
     <dependencies>
-        <!-- SpringBoot -->
+        <!-- Spring Boot 核心依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -31,7 +31,7 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- FastJackson -->
+        <!-- JSON 序列化依赖 -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
@@ -44,20 +44,20 @@
             <version>${ulid.version}</version>
         </dependency>
 
-        <!-- JJWT -->
+        <!-- JWT 令牌处理依赖 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
             <version>0.12.5</version>
         </dependency>
-        <!-- JJWT Implementation -->
+        <!-- JJWT 令牌实现依赖 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-impl</artifactId>
             <version>0.12.5</version>
             <scope>runtime</scope>
         </dependency>
-        <!-- JJWT Jackson -->
+        <!-- JJWT 的 JSON 序列化依赖 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId>
@@ -65,7 +65,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Lombok -->
+        <!-- Lombok 代码生成依赖 -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -73,14 +73,14 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Spring Boot Test -->
+        <!-- Spring Boot 测试依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <!-- Spring Security -->
+        <!-- Spring Security 安全依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
@@ -90,7 +90,7 @@
             <artifactId>junit</artifactId>
         </dependency>
 
-        <!-- Postgres -->
+        <!-- PostgreSQL 数据库驱动依赖 -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -102,7 +102,7 @@
             <scope>compile</scope>
         </dependency>
 
-        <!-- Sentinel -->
+        <!-- Sentinel 流量控制依赖 -->
         <dependency>
             <groupId>com.alibaba.csp</groupId>
             <artifactId>sentinel-core</artifactId>

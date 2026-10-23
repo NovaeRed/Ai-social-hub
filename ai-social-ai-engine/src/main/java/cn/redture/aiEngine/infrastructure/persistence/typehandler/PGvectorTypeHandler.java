@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * PGvector TypeHandler for List<Double>
+ * 面向双精度数值列表的 PGvector 类型处理器
  */
 @MappedTypes(List.class)
 public class PGvectorTypeHandler extends BaseTypeHandler<List<Double>> {
@@ -76,7 +76,7 @@ public class PGvectorTypeHandler extends BaseTypeHandler<List<Double>> {
             return null;
         }
 
-        // Parse string format "[1.0,2.0,...]"
+        // 解析 "[1.0,2.0,...]" 格式的字符串。
         value = value.replace("[", "").replace("]", "");
         if (value.trim().isEmpty()) {
             return new ArrayList<>();
@@ -88,7 +88,7 @@ public class PGvectorTypeHandler extends BaseTypeHandler<List<Double>> {
             try {
                 list.add(Double.parseDouble(part.trim()));
             } catch (NumberFormatException e) {
-                // ignore
+                // 忽略无法解析的数值。
             }
         }
         return list;

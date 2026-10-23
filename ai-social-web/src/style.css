@@ -1864,7 +1864,7 @@ footer span:last-child {
     box-shadow: 15px 0 60px #26323e20;
   }
 }
-/* Group spaces, account security and AI activity */
+/* 群空间、账号安全与人工智能活动 */
 .inline-error {
   display: flex;
   align-items: center;
@@ -2571,7 +2571,7 @@ nav button {
     overflow-x: hidden;
   }
 }
-/* Keep the conversation list beside the active chat at every viewport size. */
+/* 在所有视口宽度下，将会话列表与当前聊天保持左右并排。 */
 .chat-layout {
   display: grid;
   grid-template-columns: clamp(160px, 30%, 290px) minmax(0, 1fr);

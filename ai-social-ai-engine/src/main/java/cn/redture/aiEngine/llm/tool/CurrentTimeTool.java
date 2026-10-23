@@ -54,7 +54,7 @@ public class CurrentTimeTool implements AiTool {
                 }
             }
         } catch (Exception ignored) {
-            // ignore malformed arguments.
+            // 忽略格式无效的参数。
         }
 
         try {

@@ -15,7 +15,7 @@ public class PushConfig {
 
     // 队列配置
     private int queueCapacity = 50;
-    private long queuePollTimeoutMs = 500;        // writer轮询间隔
+    private long queuePollTimeoutMs = 500;        // 写入线程的轮询间隔
 
     // 熔断保护
     private int maxSlowCount = 3;                 // 连续发送失败阈值

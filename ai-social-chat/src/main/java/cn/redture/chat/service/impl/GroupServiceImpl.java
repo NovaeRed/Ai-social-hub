@@ -49,11 +49,11 @@ public class GroupServiceImpl implements GroupService {
      */
     @Override
     public ConversationCreatedResultVO createGroup(Long currentUserId, String name, List<String> memberPublicIds) {
-        // Step 1: 创建群 + 添加创建者（原子操作）
+        // 步骤 1: 创建群 + 添加创建者（原子操作）
         GroupService proxy = (GroupService) AopContext.currentProxy();
         Conversation group = proxy.createGroupCore(currentUserId, name);
 
-        // Step 2: 批量解析并添加其他成员（非原子，可部分失败）
+        // 步骤 2: 批量解析并添加其他成员（非原子，可部分失败）
         if (memberPublicIds != null && !memberPublicIds.isEmpty()) {
             // 批量查询 publicId → userId
             List<Long> validMemberUserIds = resolvePublicIdsToUserIds(memberPublicIds);
@@ -335,17 +335,17 @@ public class GroupServiceImpl implements GroupService {
     @Override
     @Transactional
     public void removeGroupMember(Long currentUserId, String groupPublicId, String userPublicId) {
-        // Step 1. 查询群组信息
+        // 步骤 1. 查询群组信息
         Conversation group = getConversationByPublicId(groupPublicId);
 
-        // Step 2. 查询用户ID
+        // 步骤 2. 查询用户ID
         List<Long> userIds = userService.getUserIdsByPublicIds(Collections.singletonList(userPublicId));
         if (userIds.isEmpty() || userIds.getFirst() == null) {
             throw new ResourceNotFoundException("用户");
         }
         Long targetUserId = userIds.getFirst();
 
-        // Step 3. 查询所有需要的成员信息
+        // 步骤 3. 查询所有需要的成员信息
         List<ConversationMember> members = conversationMemberMapper.selectList(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, group.getId())
                 .in(ConversationMember::getUserId, Arrays.asList(currentUserId, targetUserId)));
@@ -353,7 +353,7 @@ public class GroupServiceImpl implements GroupService {
             throw new InvalidInputException("不能移除自己");
         }
 
-        // Step 4. 从查询结果中获取成员信息
+        // 步骤 4. 从查询结果中获取成员信息
         ConversationMember operatorMember = null;
         ConversationMember targetMember = null;
 
@@ -365,10 +365,10 @@ public class GroupServiceImpl implements GroupService {
             }
         }
 
-        // Step 5. 权限检查
+        // 步骤 5. 权限检查
         validatePermission(operatorMember, targetMember, targetUserId);
 
-        // Step 6. 执行删除操作
+        // 步骤 6. 执行删除操作
         int deletedCount = conversationMemberMapper.delete(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, group.getId())
                 .eq(ConversationMember::getUserId, targetUserId));
@@ -404,8 +404,8 @@ public class GroupServiceImpl implements GroupService {
         conversationMemberMapper.delete(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, group.getId()));
 
-        // Keep messages and their foreign keys for retention; dissolved groups
-        // are excluded from every public conversation read/write path.
+        // 保留消息及其外键关联；已解散的群聊
+        // 会从所有对外会话读写入口中排除。
         group.setDeletedAt(OffsetDateTime.now());
         conversationMapper.updateById(group);
     }

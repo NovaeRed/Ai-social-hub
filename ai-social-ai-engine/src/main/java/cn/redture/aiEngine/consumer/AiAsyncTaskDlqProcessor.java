@@ -109,7 +109,7 @@ public class AiAsyncTaskDlqProcessor implements SmartLifecycle {
 
     @Override
     public int getPhase() {
-        return Integer.MAX_VALUE - 101; // Ensure lower phase stays near streaming infra
+        return Integer.MAX_VALUE - 101; // 确保较低的生命周期阶段与流式基础设施保持接近。
     }
 
     private void ensureDlqStreamGroup() {

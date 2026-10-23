@@ -1,4 +1,4 @@
-// cn.redture.common.typehandler.PgEnumTypeHandler.java
+// 枚举类型处理器文件：cn.redture.common.typehandler.PgEnumTypeHandler.java
 package cn.redture.common.util;
 
 import cn.redture.common.annotation.PgEnum;

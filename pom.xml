@@ -26,33 +26,33 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <java.version>21</java.version>
-        <!-- Spring Boot -->
+        <!-- Spring Boot 核心依赖 -->
         <spring-boot.version>3.5.5</spring-boot.version>
-        <!-- Postgres -->
+        <!-- PostgreSQL 数据库驱动依赖 -->
         <postgresql.version>42.7.8</postgresql.version>
-        <!-- JJWT -->
+        <!-- JWT 令牌处理依赖 -->
         <jjwt.version>0.12.6</jjwt.version>
-        <!-- ULID -->
+        <!-- 全局唯一标识生成依赖 -->
         <ulid.version>5.2.0</ulid.version>
-        <!-- Lombok -->
+        <!-- Lombok 代码生成依赖 -->
         <lombok.version>1.18.36</lombok.version>
-        <!-- Mybatis -->
+        <!-- MyBatis 持久化依赖 -->
         <mybatis.version>3.0.4</mybatis.version>
-        <!-- MybatisPlus -->
+        <!-- MyBatis-Plus 持久化增强依赖 -->
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
-        <!-- MapStruct -->
+        <!-- MapStruct 对象映射依赖 -->
         <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <!-- Lombok-mapstruct-binding -->
+        <!-- Lombok 与 MapStruct 集成依赖 -->
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
-        <!-- Sentinel -->
+        <!-- Sentinel 流量控制依赖 -->
         <sentinel.version>1.8.8</sentinel.version>
-        <!-- Apache Tika -->
+        <!-- Apache Tika 文本提取依赖 -->
         <tika.version>2.9.2</tika.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <!-- Spring Boot -->
+            <!-- Spring Boot 核心依赖 -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -60,13 +60,13 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- Spring Boot JDBC -->
+            <!-- Spring Boot 数据库连接依赖 -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-jdbc</artifactId>
                 <version>${spring-boot.version}</version>
             </dependency>
-            <!-- Postgres -->
+            <!-- PostgreSQL 数据库驱动依赖 -->
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
@@ -78,25 +78,25 @@
                 <version>${lombok.version}</version>
                 <scope>provided</scope>
             </dependency>
-            <!-- Mybatis -->
+            <!-- MyBatis 持久化依赖 -->
             <dependency>
                 <groupId>org.mybatis.spring.boot</groupId>
                 <artifactId>mybatis-spring-boot-starter</artifactId>
                 <version>${mybatis.version}</version>
             </dependency>
-            <!-- MybatisPlus -->
+            <!-- MyBatis-Plus 持久化增强依赖 -->
             <dependency>
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybatis-plus.version}</version>
             </dependency>
-            <!-- MapStruct for automatic DTO mapping -->
+            <!-- 使用 MapStruct 自动映射数据传输对象 -->
             <dependency>
                 <groupId>org.mapstruct</groupId>
                 <artifactId>mapstruct</artifactId>
                 <version>${mapstruct.version}</version>
             </dependency>
-            <!-- Sentinel -->
+            <!-- Sentinel 流量控制依赖 -->
             <dependency>
                 <groupId>com.alibaba.csp</groupId>
                 <artifactId>sentinel-core</artifactId>
