@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-10-23T13:13:25.747Z",
+  "model": "qwen-plus-latest",
+  "before": 0,
+  "capabilities": [
+    {
+      "capability_type": "SCHEDULE_EXTRACTION",
+      "is_enabled": true,
+      "is_default": false
+    },
+    {
+      "capability_type": "TRANSLATION",
+      "is_enabled": true,
+      "is_default": false
+    },
+    {
+      "capability_type": "CHAT_SUMMARY",
+      "is_enabled": true,
+      "is_default": false
+    },
+    {
+      "capability_type": "POLISH",
+      "is_enabled": true,
+      "is_default": false
+    },
+    {
+      "capability_type": "SMART_REPLY",
+      "is_enabled": true,
+      "is_default": false
+    }
+  ],
+  "existingModelsUnchanged": true
+}

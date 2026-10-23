@@ -43,6 +43,12 @@ for (const width of [375, 580, 1024]) {
       .getByRole('button', { name: '发消息' })
       .click();
     await expect(page.locator('.chat-list .conversation-row')).toHaveCount(4);
+    await expect(
+      page
+        .locator('.chat-list .conversation-row')
+        .filter({ hasText: '陈一诺' })
+        .locator('.conversation-unread'),
+    ).toHaveCount(0);
     await expect(page.locator('.message')).toHaveCount(3);
     const first = page.locator('.message-body p').first();
     await first.scrollIntoViewIfNeeded();
@@ -63,11 +69,11 @@ for (const width of [375, 580, 1024]) {
     await expect(toolbar).toContainText('已选 1 条');
     await page.locator('.message').nth(1).getByRole('checkbox').check();
     await expect(toolbar).toContainText('已选 2 条');
-    await page.screenshot({path: `artifacts/chat-multiselect-${width}.png`,fullPage:true});
+    await page.screenshot({ path: `artifacts/chat-multiselect-${width}.png`, fullPage: true });
     await toolbar.getByRole('button', { name: '转发', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText('转发 2 条消息');
-    await page.screenshot({path: `artifacts/chat-forward-dialog-${width}.png`,fullPage:true});
+    await page.screenshot({ path: `artifacts/chat-forward-dialog-${width}.png`, fullPage: true });
     expect(
       await dialog.evaluate((element) => element.parentElement?.parentElement === document.body),
     ).toBe(true);
@@ -116,8 +122,12 @@ test('invalid stored preferences do not crash chat and selected messages can be 
   await expect(page.getByRole('toolbar')).toContainText('已选 1 条');
   await page.locator('.message-choice').first().uncheck();
   await expect(page.getByRole('toolbar')).toContainText('已选 0 条');
-  await expect(page.getByRole('toolbar').getByRole('button',{name:'删除',exact:true})).toBeDisabled();
-  await expect(page.getByRole('toolbar').getByRole('button',{name:'转发',exact:true})).toBeDisabled();
+  await expect(
+    page.getByRole('toolbar').getByRole('button', { name: '删除', exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('toolbar').getByRole('button', { name: '转发', exact: true }),
+  ).toBeDisabled();
   await page.getByRole('toolbar').getByRole('button', { name: '取消', exact: true }).click();
   await expect(page.getByRole('toolbar')).toHaveCount(0);
 });

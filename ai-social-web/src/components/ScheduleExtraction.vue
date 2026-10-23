@@ -3,6 +3,7 @@ import { redactIdentifiers } from '../lib/presentation';
 import { ref } from 'vue';
 import { CalendarPlus, Sparkles, Clock3, Check } from 'lucide-vue-next';
 import { demo, post } from '../lib/api';
+import DateTimeField from './DateTimeField.vue';
 const props = defineProps<{ model: string }>(),
   emit = defineEmits<{ saved: []; notify: [message: string] }>();
 const text = ref(''),
@@ -77,11 +78,14 @@ async function save(item: any) {
           placeholder="例如：明天下午两点一起开产品方案讨论会，在线上碰面。"
           rows="5"
         /></label
-      ><button class="primary" :disabled="busy || !text.trim()">
+      ><button class="primary" :disabled="busy || !text.trim() || (!demo && !model)">
         <Sparkles :size="16" />{{ busy ? '正在处理…' : '提取日程' }}
       </button>
     </form>
     <p class="field-note">AI 返回的是时间描述，请核对并填写准确的起止时间后保存。</p>
+    <p v-if="!demo && !model" class="field-note" role="status">
+      AI 暂时不可用，你可以前往日程页面手动添加约定。
+    </p>
     <p v-if="error" class="inline-error" role="alert">{{ redactIdentifiers(error) }}</p>
   </section>
   <section v-for="(item, i) in items" :key="i" class="card extraction-editor">
@@ -92,19 +96,8 @@ async function save(item: any) {
     <form @submit.prevent="save(item)">
       <label>日程标题<input v-model="item.title" :disabled="item.saved" required /></label>
       <div class="two-fields">
-        <label
-          >确认开始时间<input
-            v-model="item.start_time"
-            :disabled="item.saved"
-            type="datetime-local"
-            required /></label
-        ><label
-          >确认结束时间<input
-            v-model="item.end_time"
-            :disabled="item.saved"
-            type="datetime-local"
-            required
-        /></label>
+        <DateTimeField v-model="item.start_time" label="确认开始时间" :disabled="item.saved" />
+        <DateTimeField v-model="item.end_time" label="确认结束时间" :disabled="item.saved" />
       </div>
       <label>日程地点<input v-model="item.location" :disabled="item.saved" /></label
       ><button class="primary" :disabled="busy || item.saved">

@@ -1,0 +1,148 @@
+{
+  "timestamp": "2026-10-23T13:28:03.961Z",
+  "base": "http://127.0.0.1:8083/api/v1",
+  "checks": [
+    {
+      "name": "phone lookup locates the exact test account without returning contacts",
+      "pass": true
+    },
+    {
+      "name": "stranger friend application succeeds",
+      "pass": true,
+      "status": 204
+    },
+    {
+      "name": "recipient sees a pending application",
+      "pass": true
+    },
+    {
+      "name": "friend application is accepted",
+      "pass": true
+    },
+    {
+      "name": "friendship is visible to the sender",
+      "pass": true
+    },
+    {
+      "name": "friendship can be removed",
+      "pass": true
+    },
+    {
+      "name": "removed friend can receive a new application",
+      "pass": true,
+      "status": 204
+    },
+    {
+      "name": "recipient sees a pending application",
+      "pass": true
+    },
+    {
+      "name": "friend application is accepted",
+      "pass": true
+    },
+    {
+      "name": "friendship is visible to the sender",
+      "pass": true
+    },
+    {
+      "name": "friendship can be removed",
+      "pass": true
+    },
+    {
+      "name": "exact username lookup confirms the correct person",
+      "pass": true
+    },
+    {
+      "name": "lookup returns only public confirmation fields",
+      "pass": true
+    },
+    {
+      "name": "invalid phone returns a parameter error",
+      "pass": true,
+      "status": 400
+    },
+    {
+      "name": "AI model catalog is a successful explicit list",
+      "pass": true
+    },
+    {
+      "name": "private conversations have peer names",
+      "pass": true
+    },
+    {
+      "name": "group count includes the owner",
+      "pass": true
+    },
+    {
+      "name": "outsider cannot read group detail",
+      "pass": true,
+      "status": 403
+    },
+    {
+      "name": "outsider cannot read group /members",
+      "pass": true,
+      "status": 403
+    },
+    {
+      "name": "outsider cannot read group /members/admins",
+      "pass": true,
+      "status": 403
+    },
+    {
+      "name": "send response includes the real sender",
+      "pass": true
+    },
+    {
+      "name": "history preserves both sender identities",
+      "pass": true
+    },
+    {
+      "name": "attachment upload succeeds",
+      "pass": true
+    },
+    {
+      "name": "file message includes sender and filename",
+      "pass": true
+    },
+    {
+      "name": "group with messages dissolves successfully",
+      "pass": true,
+      "status": 204
+    },
+    {
+      "name": "dissolved group rejects new messages",
+      "pass": true,
+      "status": 404
+    },
+    {
+      "name": "schedule creation succeeds",
+      "pass": true
+    },
+    {
+      "name": "schedule update succeeds",
+      "pass": true
+    },
+    {
+      "name": "schedule deletion succeeds",
+      "pass": true
+    },
+    {
+      "name": "owner can read task detail",
+      "pass": true
+    },
+    {
+      "name": "other accounts cannot read task detail",
+      "pass": true,
+      "status": 404
+    },
+    {
+      "name": "profile query works after the authorized schema migration",
+      "pass": true
+    }
+  ],
+  "aiModels": 1,
+  "summary": {
+    "passed": 32,
+    "total": 32
+  }
+}

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next';
-const props = defineProps<{ modelValue: string; label: string }>();
+const props = defineProps<{ modelValue: string; label: string; disabled?: boolean }>();
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const expanded = ref(false),
   month = ref(new Date());
@@ -59,6 +59,7 @@ function closeOnBlur(event: FocusEvent) {
         <input
           v-model="text"
           type="text"
+          :disabled="disabled"
           required
           pattern="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}"
           placeholder="YYYY-MM-DD HH:mm"
@@ -69,6 +70,7 @@ function closeOnBlur(event: FocusEvent) {
         <button
           type="button"
           class="icon-button"
+          :disabled="disabled"
           :aria-label="'选择' + label"
           :aria-expanded="expanded"
           @click="toggle"

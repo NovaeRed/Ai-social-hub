@@ -140,9 +140,7 @@ async function lookupAccount() {
     const person = demo
       ? { public_id: 'demo-new-friend', nickname: '顾星河', username: 'xinghe' }
       : await request(
-          lookupType.value === 'PUBLIC_ID'
-            ? `/users/${encodeURIComponent(code)}`
-            : '/users/lookup?' + new URLSearchParams({ type: lookupType.value, value: code }),
+          '/users/lookup?' + new URLSearchParams({ type: lookupType.value, value: code }),
         );
     if (
       sequence !== lookupSequence ||
@@ -707,8 +705,12 @@ async function load() {
       if (r.status === 'fulfilled') setters[i](r.value);
       else error.value += `${r.reason.message}；`;
     });
-    model.value ||=
-      import.meta.env.VITE_DEFAULT_MODEL || availableModels.value[0]?.option_code || '';
+    if (!availableModels.value.some((m) => m.option_code === model.value))
+      model.value =
+        availableModels.value.find((m) => m.option_code === import.meta.env.VITE_DEFAULT_MODEL)
+          ?.option_code ||
+        availableModels.value[0]?.option_code ||
+        '';
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -877,6 +879,8 @@ async function chatWith(f: User) {
       delete removedChats.value[id];
       saveChatPreferences();
     }
+    const conversation = conversations.value.find((c) => c.public_id === id);
+    if (conversation) conversation.unread_count = 0;
     selected.value = id;
     go('/messages');
   });
@@ -1753,6 +1757,9 @@ onUnmounted(() => {
             </div>
             <span class="pill"><Sparkles :size="14" />AI WORKSPACE</span>
           </div>
+          <p v-if="!demo && !models.length" class="inline-error" role="status">
+            AI 暂时不可用，请稍后再试。聊天和手动日程仍可正常使用。
+          </p>
           <div class="ai-tabs">
             <button
               :class="{ active: tool === 'schedule' }"
@@ -1815,7 +1822,12 @@ onUnmounted(() => {
                   <option value="ja">翻译为日语</option></select
                 ><span v-else class="muted">{{ aiInput.length }} 字</span
                 ><button v-if="aiBusy" class="secondary" @click="stopAi">停止生成</button
-                ><button v-else class="primary" :disabled="!aiInput.trim()" @click="runAi">
+                ><button
+                  v-else
+                  class="primary"
+                  :disabled="!aiInput.trim() || (!demo && !availableModels.length)"
+                  @click="runAi"
+                >
                   <Sparkles :size="16" />开始生成
                 </button>
               </div>

@@ -76,7 +76,7 @@ async function run(next: Tool) {
       available.value[0]?.option_code ||
       '';
   if (!demo && !model.value) {
-    error.value = '暂无支持此功能的模型，请稍后再试。';
+    error.value = 'AI 暂时不可用，请稍后再试。你的草稿已保留。';
     return;
   }
   const id = ++generation;

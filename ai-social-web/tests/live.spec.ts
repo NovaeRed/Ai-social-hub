@@ -45,6 +45,101 @@ async function login(page: Page, index = 0) {
   await expect(page.locator('.loading')).toHaveCount(0);
   await expect(page.locator('.error')).toHaveCount(0);
 }
+async function mockAiCatalog(page: Page) {
+  await page.route('**/ai/models', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 200,
+        data: {
+          models: [
+            {
+              option_code: 'test:qa',
+              name: 'QA',
+              provider: 'test',
+              capabilities: ['POLISH', 'SMART_REPLY', 'CHAT_SUMMARY'],
+            },
+          ],
+        },
+      }),
+    }),
+  );
+}
+
+test('configured AI actually polishes in chat and saves a confirmed extracted schedule', async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto('/#/messages');
+  await page.locator('.chat-list .conversation-row').first().click();
+  await expect(page.getByLabel('上传聊天文件')).toBeEnabled();
+  const original = '明天下午我们讨论一下产品方案吧';
+  const messageCount = await page.locator('.chat-messages .message').count();
+  await page.getByLabel('消息内容').fill(original);
+  await page.getByRole('button', { name: 'AI 润色', exact: true }).click();
+  await expect(page.getByRole('button', { name: '撤销润色', exact: true })).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.getByLabel('消息内容')).not.toHaveValue(original);
+  await expect(page.locator('.chat-messages .message')).toHaveCount(messageCount);
+  await expect(page).toHaveURL(/messages/);
+  await page.screenshot({ path: 'artifacts/live-real-ai-polish.png', fullPage: true });
+  await page.getByRole('button', { name: '撤销润色', exact: true }).click();
+  await expect(page.getByLabel('消息内容')).toHaveValue(original);
+  await page.goto('/#/ai');
+  await page.getByRole('button', { name: '日程提取', exact: true }).click();
+  const title = '真实AI日程验收 ' + Date.now();
+  await page
+    .getByLabel('包含约定的聊天内容')
+    .fill('2026年10月24日下午2点到3点，在线上会议室开产品方案讨论会。');
+  await page.getByRole('button', { name: '提取日程', exact: true }).click();
+  const item = page
+    .locator('.extraction-editor')
+    .filter({ has: page.getByRole('heading', { name: '待确认日程 1', exact: true }) });
+  await expect(item).toBeVisible({ timeout: 30000 });
+  await item.getByLabel('日程标题', { exact: true }).fill(title);
+  await item.getByLabel('确认开始时间', { exact: true }).fill('2026-10-24 14:00');
+  await item.getByLabel('确认结束时间', { exact: true }).fill('2026-10-24 15:00');
+  await item.getByRole('button', { name: '确认并保存日程', exact: true }).click();
+  await expect(item.getByRole('button', { name: '已保存到日程', exact: true })).toBeDisabled();
+  await page.evaluate(async (title) => {
+    const headers = { Authorization: 'Bearer ' + sessionStorage.getItem('access_token') };
+    const range = new URLSearchParams({
+      start_time: '2026-10-01T00:00:00+08:00',
+      end_time: '2026-11-01T00:00:00+08:00',
+    });
+    const list = await (await fetch('/api/v1/schedules?' + range, { headers })).json();
+    const saved = list.data.find((schedule: any) => schedule.title === title);
+    if (!saved) throw new Error('真实AI日程未持久化');
+    const response = await fetch('/api/v1/schedules/' + encodeURIComponent(saved.public_id), {
+      method: 'DELETE',
+      headers,
+    });
+    if (!response.ok) throw new Error('联调日程清理失败');
+  }, title);
+});
+
+test('an unavailable AI service disables generation and preserves chat drafts', async ({
+  page,
+}) => {
+  await page.route('**/ai/models', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 200, data: { models: [] } }),
+    }),
+  );
+  await login(page);
+  await page.goto('/#/ai');
+  await page.getByLabel('写下你想处理的内容').fill('不可用时不能误发送');
+  await expect(page.getByRole('button', { name: '开始生成', exact: true })).toBeDisabled();
+  await expect(page.locator('.page-content')).toContainText('AI 暂时不可用');
+  await page.goto('/#/messages');
+  await page.locator('.chat-list .conversation-row').first().click();
+  await page.getByLabel('消息内容').fill('需要保留的原始草稿');
+  await page.getByRole('button', { name: 'AI 润色', exact: true }).click();
+  await expect(page.locator('.chat-ai-tray').getByRole('alert')).toContainText('草稿已保留');
+  await expect(page.getByLabel('消息内容')).toHaveValue('需要保留的原始草稿');
+});
 
 test('stranger lookup verifies usernames and phones before sending an application', async ({
   page,
@@ -89,6 +184,11 @@ test('stranger lookup verifies usernames and phones before sending an applicatio
   await page.getByRole('button', { name: '查找用户', exact: true }).last().click();
   await expect(page.getByRole('dialog')).toContainText('已选择：夏晚');
   expect(lookups[1]).toBe('PHONE:13800138001');
+  await page.getByLabel('查找方式', { exact: true }).selectOption('PUBLIC_ID');
+  await page.getByLabel('用户 ID', { exact: true }).fill(hiddenId);
+  await page.getByRole('button', { name: '查找用户', exact: true }).last().click();
+  await expect(page.getByRole('dialog')).toContainText('已选择：夏晚');
+  expect(lookups[2]).toBe('PUBLIC_ID:' + hiddenId);
   await page.getByRole('button', { name: '发送申请', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('好友申请已发送');
   expect(requestedUser).toBe(hiddenId);
@@ -309,6 +409,7 @@ test('contacts and AI details use names while keeping identifiers inside API cal
 test('inline chat AI consumes SSE and keeps the draft on failure without navigating', async ({
   page,
 }) => {
+  await mockAiCatalog(page);
   await login(page);
   await page.goto('/#/messages');
   await page.locator('.chat-list .conversation-row').first().click();
@@ -356,6 +457,7 @@ test('inline chat AI consumes SSE and keeps the draft on failure without navigat
 test('switching conversations cancels pending polishing and preserves separate drafts', async ({
   page,
 }) => {
+  await mockAiCatalog(page);
   await login(page);
   await page.goto('/#/messages');
   const rows = page.locator('.chat-list .conversation-row');
@@ -469,6 +571,10 @@ test('live group lifecycle, member roles, chat, file and settings', async ({ pag
   await page.getByLabel('消息内容').fill('真实后端浏览器群聊验证');
   await page.getByRole('button', { name: '发送', exact: true }).click();
   await expect(page.locator('.chat-messages')).toContainText('真实后端浏览器群聊验证');
+  await expect(
+    page.locator('.message.mine').filter({ hasText: '真实后端浏览器群聊验证' }),
+  ).toHaveCount(1);
+  await expect(page.locator('.chat-messages')).not.toContainText('未知成员');
   await page.getByLabel('上传聊天文件').setInputFiles({
     name: 'browser-check.txt',
     mimeType: 'text/plain',
@@ -502,7 +608,7 @@ test('live group lifecycle, member roles, chat, file and settings', async ({ pag
   await page.getByRole('button', { name: '退出群聊', exact: true }).click();
   await page.getByRole('button', { name: '确认操作', exact: true }).click();
   await expect(page.locator('.group-detail')).toHaveCount(0);
-  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:5186' });
+  const context = await browser.newContext({ baseURL: new URL(page.url()).origin });
   const second = await context.newPage();
   await login(second, 1);
   await second.goto('/#/groups?group=' + groupId);
@@ -510,9 +616,7 @@ test('live group lifecycle, member roles, chat, file and settings', async ({ pag
   await expect(second).toHaveURL(/#\/groups$/);
   await second.getByRole('button', { name: '解散群聊', exact: true }).click();
   await second.getByRole('button', { name: '确认操作', exact: true }).click();
-  await expect(second.getByRole('dialog').getByRole('alert')).toContainText('服务器内部错误');
-  await expect(second.locator('.group-detail')).toHaveCount(1);
-  await second.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await expect(second.locator('.group-detail')).toHaveCount(0);
   await second.getByRole('button', { name: '创建群聊', exact: true }).click();
   await second.getByLabel('群聊名称', { exact: true }).fill('可解散空群 ' + Date.now());
   await second.getByRole('dialog').getByRole('button', { name: '创建群聊', exact: true }).click();
@@ -522,13 +626,14 @@ test('live group lifecycle, member roles, chat, file and settings', async ({ pag
   await context.close();
   expect(errors).toEqual([]);
 });
-test('live AI activity exposes backend failures and all pages fit mobile', async ({ page }) => {
+test('live AI activity handles empty profiles and all pages fit mobile', async ({ page }) => {
   await login(page);
   await page.goto('/#/insights');
   await page.getByRole('button', { name: '使用统计', exact: true }).click();
   await expect(page.locator('.usage-stats')).toBeVisible();
   await page.getByRole('button', { name: '沟通画像', exact: true }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '还没有生成沟通画像' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.locator('.error')).toHaveCount(0);
   await page.setViewportSize({ width: 375, height: 900 });
   for (const path of [
