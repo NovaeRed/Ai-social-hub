@@ -12,6 +12,9 @@ import cn.redture.aiEngine.pojo.model.AiConfigParams;
 import cn.redture.aiEngine.pojo.vo.*;
 import cn.redture.aiEngine.service.AiConfigService;
 import cn.redture.aiEngine.service.AiAsyncSubmissionService;
+import cn.redture.aiEngine.llm.config.ModelCatalog;
+import cn.redture.aiEngine.llm.config.AiProviderProperties;
+import cn.redture.aiEngine.llm.factory.ModelProviderStrategyFactory;
 import cn.redture.common.integration.ai.AiExternalService;
 import cn.redture.common.util.JsonUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -48,6 +51,8 @@ public class AiConfigServiceImpl implements AiConfigService {
     private final StreamMessagePublisher streamMessagePublisher;
     private final AiExternalService aiExternalService;
     private final AiAsyncSubmissionService aiAsyncSubmissionService;
+    private final ModelCatalog modelCatalog;
+    private final ModelProviderStrategyFactory providerFactory;
 
     // 批量分析触发的消息数阈值
     @Value("${ai.persona.timeline.message-threshold:20}")
@@ -69,6 +74,9 @@ public class AiConfigServiceImpl implements AiConfigService {
         );
 
         return capabilities.stream()
+                .filter(c -> providerFactory.supportsProvider(c.getProvider()))
+                .filter(c -> modelCatalog.findEnabledCandidateByProviderAndModel(c.getProvider(), c.getModelName()) != null)
+                .filter(c -> hasProviderCredentials(c.getProvider()))
                 .collect(Collectors.groupingBy(c -> c.getModelName() + ":" + c.getProvider()))
                 .values().stream()
                 .map(list -> {
@@ -85,6 +93,14 @@ public class AiConfigServiceImpl implements AiConfigService {
                     return model;
                 })
                 .collect(Collectors.toList());
+    }
+
+    private boolean hasProviderCredentials(String provider) {
+        AiProviderProperties.ProviderConfig config = modelCatalog.findEnabledProviderConfig(provider);
+        return config != null && config.getApiKey() != null && !config.getApiKey().isBlank()
+                && config.getUrl() != null && !config.getUrl().isBlank()
+                && config.getEndpoints() != null && config.getEndpoints().get("chat") != null
+                && !config.getEndpoints().get("chat").isBlank();
     }
 
     /**
