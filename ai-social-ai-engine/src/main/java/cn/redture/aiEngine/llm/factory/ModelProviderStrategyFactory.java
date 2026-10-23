@@ -79,4 +79,8 @@ public class ModelProviderStrategyFactory {
         return strategy;
     }
 
+    public boolean supportsProvider(String provider) {
+        return strategyMap.containsKey(ModelProviderUtil.normalizeProvider(provider));
+    }
+
 }

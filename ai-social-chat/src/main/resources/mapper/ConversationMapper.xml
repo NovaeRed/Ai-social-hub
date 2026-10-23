@@ -25,7 +25,14 @@
         c.id,
         c.public_id AS publicId,
         c.type,
-        c.name,
+        CASE WHEN c.type = 'PRIVATE' THEN COALESCE(
+            (SELECT CASE WHEN u.nickname IS NOT NULL AND u.nickname != '' AND u.nickname NOT LIKE 'AIHub\_%' ESCAPE '\'
+                         THEN u.nickname ELSE u.username END
+             FROM conversation_members peer
+             JOIN users u ON u.id = peer.user_id AND u.deleted_at IS NULL
+             WHERE peer.conversation_id = c.id AND peer.user_id != #{userId}
+             ORDER BY peer.id LIMIT 1), '已注销用户')
+        ELSE c.name END AS name,
         c.latest_message_id AS latestMessageId,
         m.public_id AS latestMessagePublicId,
         m.content AS latestMessageContent,
@@ -54,6 +61,7 @@
         SELECT c.*
         FROM conversations c
         WHERE c.type = 'PRIVATE'
+          AND c.deleted_at IS NULL
           AND EXISTS (SELECT 1
                       FROM conversation_members m1
                       WHERE m1.conversation_id = c.id

@@ -68,7 +68,8 @@ public class MessageServiceImpl implements MessageService {
     @Transactional
     public void clearConversationMessages(Long currentUserId, String conversationPublicId) {
         Conversation conv = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
-                .eq(Conversation::getPublicId, conversationPublicId));
+                .eq(Conversation::getPublicId, conversationPublicId)
+                .isNull(Conversation::getDeletedAt));
         if (conv == null) {
             throw new ResourceNotFoundException("会话不存在");
         }
@@ -85,7 +86,8 @@ public class MessageServiceImpl implements MessageService {
         Long userId = SecurityContextHolderUtil.getUserId();
 
         Conversation conv = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
-                .eq(Conversation::getPublicId, conversationPublicId));
+                .eq(Conversation::getPublicId, conversationPublicId)
+                .isNull(Conversation::getDeletedAt));
         if (conv == null) {
             return new CursorPageResult<>();
         }
@@ -132,7 +134,8 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public MessageItemVO createMessage(String conversationPublicId, Long senderUserId, CreateMessageDTO dto) {
         Conversation conv = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
-                .eq(Conversation::getPublicId, conversationPublicId));
+                .eq(Conversation::getPublicId, conversationPublicId)
+                .isNull(Conversation::getDeletedAt));
         if (conv == null) {
             throw new ResourceNotFoundException("会话不存在");
         }
@@ -252,7 +255,8 @@ public class MessageServiceImpl implements MessageService {
         try {
             // 1. 按 publicId 查询会话
             Conversation conv = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
-                    .eq(Conversation::getPublicId, conversationPublicId));
+                    .eq(Conversation::getPublicId, conversationPublicId)
+                .isNull(Conversation::getDeletedAt));
             
             if (conv == null) {
                 log.warn("会话不存在：{}", conversationPublicId);
@@ -311,7 +315,8 @@ public class MessageServiceImpl implements MessageService {
     public List<MessageItemVO> getUserMessagesInConversation(String conversationPublicId, Long userId, int limit) {
         try {
             Conversation conv = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
-                    .eq(Conversation::getPublicId, conversationPublicId));
+                    .eq(Conversation::getPublicId, conversationPublicId)
+                .isNull(Conversation::getDeletedAt));
 
             if (conv == null) {
                 log.error("会话不存在：{}", conversationPublicId);

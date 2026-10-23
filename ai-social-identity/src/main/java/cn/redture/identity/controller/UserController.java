@@ -7,6 +7,8 @@ import cn.redture.identity.pojo.dto.ChangePasswordDTO;
 import cn.redture.identity.pojo.dto.UpdateUserDTO;
 import cn.redture.identity.pojo.vo.UserInformation;
 import cn.redture.identity.service.UserService;
+import cn.redture.identity.service.UserLookupService;
+import cn.redture.identity.pojo.vo.UserLookupResult;
 import jakarta.annotation.Resource;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,8 @@ public class UserController {
 
     @Resource
     private UserService userService;
+    @Resource
+    private UserLookupService userLookupService;
     @Resource
     private ApplicationEventPublisher eventPublisher;
 
@@ -31,6 +35,12 @@ public class UserController {
     public RestResult<UserInformation> getUserByPublicId(@PathVariable("user_public_id") String userPublicId) {
         UserInformation userResult = userService.getUserByPublicId(userPublicId);
         return RestResult.success(userResult);
+    }
+
+    @GetMapping("/lookup")
+    public RestResult<UserLookupResult> lookup(@RequestParam("type") String type,
+                                               @RequestParam("value") String value) {
+        return RestResult.success(userLookupService.lookup(SecurityContextHolderUtil.getUserId(), type, value));
     }
 
     @PatchMapping("/me")

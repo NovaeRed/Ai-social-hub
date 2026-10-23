@@ -73,6 +73,7 @@ public class GroupServiceImpl implements GroupService {
         group.setPublicId(IdUtil.nextId());
         group.setType(ConversationTypeEnum.GROUP);
         group.setName(name);
+        group.setMemberCount(1L);
         group.setCreatedAt(OffsetDateTime.now());
         conversationMapper.insert(group);
 
@@ -93,7 +94,7 @@ public class GroupServiceImpl implements GroupService {
     @Transactional
     @Override
     public void batchInsertMembers(Long conversationId, List<Long> userIds) {
-        List<ConversationMember> members = userIds.stream().map(userId -> {
+        List<ConversationMember> members = userIds.stream().filter(Objects::nonNull).distinct().map(userId -> {
             if (conversationMemberMapper.selectByConversationIdAndUserId(conversationId, userId) != null) {
                 // 已经是成员，跳过
                 return null;
@@ -102,9 +103,12 @@ public class GroupServiceImpl implements GroupService {
             ConversationMember m = new ConversationMember();
             m.setConversationId(conversationId);
             m.setUserId(userId);
+            m.setRole(ConversationMemberRoleEnum.MEMBER);
             m.setJoinedAt(OffsetDateTime.now());
             return m;
-        }).collect(Collectors.toList());
+        }).filter(Objects::nonNull).collect(Collectors.toList());
+
+        if (members.isEmpty()) return;
 
         int newMemberCount = conversationMemberMapper.insertBatch(members);
         // 更新群成员数
@@ -191,6 +195,7 @@ public class GroupServiceImpl implements GroupService {
     @Override
     public List<GroupAdminVO> listGroupAdmins(Long currentUserId, String groupPublicId) {
         Conversation group = getConversationByPublicId(groupPublicId);
+        requireMember(group.getId(), currentUserId);
         List<ConversationMember> adminMembers = conversationMemberMapper.selectList(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, group.getId())
                 .in(ConversationMember::getRole, Arrays.asList(ConversationMemberRoleEnum.OWNER, ConversationMemberRoleEnum.ADMIN)));
@@ -288,7 +293,8 @@ public class GroupServiceImpl implements GroupService {
             }
             membersToUpdateIds.add(userId);
         });
-        conversationMemberMapper.batchUpdateRoleToMember(group.getId(), membersToUpdateIds);
+        if (!membersToUpdateIds.isEmpty())
+            conversationMemberMapper.batchUpdateRoleToMember(group.getId(), membersToUpdateIds);
     }
 
     /**
@@ -383,6 +389,7 @@ public class GroupServiceImpl implements GroupService {
     public void removeGroup(Long currentUserId, String groupPublicId) {
         Conversation group = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
                 .eq(Conversation::getPublicId, groupPublicId)
+                .isNull(Conversation::getDeletedAt)
                 .eq(Conversation::getType, ConversationTypeEnum.GROUP));
 
         if (group == null) {
@@ -397,7 +404,10 @@ public class GroupServiceImpl implements GroupService {
         conversationMemberMapper.delete(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, group.getId()));
 
-        conversationMapper.deleteById(group.getId());
+        // Keep messages and their foreign keys for retention; dissolved groups
+        // are excluded from every public conversation read/write path.
+        group.setDeletedAt(OffsetDateTime.now());
+        conversationMapper.updateById(group);
     }
 
     @Override
@@ -493,10 +503,12 @@ public class GroupServiceImpl implements GroupService {
     public GroupDetailVO getGroupDetail(Long currentUserId, String groupPublicId) {
         Conversation group = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
                 .eq(Conversation::getPublicId, groupPublicId)
+                .isNull(Conversation::getDeletedAt)
                 .eq(Conversation::getType, ConversationTypeEnum.GROUP));
         if (group == null) {
             throw new ResourceNotFoundException("群组");
         }
+        requireMember(group.getId(), currentUserId);
 
         List<ConversationMember> members = conversationMemberMapper.selectList(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, group.getId()));
@@ -538,12 +550,18 @@ public class GroupServiceImpl implements GroupService {
     private Conversation getConversationByPublicId(String groupPublicId) {
         Conversation group = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
                 .eq(Conversation::getPublicId, groupPublicId)
+                .isNull(Conversation::getDeletedAt)
                 .eq(Conversation::getType, ConversationTypeEnum.GROUP)
                 .last("FOR UPDATE"));
         if (group == null) {
             throw new ResourceNotFoundException("群组");
         }
         return group;
+    }
+
+    private void requireMember(Long conversationId, Long userId) {
+        if (userId == null || conversationMemberMapper.selectByConversationIdAndUserId(conversationId, userId) == null)
+            throw new AccessDeniedException("不是群组成员，无法查看群资料");
     }
 }
 
