@@ -10,6 +10,8 @@ import cn.redture.aiEngine.mapper.AiTaskMapper;
 import cn.redture.aiEngine.pojo.model.ModelConfig;
 import cn.redture.aiEngine.service.AiTaskService;
 import cn.redture.common.util.IdUtil;
+import cn.redture.common.util.SecurityContextHolderUtil;
+import cn.redture.common.exception.businessException.ResourceNotFoundException;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -218,13 +220,14 @@ public class AiTaskServiceImpl implements AiTaskService {
      * 查询任务详情并转换为前端展示对象。
      *
      * @param publicId 任务公开 ID
-     * @return 任务详情，不存在时返回 null
+     * @return 当前用户的任务详情，不存在或不属于当前用户时返回 404
      */
     @Override
     public AiTaskDetailVO getTaskDetail(String publicId) {
+        Long currentUserId = SecurityContextHolderUtil.getUserId();
         AiTask task = getTaskByPublicId(publicId);
-        if (task == null) {
-            return null;
+        if (task == null || !currentUserId.equals(task.getUserId())) {
+            throw new ResourceNotFoundException("任务");
         }
 
         AiTaskDetailVO vo = new AiTaskDetailVO();
