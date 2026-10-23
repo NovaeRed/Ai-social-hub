@@ -80,7 +80,7 @@ public class AiJobController {
     }
 
     @GetMapping("/{publicId}")
-    public RestResult<AiTaskDetailVO> getTaskDetail(@PathVariable String publicId) {
+    public RestResult<AiTaskDetailVO> getTaskDetail(@PathVariable("publicId") String publicId) {
         AiTaskDetailVO detail = aiTaskService.getTaskDetail(publicId);
         return RestResult.success(detail);
     }
