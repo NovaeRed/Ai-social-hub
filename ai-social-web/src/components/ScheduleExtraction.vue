@@ -1,0 +1,115 @@
+<script setup lang="ts">
+import { redactIdentifiers } from '../lib/presentation';
+import { ref } from 'vue';
+import { CalendarPlus, Sparkles, Clock3, Check } from 'lucide-vue-next';
+import { demo, post } from '../lib/api';
+const props = defineProps<{ model: string }>(),
+  emit = defineEmits<{ saved: []; notify: [message: string] }>();
+const text = ref(''),
+  busy = ref(false),
+  error = ref(''),
+  items = ref<any[]>([]);
+async function extract() {
+  busy.value = true;
+  error.value = '';
+  items.value = [];
+  try {
+    if (!props.model && !demo) throw new Error('请先选择可用的 AI 模型');
+    const result = demo
+      ? { schedules: [{ title: '产品方案讨论', time: '明天下午两点', location: '线上' }] }
+      : await post('/ai/interactions/schedule', {
+          messages: [{ sender: '我', content: text.value, timestamp: new Date().toISOString() }],
+          model_option_code: props.model,
+          context: { timezone: 'Asia/Shanghai' },
+        });
+    items.value = (result.schedules || []).map((i: any) => ({
+      ...i,
+      start_time: '',
+      end_time: '',
+      saved: false,
+    }));
+    if (!items.value.length) error.value = '没有识别到日程，请提供活动名称、时间或地点等信息';
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    busy.value = false;
+  }
+}
+async function save(item: any) {
+  if (busy.value) return;
+  busy.value = true;
+  error.value = '';
+  try {
+    if (!item.title.trim() || !item.start_time || !item.end_time)
+      throw new Error('请补全标题、开始时间和结束时间');
+    if (new Date(item.end_time) <= new Date(item.start_time))
+      throw new Error('结束时间必须晚于开始时间');
+    if (!demo)
+      await post('/schedules', {
+        title: item.title,
+        description: 'AI 提取时间描述：' + item.time,
+        start_time: new Date(item.start_time).toISOString(),
+        end_time: new Date(item.end_time).toISOString(),
+        location: item.location,
+        is_ai_extracted: true,
+      });
+    item.saved = true;
+    emit('saved');
+    emit('notify', '日程已确认并保存');
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    busy.value = false;
+  }
+}
+</script>
+<template>
+  <section class="card extraction-editor">
+    <div class="section-heading">
+      <h3><CalendarPlus :size="18" />把聊天中的约定记下来</h3>
+      <span class="pill">{{ demo ? '演示提取' : '智能日程' }}</span>
+    </div>
+    <form @submit.prevent="extract">
+      <label
+        >包含约定的聊天内容<textarea
+          v-model="text"
+          required
+          placeholder="例如：明天下午两点一起开产品方案讨论会，在线上碰面。"
+          rows="5"
+        /></label
+      ><button class="primary" :disabled="busy || !text.trim()">
+        <Sparkles :size="16" />{{ busy ? '正在处理…' : '提取日程' }}
+      </button>
+    </form>
+    <p class="field-note">AI 返回的是时间描述，请核对并填写准确的起止时间后保存。</p>
+    <p v-if="error" class="inline-error" role="alert">{{ redactIdentifiers(error) }}</p>
+  </section>
+  <section v-for="(item, i) in items" :key="i" class="card extraction-editor">
+    <div class="section-heading">
+      <h3>待确认日程 {{ i + 1 }}</h3>
+      <span class="pill"><Clock3 :size="12" />{{ item.time }}</span>
+    </div>
+    <form @submit.prevent="save(item)">
+      <label>日程标题<input v-model="item.title" :disabled="item.saved" required /></label>
+      <div class="two-fields">
+        <label
+          >确认开始时间<input
+            v-model="item.start_time"
+            :disabled="item.saved"
+            type="datetime-local"
+            required /></label
+        ><label
+          >确认结束时间<input
+            v-model="item.end_time"
+            :disabled="item.saved"
+            type="datetime-local"
+            required
+        /></label>
+      </div>
+      <label>日程地点<input v-model="item.location" :disabled="item.saved" /></label
+      ><button class="primary" :disabled="busy || item.saved">
+        <Check :size="16" />{{ item.saved ? '已保存到日程' : '确认并保存日程' }}
+      </button>
+    </form>
+  </section>
+</template>

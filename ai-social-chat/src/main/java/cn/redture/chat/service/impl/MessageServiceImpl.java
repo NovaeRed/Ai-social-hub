@@ -22,6 +22,8 @@ import cn.redture.common.exception.businessException.ResourceNotFoundException;
 import cn.redture.common.pojo.vo.CursorPageResult;
 import cn.redture.common.util.IdUtil;
 import cn.redture.common.util.SecurityContextHolderUtil;
+import cn.redture.identity.mapper.UserMapper;
+import cn.redture.identity.pojo.entity.User;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -58,6 +60,9 @@ public class MessageServiceImpl implements MessageService {
 
     @Resource
     private ChatFileService chatFileService;
+
+    @Resource
+    private UserMapper userMapper;
 
     @Override
     @Transactional
@@ -169,6 +174,7 @@ public class MessageServiceImpl implements MessageService {
         conversationMapper.updateById(conv);
 
         MessageItemVO vo = MessageConverter.INSTANCE.toMessageItemVO(message);
+        attachSenders(List.of(message), List.of(vo));
         attachSingleFileInfo(message, vo, chatFile);
 
         // 3. 推送 SSE 事件给会话中的其他成员
@@ -351,7 +357,26 @@ public class MessageServiceImpl implements MessageService {
                 .map(MessageConverter.INSTANCE::toMessageItemVO)
                 .toList();
         attachBatchFileInfo(messages, items);
+        attachSenders(messages, items);
         return items;
+    }
+
+    private void attachSenders(List<Message> messages, List<MessageItemVO> items) {
+        List<Long> senderIds = messages.stream().map(Message::getSenderId)
+                .filter(Objects::nonNull).distinct().toList();
+        if (senderIds.isEmpty()) return;
+        Map<Long, User> users = userMapper.selectByIds(senderIds).stream()
+                .collect(Collectors.toMap(User::getId, user -> user, (first, ignored) -> first));
+        for (int i = 0; i < messages.size(); i++) {
+            User user = users.get(messages.get(i).getSenderId());
+            if (user == null) continue;
+            MessageItemVO.SenderVO sender = new MessageItemVO.SenderVO();
+            sender.setPublicId(user.getPublicId());
+            sender.setNickname(user.getDeletedAt() != null ? "已注销用户" :
+                    StringUtils.hasText(user.getNickname()) && !user.getNickname().startsWith("AIHub_")
+                            ? user.getNickname() : user.getUsername());
+            items.get(i).setSender(sender);
+        }
     }
 
     private void attachBatchFileInfo(List<Message> messages, List<MessageItemVO> items) {
