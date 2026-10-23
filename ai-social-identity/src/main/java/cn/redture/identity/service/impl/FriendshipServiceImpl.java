@@ -97,10 +97,8 @@ public class FriendshipServiceImpl implements FriendshipService {
                 // 幂等：已有待处理请求则直接返回
                 return;
             }
-            if (existing.getStatus() == FriendshipRequestStatus.ACCEPTED) {
-                throw new FriendshipBusinessException("你们已经是好友");
-            }
-            // 若之前对方拒绝过（REJECTED），重新发起请求：复用旧记录，重置为 PENDING 并更新消息
+            // The current friendship was checked above. An old ACCEPTED request
+            // can remain after the friendship is removed; reuse it like REJECTED.
             existing.setStatus(FriendshipRequestStatus.PENDING);
             existing.setMessage(dto.getMessage());
             friendshipRequestMapper.updateById(existing);
