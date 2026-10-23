@@ -100,6 +100,7 @@ test('dashboard, chat, AI, friends, schedules and profile work', async ({ page }
   await page.getByRole('textbox', { name: '搜索好友' }).fill('陈一诺');
   await expect(page.locator('.friend-card')).toHaveCount(1);
   await page.getByRole('button', { name: '添加好友' }).click();
+  await page.getByRole('button', { name: '同群联系人', exact: true }).click();
   await page.getByLabel('搜索联系人').fill('顾星河');
   await page.getByRole('button', { name: '顾星河', exact: false }).click();
   await page.getByLabel('打招呼').fill('你好');

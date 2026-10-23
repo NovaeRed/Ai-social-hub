@@ -14,16 +14,28 @@ export function useChatPreferences(user: Ref<User>) {
       try {
         saved = JSON.parse(localStorage.getItem('chat-preferences:' + id) || '{}');
       } catch {}
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) saved = {};
       pinned.value = Array.isArray(saved.pinned)
         ? saved.pinned.filter((id: unknown) => typeof id === 'string')
         : [];
       removed.value =
         saved.removed && typeof saved.removed === 'object' && !Array.isArray(saved.removed)
-          ? saved.removed
+          ? Object.fromEntries(
+              Object.entries(saved.removed).filter(
+                (entry): entry is [string, string] => !!entry[0] && typeof entry[1] === 'string',
+              ),
+            )
           : {};
       hidden.value =
         saved.hidden && typeof saved.hidden === 'object' && !Array.isArray(saved.hidden)
-          ? saved.hidden
+          ? Object.fromEntries(
+              Object.entries(saved.hidden)
+                .filter(([key, value]) => key && Array.isArray(value))
+                .map(([key, value]) => [
+                  key,
+                  (value as unknown[]).filter((item): item is string => typeof item === 'string'),
+                ]),
+            )
           : {};
     },
     { immediate: true },

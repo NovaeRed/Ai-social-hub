@@ -1,4 +1,8 @@
 import { defineConfig } from '@playwright/test';
+const demoPort = Number(process.env.PLAYWRIGHT_DEMO_PORT || 5190);
+const livePort = Number(process.env.PLAYWRIGHT_LIVE_PORT || 5186);
+const demoUrl = `http://127.0.0.1:${demoPort}`;
+const liveUrl = `http://127.0.0.1:${livePort}`;
 export default defineConfig({
   testDir: './tests',
   outputDir: `test-results/run-${Date.now()}`,
@@ -7,19 +11,23 @@ export default defineConfig({
   use: { channel: 'msedge', headless: true },
   reporter: 'list',
   projects: [
-    { name: 'demo', testMatch: 'ui.spec.ts', use: { baseURL: 'http://127.0.0.1:5190' } },
-    { name: 'live', testMatch: 'live.spec.ts', use: { baseURL: 'http://127.0.0.1:5186' } },
+    { name: 'demo', testMatch: ['ui.spec.ts', 'chat.spec.ts'], use: { baseURL: demoUrl } },
+    {
+      name: 'live',
+      testMatch: ['live.spec.ts', 'chat-contract.spec.ts'],
+      use: { baseURL: liveUrl },
+    },
   ],
   webServer: [
     {
-      command: 'npm run dev -- --host 127.0.0.1 --port 5190 --strictPort',
-      url: 'http://127.0.0.1:5190',
+      command: `npm run dev -- --host 127.0.0.1 --port ${demoPort} --strictPort`,
+      url: demoUrl,
       reuseExistingServer: true,
       env: { VITE_DEMO_MODE: 'true' },
     },
     {
-      command: 'npm run dev -- --host 127.0.0.1 --port 5186 --strictPort',
-      url: 'http://127.0.0.1:5186',
+      command: `npm run dev -- --host 127.0.0.1 --port ${livePort} --strictPort`,
+      url: liveUrl,
       reuseExistingServer: true,
       env: { VITE_DEMO_MODE: 'false' },
     },

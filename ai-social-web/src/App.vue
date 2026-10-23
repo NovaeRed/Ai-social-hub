@@ -859,6 +859,10 @@ async function chatWith(f: User) {
         .map(normalizeMessage)
         .reverse();
     }
+    if (removedChats.value[id]) {
+      delete removedChats.value[id];
+      saveChatPreferences();
+    }
     selected.value = id;
     go('/messages');
   });
