@@ -8,9 +8,10 @@ const expanded = ref(false);
 let start: { x: number; y: number } | null = null,
   suppress = false;
 function down(event: PointerEvent) {
-  if (event.button !== 0) return;
+  if (event.button !== 0 || !event.isPrimary) return;
   start = { x: event.clientX, y: event.clientY };
   suppress = false;
+  (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
 }
 function move(event: PointerEvent) {
   if (!start) return;
@@ -36,7 +37,7 @@ function open() {
 }
 </script>
 <template>
-  <div class="conversation-item">
+  <div class="conversation-item" @keydown.esc.stop="expanded = false">
     <button
       :class="['conversation-row', { selected, unread: conversation.unread_count > 0, pinned }]"
       @pointerdown="down"
