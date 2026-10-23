@@ -281,11 +281,7 @@ onMounted(async () => {
 </script>
 <template>
   <div class="page-heading">
-    <div>
-      <span class="eyebrow">IDEAS ARE BETTER TOGETHER</span>
-      <h1>好想法，在一起发生</h1>
-      <p>把有趣的人聚在一起，让灵感自在碰撞。</p>
-    </div>
+    <div><h1>群聊</h1></div>
     <button class="primary" @click="create"><Plus :size="17" />创建群聊</button>
   </div>
   <p v-if="error" class="inline-error" role="alert">{{ redactIdentifiers(error) }}</p>

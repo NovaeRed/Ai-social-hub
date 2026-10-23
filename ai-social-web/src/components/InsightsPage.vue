@@ -137,11 +137,7 @@ onUnmounted(() => clearTimeout(poll));
 </script>
 <template>
   <div class="page-heading">
-    <div>
-      <span class="eyebrow">YOUR INTELLIGENCE, IN VIEW</span>
-      <h1>每一点智能，都看得见</h1>
-      <p>追踪 AI 任务、查看使用情况，了解你的沟通画像。</p>
-    </div>
+    <div><h1>AI 活动</h1></div>
     <button class="secondary" :disabled="busy" @click="load()"><RefreshCw :size="16" />刷新</button>
   </div>
   <div class="ai-tabs">

@@ -459,7 +459,19 @@ main {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 27px;
+  min-height: 42px;
+  margin-bottom: 20px;
+}
+.page-heading h1 {
+  font-size: 22px;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+.heading-count {
+  margin-left: 6px;
+  color: #737b87;
+  font-size: 14px;
+  font-weight: 400;
 }
 .eyebrow {
   display: block;
@@ -1300,6 +1312,9 @@ footer span:last-child {
   width: 430px;
   padding: 35px;
 }
+.login-card > h1 {
+  margin-bottom: 24px;
+}
 .login-card > p {
   font-size: 12px;
   color: #9298a2;
@@ -1571,11 +1586,12 @@ footer span:last-child {
     font-size: 23px;
   }
   .page-heading {
-    align-items: flex-start;
+    align-items: center;
   }
   .page-heading > .inline-actions {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
   .page-heading .primary,
   .page-heading .secondary {
@@ -1631,7 +1647,7 @@ footer span:last-child {
     padding: 24px 18px 20px;
   }
   .page-heading {
-    margin-bottom: 22px;
+    margin-bottom: 16px;
     gap: 10px;
   }
   .eyebrow {
@@ -2575,7 +2591,7 @@ nav button {
 .chat-layout {
   display: grid;
   grid-template-columns: clamp(160px, 30%, 290px) minmax(0, 1fr);
-  height: calc(100dvh - 220px);
+  height: calc(100dvh - 184px);
   min-height: 540px;
   max-height: 900px;
   align-items: stretch;
@@ -2587,6 +2603,9 @@ nav button {
   overflow: auto;
   border-right: 1px solid var(--line);
   border-bottom: 0;
+}
+.chat-layout .conversation-tabs button {
+  white-space: nowrap;
 }
 .chat-layout .chat-panel {
   height: 100%;

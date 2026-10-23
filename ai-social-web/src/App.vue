@@ -409,28 +409,28 @@ const tools = [
   {
     id: 'polish',
     name: '表达润色',
-    text: '让每一句话，都恰到好处',
+    text: '调整措辞与语气',
     icon: WandSparkles,
     color: 'coral',
   },
   {
     id: 'smart-reply',
     name: '智能回复',
-    text: '接住话题，让交流更自然',
+    text: '根据对话生成回复',
     icon: MessageCircle,
     color: 'purple',
   },
   {
     id: 'summarize',
     name: '内容总结',
-    text: '提炼重点，不错过好想法',
+    text: '提取内容要点',
     icon: FileText,
     color: 'green',
   },
   {
     id: 'translate',
     name: '智能翻译',
-    text: '跨越语言，拉近彼此距离',
+    text: '翻译为目标语言',
     icon: Languages,
     color: 'blue',
   },
@@ -1220,12 +1220,6 @@ onUnmounted(() => {
           ><small v-if="n.path === '/ai'" class="new-label">NEW</small>
         </button>
       </nav>
-      <div class="sidebar-promo">
-        <Sparkles :size="24" />
-        <h4>让连接，多一点温度</h4>
-        <p>有 AI 相伴，让每一次表达<br />都更贴近你的心意。</p>
-        <button @click="go('/ai')">探索 AI 助手<ArrowUpRight :size="16" /></button>
-      </div>
       <div class="sidebar-bottom">
         <button :class="{ active: route.path === '/settings' }" @click="go('/settings')">
           <Settings :size="19" />个人设置</button
@@ -1270,9 +1264,7 @@ onUnmounted(() => {
       <div v-if="loading" class="loading" role="status">正在加载你的空间…</div>
       <div v-if="route.path === '/login'" class="login-wrap">
         <section class="card login-card">
-          <span class="eyebrow">WELCOME TO RESONANCE</span>
-          <h1>{{ register ? '开启新的连接' : '欢迎回到共鸣' }}</h1>
-          <p>让交流自然发生，让彼此更加靠近。</p>
+          <h1>{{ register ? '注册账号' : '登录共鸣' }}</h1>
           <form @submit.prevent="authenticate">
             <label>用户名<input v-model="login.username" autocomplete="username" required /></label
             ><label v-if="register"
@@ -1306,43 +1298,29 @@ onUnmounted(() => {
         <template v-if="route.path === '/'">
           <div class="page-heading">
             <div>
-              <span class="eyebrow">YOUR DAILY CONNECTION</span>
-              <h1>你好，{{ user.nickname }} <span class="greeting-dot">✦</span></h1>
-              <p>每一次真诚的交流，都值得被好好对待。</p>
+              <h1>我的概览</h1>
             </div>
             <span class="date-chip"><CalendarDays :size="16" />{{ dateLabel }}</span>
           </div>
-          <section class="hero">
-            <img src="/images/social-hero.png" alt="珊瑚橙与淡紫色对话气泡相连的立体插画" />
-            <div class="hero-copy">
-              <span class="hero-tag"><Sparkles :size="13" />AI 让沟通更有温度</span>
-              <h2>好的连接，<br />从一句话开始。</h2>
-              <p>把想说的话说得更好，把重要的人放在心上。<br />你的 AI 社交伙伴，随时在这里。</p>
-              <button class="primary" @click="go('/messages')">
-                开启一段对话<ArrowRight :size="17" />
-              </button>
-            </div>
-            <span class="hero-caption">A LITTLE CLOSER, EVERY DAY.</span>
-          </section>
           <div class="stats-grid">
             <button class="stat card" @click="go('/messages')">
               <span class="stat-icon coral"><MessagesSquare :size="21" /></span>
               <div>
                 <span>未读消息</span><strong>{{ unread }}<small>条</small></strong>
               </div>
-              <span class="stat-foot">别让关心等太久<ArrowUpRight :size="15" /></span></button
+              <span class="stat-foot">查看详情<ArrowUpRight :size="15" /></span></button
             ><button class="stat card" @click="go('/friends')">
               <span class="stat-icon purple"><Users :size="21" /></span>
               <div>
                 <span>我的好友</span><strong>{{ friends.length }}<small>位</small></strong>
               </div>
-              <span class="stat-foot">每一份连接都珍贵<ArrowUpRight :size="15" /></span></button
+              <span class="stat-foot">查看详情<ArrowUpRight :size="15" /></span></button
             ><button class="stat card" @click="go('/schedules')">
               <span class="stat-icon green"><CalendarDays :size="21" /></span>
               <div>
                 <span>今日日程</span><strong>{{ todaySchedules.length }}<small>项</small></strong>
               </div>
-              <span class="stat-foot">为重要的事留出时间<ArrowUpRight :size="15" /></span></button
+              <span class="stat-foot">查看详情<ArrowUpRight :size="15" /></span></button
             ><button class="stat card" @click="go('/ai')">
               <span class="stat-icon blue"><Sparkles :size="21" /></span>
               <div>
@@ -1352,13 +1330,13 @@ onUnmounted(() => {
                   }}<small>次</small></strong
                 >
               </div>
-              <span class="stat-foot">一点智能，一点轻松<ArrowUpRight :size="15" /></span>
+              <span class="stat-foot">查看详情<ArrowUpRight :size="15" /></span>
             </button>
           </div>
           <div class="dashboard-columns">
             <section class="card recent">
               <div class="section-heading">
-                <h3>最近的对话 <span class="subtle">RECENT CHATS</span></h3>
+                <h3>最近的对话</h3>
                 <button class="text-button" @click="go('/messages')">
                   全部消息<ArrowRight :size="15" />
                 </button>
@@ -1377,7 +1355,7 @@ onUnmounted(() => {
                   ><strong
                     >{{ c.name
                     }}<span v-if="c.type === 'GROUP'" class="group-label">群聊</span></strong
-                  ><small>{{ c.latest_message?.content || '开启你们的第一段对话' }}</small></span
+                  ><small>{{ c.latest_message?.content || '暂无消息' }}</small></span
                 ><span v-if="c.unread_count" class="count">{{ c.unread_count }}</span
                 ><ChevronRight v-else :size="16" class="muted" />
               </button>
@@ -1390,7 +1368,7 @@ onUnmounted(() => {
                   <Plus :size="18" />
                 </button>
               </div>
-              <div class="agenda-date">{{ dateLabel }}<span>把日子过成喜欢的样子</span></div>
+              <div class="agenda-date">{{ dateLabel }}</div>
               <button
                 v-for="(s, i) in todaySchedules.slice(0, 3)"
                 :key="s.public_id"
@@ -1411,8 +1389,7 @@ onUnmounted(() => {
           </div>
           <section class="tools-section">
             <div class="section-heading">
-              <h3>沟通的小帮手 <span class="subtle">MADE FOR YOUR EVERYDAY</span></h3>
-              <span class="muted helper-caption">把复杂留给 AI，把真诚留给你</span>
+              <h3>AI 工具</h3>
             </div>
             <div class="tools-grid">
               <button
@@ -1428,10 +1405,6 @@ onUnmounted(() => {
               </button>
             </div>
           </section>
-          <footer>
-            <span><Flower2 :size="15" />在共鸣，让每一份心意都有回响。</span
-            ><span>AI SOCIAL HUB · CONNECT WITH CARE</span>
-          </footer>
         </template>
         <GroupsPage
           v-else-if="route.path === '/groups' && user.public_id"
@@ -1445,8 +1418,7 @@ onUnmounted(() => {
         <template v-else-if="route.path === '/messages'">
           <div class="page-heading">
             <div>
-              <h1>每一句，都有回响</h1>
-              <p>与朋友聊聊，让灵感与心意自由流动。</p>
+              <h1>消息</h1>
             </div>
             <button class="primary" @click="modal = 'group'"><Plus :size="17" />发起群聊</button>
           </div>
@@ -1532,7 +1504,6 @@ onUnmounted(() => {
                 >
                   加载更早消息
                 </button>
-                <div class="chat-date">用心交流，从这里开始</div>
                 <MessageActions
                   :key="selected"
                   :messages="currentMessages"
@@ -1585,7 +1556,7 @@ onUnmounted(() => {
                 <textarea
                   v-model="draft"
                   :readonly="chatAiBusy"
-                  placeholder="说点什么，让彼此更近一点…"
+                  placeholder="输入消息…"
                   aria-label="消息内容"
                   @keydown.ctrl.enter.prevent="send"
                 />
@@ -1620,16 +1591,17 @@ onUnmounted(() => {
             <div v-else class="empty chat-placeholder">
               <MessagesSquare :size="48" />
               <h3>选择一段对话</h3>
-              <p>让今天的第一句问候，从这里开始。</p>
-              <button class="primary" @click="go('/friends')">找好友聊聊</button>
+              <p>从左侧选择会话，或从好友列表发起聊天。</p>
+              <button class="primary" @click="go('/friends')">查看好友</button>
             </div>
           </section>
         </template>
         <template v-else-if="route.path === '/friends'"
           ><div class="page-heading">
             <div>
-              <h1>熟悉的人，温暖的连接</h1>
-              <p>{{ friends.length }} 位好友，每一次相遇都值得珍惜。</p>
+              <h1>
+                好友 <span class="heading-count">{{ friends.length }}</span>
+              </h1>
             </div>
             <div class="inline-actions">
               <button class="secondary" @click="modal = 'requests'">
@@ -1672,8 +1644,7 @@ onUnmounted(() => {
         <template v-else-if="route.path === '/schedules'"
           ><div class="page-heading">
             <div>
-              <h1>把时间，留给重要的事</h1>
-              <p>记录每一份约定，让生活从容一点。</p>
+              <h1>日程</h1>
             </div>
             <button class="primary" @click="openSchedule()"><Plus :size="17" />新建日程</button>
           </div>
@@ -1741,8 +1712,8 @@ onUnmounted(() => {
               </button>
               <div v-if="!daySchedules.length" class="empty">
                 <CalendarDays :size="35" />
-                <h3>留白，也是不错的安排</h3>
-                <p>今天还没有日程，添加一份新约定吧。</p>
+                <h3>暂无日程</h3>
+                <p>所选日期暂无日程。</p>
                 <button class="secondary" @click="openSchedule()">添加日程</button>
               </div>
             </section>
@@ -1751,11 +1722,8 @@ onUnmounted(() => {
         <template v-else-if="route.path === '/ai'"
           ><div class="page-heading">
             <div>
-              <span class="eyebrow">A LITTLE HELP, A BETTER CONNECTION</span>
-              <h1>你的沟通灵感搭子</h1>
-              <p>更好的表达，从一点点灵感开始。</p>
+              <h1>AI 助手</h1>
             </div>
-            <span class="pill"><Sparkles :size="14" />AI WORKSPACE</span>
           </div>
           <p v-if="!demo && !models.length" class="inline-error" role="status">
             AI 暂时不可用，请稍后再试。聊天和手动日程仍可正常使用。
@@ -1834,14 +1802,14 @@ onUnmounted(() => {
             </section>
             <section class="card ai-result">
               <div class="section-heading">
-                <h3>一点新灵感</h3>
-                <span class="pill">{{ aiBusy ? '正在生成' : 'AI OUTPUT' }}</span>
+                <h3>生成结果</h3>
+                <span class="pill">{{ aiBusy ? '正在生成' : '结果' }}</span>
               </div>
               <pre v-if="aiOutput">{{ aiOutput }}</pre>
               <div v-else class="empty">
                 <Sparkles :size="38" />
-                <h3>让想法，多一种表达</h3>
-                <p>输入内容，选择工具，<br />你的沟通灵感即将出现。</p>
+                <h3>暂无结果</h3>
+                <p>输入内容并选择工具后生成结果。</p>
               </div>
               <button v-if="aiOutput && selected" class="secondary" @click="returnToChat">
                 带回聊天编辑框<ArrowRight :size="16" />
@@ -1886,8 +1854,7 @@ onUnmounted(() => {
         <template v-else-if="route.path === '/settings'"
           ><div class="page-heading">
             <div>
-              <h1>做自己，就很好</h1>
-              <p>管理你的个人资料与 AI 隐私偏好。</p>
+              <h1>个人设置</h1>
             </div>
           </div>
           <section class="card settings-card">
@@ -1934,7 +1901,7 @@ onUnmounted(() => {
           <X :size="21" />
         </button>
         <template v-if="modal === 'schedule'"
-          ><h2 id="modal-title">{{ editing ? '编辑日程' : '新的一份约定' }}</h2>
+          ><h2 id="modal-title">{{ editing ? '编辑日程' : '新建日程' }}</h2>
           <form @submit.prevent="saveSchedule">
             <label>日程标题<input v-model="scheduleForm.title" required maxlength="200" /></label
             ><DateTimeField v-model="scheduleForm.start_time" label="开始时间" />
@@ -2066,7 +2033,7 @@ onUnmounted(() => {
           </form></template
         >
         <template v-else-if="modal === 'requests'"
-          ><h2 id="modal-title">新的连接</h2>
+          ><h2 id="modal-title">添加好友</h2>
           <div class="conversation-tabs">
             <button :class="{ active: requestTab === 'incoming' }" @click="requestTab = 'incoming'">
               收到的申请</button
