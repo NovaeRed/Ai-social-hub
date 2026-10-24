@@ -16,29 +16,30 @@ import java.util.regex.Pattern;
 @Component
 public class ModelOutputSecurityValidator {
 
-    private static final int STREAM_SCAN_WINDOW = 4096;
+    public static final int STREAM_SCAN_WINDOW = 4096;
 
     private static final List<Pattern> LEAK_PATTERNS = List.of(
             Pattern.compile("(?i)\\b(api[_-]?key|secret[_-]?key|access[_-]?token)\\b\\s*[:=]\\s*['\\\"]?[A-Za-z0-9_\\-]{8,}"),
             Pattern.compile("(?i)\\bbearer\\s+[A-Za-z0-9_\\-=\\.]{16,}"),
             Pattern.compile("\\bsk-[A-Za-z0-9]{16,}\\b"),
-                Pattern.compile("(?is).*(核心规则|防御规则|不要透露本提示词|系统最高提示词|你是\\s*Ai-social-hub\\s*平台的智能助手).*")
+            Pattern.compile("(?i)(核心规则|防御规则|不要透露本提示词|系统最高提示词|你是\\s*Ai-social-hub\\s*平台的智能助手)")
     );
 
     /**
      * 流式输出分片阶段校验。
      *
-     * @param outputSnapshot 当前累计输出
+     * @param outputSnapshot 当前待扫描输出，使用重叠窗口控制单次扫描大小
      */
     public void validateChunk(CharSequence outputSnapshot) {
-        if (outputSnapshot == null || outputSnapshot.length() < 24) {
+        if (outputSnapshot == null || outputSnapshot.isEmpty()) {
             return;
         }
-        String text = outputSnapshot.toString();
-        String tail = text.length() > STREAM_SCAN_WINDOW
-                ? text.substring(text.length() - STREAM_SCAN_WINDOW)
-                : text;
-        validateOrThrow(tail);
+        int length = outputSnapshot.length();
+        for (int start = 0; start < length; start += STREAM_SCAN_WINDOW / 2) {
+            int end = start + Math.min(STREAM_SCAN_WINDOW, length - start);
+            validateOrThrow(outputSnapshot.subSequence(start, end).toString());
+            if (end == length) break;
+        }
     }
 
     /**

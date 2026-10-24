@@ -1,11 +1,13 @@
 server:
-  port: 8080
+  port: 8082
   servlet:
     context-path: ${app.api-prefix:/api/v1}
   tomcat:
     threads:
       max: 500
 spring:
+  config:
+    import: optional:file:./config/application-local.yaml
   application:
     name: ai-social-app
   datasource:
@@ -59,16 +61,16 @@ ai:
   providers:
     dashscope:
       url: https://dashscope.aliyuncs.com
-      api-key: ${Qwen-api:}
+      api-key: ${DASHSCOPE_API_KEY:}
       endpoints:
         chat: /compatible-mode/v1/chat/completions
 
   chat:
-    default-model: qwen3-max-2026-01-23
+    default-model: deepseek-v4-flash-0731
     candidates:
-      - id: qwen3
+      - id: deepseek-v4-flash-0731
         provider: dashscope
-        model: qwen3-max-2026-01-23
+        model: deepseek-v4-flash-0731
         enabled: true
       - id: qwen-plus
         provider: dashscope
