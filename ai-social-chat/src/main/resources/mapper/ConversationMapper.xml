@@ -75,7 +75,10 @@
 
     <!-- 游标分页查询用户参与的群组 -->
     <select id="selectUserGroupsByCursor" resultType="cn.redture.chat.pojo.entity.Conversation">
-        SELECT c.*
+        SELECT c.id, c.public_id, c.type, c.name, c.announcement,
+               c.latest_message_id, c.created_at, c.deleted_at,
+               (SELECT COUNT(*) FROM conversation_members actual
+                WHERE actual.conversation_id = c.id) AS member_count
         FROM conversations c
         INNER JOIN conversation_members cm ON c.id = cm.conversation_id
         WHERE cm.user_id = #{userId}

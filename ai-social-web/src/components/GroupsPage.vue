@@ -85,6 +85,7 @@ const confirmTitle = computed(
 );
 const roleName = (role: string) =>
   ({ OWNER: '群主', ADMIN: '管理员', MEMBER: '成员' })[role] || role;
+let loadVersion = 0;
 async function act(fn: () => Promise<void>) {
   if (busy.value) return;
   busy.value = true;
@@ -98,6 +99,7 @@ async function act(fn: () => Promise<void>) {
   }
 }
 async function load(more = false) {
+  const version = ++loadVersion;
   loading.value = true;
   error.value = '';
   try {
@@ -122,15 +124,30 @@ async function load(more = false) {
     const qs = new URLSearchParams({ limit: '20', keyword: keyword.value });
     if (more && cursor.value) qs.set('cursor', String(cursor.value));
     const page = await request('/groups?' + qs);
-    groups.value = (more ? [...groups.value, ...page.items] : page.items).map((g: Group) =>
-      g.public_id === detail.value?.public_id ? { ...g, member_count: actualCount.value } : g,
-    );
+    if (version !== loadVersion) return;
+    groups.value = more ? [...groups.value, ...page.items] : page.items;
     cursor.value = page.next_cursor;
     hasMore.value = page.has_more;
+    // 刷新列表时同步刷新展开的成员资料，不能用旧详情覆盖最新人数。
+    const activeId = detail.value?.public_id;
+    if (!more && activeId) {
+      if (
+        !hasMore.value &&
+        !keyword.value.trim() &&
+        !groups.value.some((g) => g.public_id === activeId)
+      ) {
+        closeDetail();
+        emit('notify', '你已不在此群聊中，或群聊已解散');
+        return;
+      }
+      const freshDetail = await request(`/groups/${activeId}`);
+      if (version === loadVersion && detail.value?.public_id === activeId)
+        detail.value = freshDetail;
+    }
   } catch (e) {
-    error.value = (e as Error).message;
+    if (version === loadVersion) error.value = (e as Error).message;
   } finally {
-    loading.value = false;
+    if (version === loadVersion) loading.value = false;
   }
 }
 async function open(group: Group) {
