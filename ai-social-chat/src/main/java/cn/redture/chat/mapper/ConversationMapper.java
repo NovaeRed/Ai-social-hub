@@ -25,10 +25,15 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
                                                 @Param("limit") int limit,
                                                 @Param("keyword") String keyword);
 
-    @Update("UPDATE conversations SET member_count = GREATEST(0, member_count + #{delta}) WHERE id = #{conversationId}")
+    // 保留入群计数的原调用入口，实际值以成员关系为准，不叠加历史错误计数。
+    @Update("UPDATE conversations SET member_count = (SELECT COUNT(*) FROM conversation_members WHERE conversation_id = #{conversationId}) WHERE id = #{conversationId}")
     int incrementMemberCount(@Param("conversationId") Long conversationId, @Param("delta") int delta);
 
     @Update("UPDATE conversations SET member_count = GREATEST(0, member_count - #{delta}) WHERE id = #{conversationId}")
     int decrementMemberCount(@Param("conversationId") Long conversationId, @Param("delta") int delta);
+
+    // 以成员关系为准重算，避免历史计数偏差在增减操作后继续保留。
+    @Update("UPDATE conversations SET member_count = (SELECT COUNT(*) FROM conversation_members WHERE conversation_id = #{conversationId}) WHERE id = #{conversationId}")
+    int refreshMemberCount(@Param("conversationId") Long conversationId);
 
 }

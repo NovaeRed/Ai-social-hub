@@ -111,7 +111,6 @@ public class GroupServiceImpl implements GroupService {
         if (members.isEmpty()) return;
 
         int newMemberCount = conversationMemberMapper.insertBatch(members);
-        // 更新群成员数
         conversationMapper.incrementMemberCount(conversationId, newMemberCount);
     }
 
@@ -124,6 +123,7 @@ public class GroupServiceImpl implements GroupService {
      * @return 更新后的群信息
      */
     @Override
+    @Transactional
     public ConversationSummaryVO updateGroup(Long currentUserId, String groupPublicId, String name) {
         Conversation group = getConversationByPublicId(groupPublicId);
 
@@ -160,7 +160,7 @@ public class GroupServiceImpl implements GroupService {
         List<Long> userIds = userService.getUserIdsByPublicIds(userPublicIds);
         List<ConversationMember> membersToInsert = new ArrayList<>();
 
-        for (Long userId : userIds) {
+        for (Long userId : userIds.stream().distinct().toList()) {
             if (userId == null) {
                 continue;
             }
@@ -181,7 +181,7 @@ public class GroupServiceImpl implements GroupService {
         if (!membersToInsert.isEmpty()) {
             conversationMemberMapper.insertBatch(membersToInsert);
             // 更新群成员数
-            conversationMapper.incrementMemberCount(group.getId(), membersToInsert.size());
+            conversationMapper.refreshMemberCount(group.getId());
         }
     }
 
@@ -374,7 +374,7 @@ public class GroupServiceImpl implements GroupService {
                 .eq(ConversationMember::getUserId, targetUserId));
 
         if (deletedCount > 0) {
-            conversationMapper.decrementMemberCount(group.getId(), 1);
+            conversationMapper.refreshMemberCount(group.getId());
         }
     }
 
@@ -411,6 +411,7 @@ public class GroupServiceImpl implements GroupService {
     }
 
     @Override
+    @Transactional
     public void leaveGroup(Long currentUserId, String groupPublicId) {
         Conversation group = getConversationByPublicId(groupPublicId);
         ConversationMember operatorMember = conversationMemberMapper.selectByConversationIdAndUserId(group.getId(), currentUserId);
@@ -424,7 +425,7 @@ public class GroupServiceImpl implements GroupService {
 
         int success = conversationMemberMapper.deleteById(operatorMember.getId());
         if (success == 1) {
-            conversationMapper.decrementMemberCount(group.getId(), 1);
+            conversationMapper.refreshMemberCount(group.getId());
         }
     }
 
@@ -518,7 +519,7 @@ public class GroupServiceImpl implements GroupService {
         detail.setName(group.getName());
         detail.setAnnouncement(group.getAnnouncement());
         detail.setCreatedAt(group.getCreatedAt());
-        detail.setMemberCount(group.getMemberCount());
+        detail.setMemberCount((long) members.size());
 
         List<GroupDetailVO.MemberVO> memberVOList = members.stream().map(cm -> {
             UserInformation userInformation = userService.getUserById(cm.getUserId());

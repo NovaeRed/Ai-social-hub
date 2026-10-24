@@ -213,11 +213,11 @@ public class ConversationAgentMemoryService {
 
     private List<TurnEntry> loadRecentEntries(Long userId, String conversationPublicId, int limit) {
         String key = buildRecentStreamKey(userId, conversationPublicId);
-        List<MapRecord<String, Object, Object>> records = stringRedisTemplate.opsForStream()
+        List<MapRecord<String, Object, Object>> records = new ArrayList<>(stringRedisTemplate.opsForStream()
                 .reverseRange(key, Range.unbounded())
                 .stream()
                 .limit(Math.max(limit, 1))
-                .toList();
+                .toList());
         if (records == null || records.isEmpty()) {
             return List.of();
         }
