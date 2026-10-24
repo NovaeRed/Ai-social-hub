@@ -1,16 +1,16 @@
-# Compiled class file
+# 编译生成的类文件
 *.class
 
-# Log file
+# 日志文件
 *.log
 
-# BlueJ files
+# BlueJ 开发环境文件
 *.ctxt
 
-# Mobile Tools for Java (J2ME)
+# Java 移动开发工具文件
 .mtj.tmp/
 
-# Package Files #
+# 打包产物
 *.jar
 *.war
 *.nar
@@ -19,27 +19,27 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# 虚拟机崩溃日志，参考 http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
 
-# IDE specific files
+# 集成开发环境专用文件
 .cursor
 .vscode/
 .idea/
 .project/
 .classpath/
 
-# Maven target directory
+# Maven 编译输出目录
 target/
 
-# Gradle build directory
+# Gradle 构建目录
 build/
 
-# Eclipse specific files
+# Eclipse 开发环境专用文件
 .settings/
 
-# NetBeans specific files
+# NetBeans 开发环境专用文件
 nbproject/private/
 dist/
 nbbuild/
@@ -48,5 +48,13 @@ nbbuild/
 .generated/
 nbattrs/
 
-# Codex specific files
+# Codex 工作文件
 .codex/
+
+# 运行时聊天附件，包括集成测试上传的文件
+/data/chat-files/
+
+# 本地运行日志与私有配置
+/logs/
+/config/application-local.yaml
+/ai-social-app/src/main/resources/application-local.yaml

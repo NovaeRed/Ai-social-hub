@@ -54,14 +54,15 @@ public class AiFacadeHandler {
         DispatchTarget dispatch = resolveDispatchTarget(route, "stream");
         log.debug("Execute stream task: userId={}, taskType={}, provider={}, model={}", userId, taskType, dispatch.context().provider(), dispatch.context().modelName());
         String prompt = buildPrompt(taskType, params);
-        StringBuilder outputBuffer = new StringBuilder();
-
-        return dispatch.strategy().stream(prompt, dispatch.context())
-            .<String>handle((chunk, sink) -> {
-                    outputBuffer.append(chunk);
-                    modelOutputSecurityValidator.validateChunk(outputBuffer);
-                    sink.next(chunk);
-                })
+        return Flux.defer(() -> {
+            // 每次订阅使用独立窗口，避免重试或重复订阅共享状态。
+            StringBuilder securityWindow = new StringBuilder(ModelOutputSecurityValidator.STREAM_SCAN_WINDOW * 2);
+            return dispatch.strategy().stream(prompt, dispatch.context())
+                    .<String>handle((chunk, sink) -> {
+                        validateStreamChunk(securityWindow, chunk);
+                        sink.next(chunk);
+                    });
+        })
                 .doOnError(error -> log.error("Error in stream task", error))
                 .doOnComplete(() -> log.debug("Stream task completed"));
     }
@@ -173,5 +174,18 @@ public class AiFacadeHandler {
 
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private void validateStreamChunk(StringBuilder securityWindow, String chunk) {
+        int windowSize = ModelOutputSecurityValidator.STREAM_SCAN_WINDOW;
+        // 超大片段分段扫描；先校验再裁剪，保留跨片段匹配所需的重叠部分。
+        for (int start = 0; start < chunk.length(); ) {
+            int end = start + Math.min(windowSize / 2, chunk.length() - start);
+            securityWindow.append(chunk, start, end);
+            modelOutputSecurityValidator.validateChunk(securityWindow);
+            int overflow = securityWindow.length() - windowSize;
+            if (overflow > 0) securityWindow.delete(0, overflow);
+            start = end;
+        }
     }
 }
