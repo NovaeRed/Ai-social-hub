@@ -1,5 +1,100 @@
 import { test, expect } from '@playwright/test';
 
+test('SSE bursts combine refreshes and a reconnect resynchronizes persisted state', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    let stream: ReadableStreamDefaultController<Uint8Array>;
+    const encoder = new TextEncoder();
+    (window as any).sseConnections = 0;
+    (window as any).emitSse = (type: string, count = 1) => {
+      for (let i = 0; i < count; i++)
+        stream.enqueue(encoder.encode(`data: ${JSON.stringify({ type })}\n\n`));
+    };
+    (window as any).disconnectSse = () => stream.close();
+    window.fetch = (input, init) => {
+      if (String(input).endsWith('/sse/subscribe')) {
+        (window as any).sseConnections++;
+        return Promise.resolve(
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                stream = controller;
+                (window as any).emitSse('CONNECTION_ESTABLISHED');
+              },
+            }),
+            { headers: { 'Content-Type': 'text/event-stream' } },
+          ),
+        );
+      }
+      return originalFetch(input, init);
+    };
+  });
+  let conversationRequests = 0,
+    active = 0,
+    maximum = 0;
+  let hold = false,
+    release: (() => void) | undefined;
+  await page.route('**/api/v1/**', async (route) => {
+    const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
+    const fulfill = (data: unknown) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 200, data }),
+      });
+    if (path === '/auth/login')
+      return fulfill({ access_token: 'access', refresh_token: 'refresh' });
+    if (path === '/users/me') return fulfill({ public_id: 'me', nickname: '测试用户' });
+    if (path === '/conversations') {
+      conversationRequests++;
+      maximum = Math.max(maximum, ++active);
+      if (hold) {
+        hold = false;
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      active--;
+      return fulfill({ items: [], has_more: false });
+    }
+    if (path === '/friends' || path === '/schedules') return fulfill([]);
+    if (path === '/ai/jobs')
+      return fulfill({
+        items: [
+          {
+            public_id: 'job',
+            type: 'POLISH',
+            status: 'COMPLETED',
+            created_at: new Date().toISOString(),
+          },
+        ],
+        has_more: false,
+      });
+    if (path === '/friends/requests') return fulfill({ incoming: [], outgoing: [] });
+    if (path === '/ai/models') return fulfill({ models: [] });
+    throw new Error(`unexpected request ${path}`);
+  });
+  await page.goto('/#/login');
+  await page.getByLabel('用户名', { exact: true }).fill('test-user');
+  await page.getByLabel('密码', { exact: true }).fill('Test123!');
+  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await expect.poll(() => conversationRequests).toBe(2); // Login load + handshake synchronization.
+  await expect.poll(() => active).toBe(0);
+  hold = true;
+  await page.evaluate(() => (window as any).emitSse('MESSAGE_CREATED'));
+  await expect.poll(() => !!release).toBe(true);
+  await page.evaluate(() => (window as any).emitSse('MESSAGE_CREATED', 50));
+  release!();
+  await expect.poll(() => conversationRequests).toBe(4); // One running + one combined follow-up.
+  await expect.poll(() => active).toBe(0);
+  expect(maximum).toBe(1);
+  await page.evaluate(() => (window as any).disconnectSse());
+  await expect.poll(() => page.evaluate(() => (window as any).sseConnections)).toBe(2);
+  await expect.poll(() => conversationRequests).toBe(5); // New handshake syncs persisted results.
+  await expect(page.getByText('实时在线', { exact: true })).toBeVisible();
+});
+
 test('forward retries only unsent messages and copies attachments to the destination conversation', async ({
   page,
 }) => {
@@ -79,7 +174,7 @@ test('forward retries only unsent messages and copies attachments to the destina
   await page.getByLabel('用户名', { exact: true }).fill('test-user');
   await page.getByLabel('密码', { exact: true }).fill('Test123!');
   await page.getByRole('button', { name: '登录', exact: true }).click();
-  await expect(page.locator('.page-heading h1')).toContainText('你好');
+  await expect(page.locator('.page-heading h1')).toHaveText('我的概览');
   await page.goto('/#/messages');
   await page.locator('.conversation-row').filter({ hasText: '陈一诺' }).click();
   await expect(page.locator('.message')).toHaveCount(2);

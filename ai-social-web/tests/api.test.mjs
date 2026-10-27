@@ -118,3 +118,142 @@ test('HTTP 200 TOKEN_EXPIRED responses are refreshed and retried', async () => {
         : json({ code: 401, msg: 'expired', error_code: 'TOKEN_EXPIRED' });
   assert.equal((await api.request('/users/me')).ok, true);
 });
+
+function subscribeResponse(text) {
+  globalThis.fetch = async () =>
+    new Response(text, {
+      headers: { 'Content-Type': 'text/event-stream' },
+    });
+}
+
+test('subscription reports synchronous business failures separately from parsing failures', async () => {
+  subscribeResponse('data: nope\n\ndata: {"type":"MESSAGE_CREATED"}\n\n');
+  const failures = [];
+  await assert.rejects(
+    api.subscribe(
+      () => {
+        throw new Error('refresh failed');
+      },
+      new AbortController().signal,
+      (failure) => failures.push(failure),
+    ),
+    /实时连接已断开/,
+  );
+  assert.deepEqual(
+    failures.map((f) => f.stage),
+    ['parse', 'handler'],
+  );
+  assert.match(failures[1].error.message, /refresh failed/);
+});
+
+test('subscription catches async handler rejection without blocking subsequent frames', async () => {
+  subscribeResponse('data: {"type":"FIRST"}\n\ndata: {"type":"SECOND"}\n\n');
+  const seen = [],
+    failures = [];
+  let rejectHandler;
+  await assert.rejects(
+    api.subscribe(
+      (event) => {
+        seen.push(event.type);
+        if (event.type === 'FIRST')
+          return new Promise((_, reject) => {
+            rejectHandler = reject;
+          });
+      },
+      new AbortController().signal,
+      (failure) => failures.push(failure),
+    ),
+    /实时连接已断开/,
+  );
+  assert.deepEqual(seen, ['FIRST', 'SECOND']);
+  rejectHandler(new Error('async refresh failed'));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].stage, 'handler');
+});
+
+test('subscription validates notification structure and preserves split UTF-8 and CRLF', async () => {
+  const bytes = new TextEncoder().encode(
+    ': heartbeat\r\n\r\ndata: null\r\n\r\ndata: {"payload":1}\r\n\r\ndata: {"type":"MESSAGE_CREATED","payload":"你好"}\r\n\r\n',
+  );
+  globalThis.fetch = async () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          for (let i = 0; i < bytes.length; i += 2) controller.enqueue(bytes.slice(i, i + 2));
+          controller.close();
+        },
+      }),
+      { headers: { 'Content-Type': 'text/event-stream' } },
+    );
+  const seen = [],
+    failures = [];
+  await assert.rejects(
+    api.subscribe(
+      (event) => {
+        seen.push(event);
+      },
+      new AbortController().signal,
+      (failure) => failures.push(failure),
+    ),
+    /实时连接已断开/,
+  );
+  assert.equal(failures.length, 2);
+  assert.deepEqual(
+    failures.map((f) => f.stage),
+    ['parse', 'parse'],
+  );
+  assert.deepEqual(seen, [{ type: 'MESSAGE_CREATED', payload: '你好' }]);
+});
+
+test('subscription diagnostics count attempts, handshake, failures and pending async handlers', async () => {
+  const before = api.getSubscriptionDiagnostics();
+  api.recordSubscriptionAttempt(false);
+  api.recordSubscriptionAttempt(true);
+  subscribeResponse(
+    'data: broken\n\ndata: {"type":"CONNECTION_ESTABLISHED"}\n\ndata: {"type":"MESSAGE_CREATED"}\n\n',
+  );
+  const completions = [];
+  await assert.rejects(
+    api.subscribe(
+      () =>
+        new Promise((resolve, reject) => {
+          completions.push({ resolve, reject });
+        }),
+      new AbortController().signal,
+      () => {},
+    ),
+    /实时连接已断开/,
+  );
+  const during = api.getSubscriptionDiagnostics();
+  assert.equal(during.connectionAttempts - before.connectionAttempts, 2);
+  assert.equal(during.reconnectAttempts - before.reconnectAttempts, 1);
+  assert.equal(during.handshakes - before.handshakes, 1);
+  assert.equal(during.parseFailures - before.parseFailures, 1);
+  assert.equal(during.activeHandlers, 2);
+  assert.ok(during.maxConcurrentHandlers >= 2);
+  completions[0].resolve();
+  completions[1].reject(new Error('business failure'));
+  await new Promise((resolve) => setImmediate(resolve));
+  const after = api.getSubscriptionDiagnostics();
+  assert.equal(after.activeHandlers, 0);
+  assert.equal(after.handlerFailures - before.handlerFailures, 1);
+  assert.equal(during.activeHandlers, 2, 'a returned snapshot is independent of later changes');
+  assert.ok(Object.isFrozen(after));
+  assert.throws(() => {
+    after.activeHandlers = 10;
+  }, TypeError);
+});
+
+test('synchronous handlers do not appear concurrently active in diagnostics', async () => {
+  subscribeResponse('data: {"type":"FIRST"}\n\ndata: {"type":"SECOND"}\n\n');
+  const active = [];
+  await assert.rejects(
+    api.subscribe(() => {
+      active.push(api.getSubscriptionDiagnostics().activeHandlers);
+    }, new AbortController().signal),
+    /实时连接已断开/,
+  );
+  assert.deepEqual(active, [1, 1]);
+  assert.equal(api.getSubscriptionDiagnostics().activeHandlers, 0);
+});

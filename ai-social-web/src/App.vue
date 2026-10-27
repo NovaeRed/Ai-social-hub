@@ -38,11 +38,15 @@ import {
   clearTokens,
   stream,
   subscribe,
+  getSubscriptionDiagnostics,
+  recordSubscriptionAttempt,
+  recordSubscriptionFailure,
   downloadFile,
   type User,
   type Conversation,
   type Message,
   type Schedule,
+  type SubscriptionFailure,
 } from './lib/api';
 import * as seed from './lib/demo';
 import { normalizeCurrentUser } from './lib/identity';
@@ -56,6 +60,7 @@ import DateTimeField from './components/DateTimeField.vue';
 import ConversationRow from './components/ConversationRow.vue';
 import MessageActions from './components/MessageActions.vue';
 import { useChatPreferences } from './lib/chatPreferences';
+import { createCoalescedRefresh } from './lib/refresh';
 const route = useRoute(),
   router = useRouter();
 const nav = [
@@ -361,6 +366,7 @@ function resetSession() {
   sseController?.abort();
   clearTimeout(reconnectTimer);
   connectEpoch++;
+  reconnectAttempt = 0;
   selected.value = '';
   history.value = {};
   user.value = { public_id: '', nickname: '' };
@@ -658,7 +664,7 @@ function go(path: string) {
   query.value = '';
   router.push(path);
 }
-async function load() {
+const load = createCoalescedRefresh(async () => {
   if (demo) return;
   const generation = sessionGeneration;
   loading.value = true;
@@ -712,46 +718,86 @@ async function load() {
         availableModels.value[0]?.option_code ||
         '';
   } catch (e) {
-    error.value = (e as Error).message;
+    if (generation === sessionGeneration) error.value = (e as Error).message;
   } finally {
-    loading.value = false;
+    if (generation === sessionGeneration) loading.value = false;
   }
+});
+
+const refreshRealtimeState = createCoalescedRefresh(async () => {
+  const generation = sessionGeneration;
+  if (!sessionStorage.getItem('access_token')) return;
+  await load();
+  if (generation !== sessionGeneration) return;
+  if (selected.value && route.path === '/messages') {
+    const id = selected.value;
+    const page = await request(`/conversations/${encodeURIComponent(id)}/messages`);
+    if (generation !== sessionGeneration || selected.value !== id || route.path !== '/messages')
+      return;
+    history.value[id] = page.items.map(normalizeMessage).reverse();
+    messagePages.value[id] = page;
+    const active = conversations.value.find((c) => c.public_id === id);
+    if (active) active.unread_count = 0;
+  }
+});
+let realtimeRefreshFlight: Promise<void> | null = null;
+function reportRealtimeFailure(failure: SubscriptionFailure) {
+  console.error(`SSE ${failure.stage} failed`, failure.error, {
+    subscription: getSubscriptionDiagnostics(),
+    refresh: refreshRealtimeState.diagnostics(),
+  });
+  if (failure.stage === 'handler') notify('实时状态更新失败，请刷新页面重试');
 }
 function connect() {
   if (demo || !sessionStorage.getItem('access_token')) return;
+  recordSubscriptionAttempt(reconnectAttempt > 0);
   const epoch = ++connectEpoch;
   clearTimeout(reconnectTimer);
   sseController?.abort();
   sseController = new AbortController();
   realtime.value = '连接中';
-  subscribe(async (e) => {
-    if (e.type === 'CONNECTION_ESTABLISHED') {
-      realtime.value = '实时在线';
-      reconnectAttempt = 0;
-    }
-    if (e.type === 'MESSAGE_CREATED') {
-      await load();
-      if (selected.value && route.path === '/messages') {
-        try {
-          const id = selected.value;
-          const page = await request(`/conversations/${encodeURIComponent(id)}/messages`);
-          history.value[id] = page.items.map(normalizeMessage).reverse();
-          messagePages.value[id] = page;
-          const active = conversations.value.find((c) => c.public_id === id);
-          if (active) active.unread_count = 0;
-        } catch (e) {
-          notify((e as Error).message);
+  subscribe(
+    (e) => {
+      if (epoch !== connectEpoch) return;
+      if (e.type === 'CONNECTION_ESTABLISHED') {
+        realtime.value = '实时在线';
+        reconnectAttempt = 0;
+      }
+      if (['MESSAGE_CREATED', 'AI_TASK_COMPLETED', 'CONNECTION_ESTABLISHED'].includes(e.type)) {
+        const flight = refreshRealtimeState();
+        // Attach one failure observer per flight, even when thousands of events are combined.
+        if (realtimeRefreshFlight !== flight) {
+          realtimeRefreshFlight = flight;
+          void flight.then(
+            () => {
+              if (epoch === connectEpoch)
+                console.debug('SSE state synchronized', {
+                  subscription: getSubscriptionDiagnostics(),
+                  refresh: refreshRealtimeState.diagnostics(),
+                });
+            },
+            (error) => {
+              recordSubscriptionFailure('handler');
+              if (epoch === connectEpoch) reportRealtimeFailure({ stage: 'handler', error });
+            },
+          );
         }
       }
-    }
-  }, sseController.signal).catch((e) => {
+    },
+    sseController.signal,
+    (failure) => {
+      if (epoch === connectEpoch) reportRealtimeFailure(failure);
+    },
+  ).catch((e) => {
     if (
       e.name !== 'AbortError' &&
       epoch === connectEpoch &&
       sessionStorage.getItem('access_token')
     ) {
       realtime.value = '正在重连';
-      reconnectTimer = setTimeout(connect, Math.min(30000, 1000 * 2 ** reconnectAttempt++));
+      console.debug('SSE reconnect scheduled', getSubscriptionDiagnostics());
+      const delay = Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempt++, 5));
+      reconnectTimer = setTimeout(connect, delay * (0.5 + Math.random() * 0.5));
     }
   });
 }

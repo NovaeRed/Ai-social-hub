@@ -1,5 +1,8 @@
 package cn.redture.aiEngine.consumer;
 
+import static cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_DLQ_STREAM_KEY;
+import static cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_STREAM_KEY;
+
 import cn.redture.aiEngine.pojo.dto.AiAsyncTaskDTO;
 import cn.redture.aiEngine.pojo.dto.AiPersonaTaskDTO;
 import cn.redture.aiEngine.pojo.enums.AsyncTaskDomain;
@@ -7,8 +10,11 @@ import cn.redture.aiEngine.service.AiConfigService;
 import cn.redture.aiEngine.service.AiTaskExecutionService;
 import cn.redture.common.constants.ErrorCodes;
 import cn.redture.common.util.JsonUtil;
+
 import jakarta.annotation.Resource;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.data.redis.connection.stream.Consumer;
@@ -27,25 +33,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_DLQ_STREAM_GROUP;
-import static cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_DLQ_STREAM_KEY;
-import static cn.redture.common.constants.RedisConstants.AI_ASYNC_TASK_STREAM_KEY;
-
-/**
- * 统一死信队列（DLQ）消费者处理器。
- */
+/** 统一死信队列（DLQ）消费者处理器。 */
 @Slf4j
 @Component
 public class AiAsyncTaskDlqProcessor implements SmartLifecycle {
 
-    @Resource
-    private StringRedisTemplate stringRedisTemplate;
+    @Resource private StringRedisTemplate stringRedisTemplate;
 
-    @Resource
-    private AiTaskExecutionService aiTaskExecutionService;
+    @Resource private AiTaskExecutionService aiTaskExecutionService;
 
-    @Resource
-    private AiConfigService aiConfigService;
+    @Resource private AiConfigService aiConfigService;
+
+    @Value("${ai.async.dlq.group:ai-async-dlq-group}")
+    private String dlqGroup;
 
     private Thread dlqThread;
     private volatile boolean running;
@@ -81,7 +81,7 @@ public class AiAsyncTaskDlqProcessor implements SmartLifecycle {
         dlqThread = new Thread(this::consumeDlqLoop, "ai-async-dlq-processor");
         dlqThread.setDaemon(true);
         dlqThread.start();
-        log.info("统一异步 DLQ 处置线程已启动，group={}", AI_ASYNC_TASK_DLQ_STREAM_GROUP);
+        log.info("统一异步 DLQ 处置线程已启动，group={}", dlqGroup);
     }
 
     @Override
@@ -117,14 +117,20 @@ public class AiAsyncTaskDlqProcessor implements SmartLifecycle {
             if (!stringRedisTemplate.hasKey(AI_ASYNC_TASK_DLQ_STREAM_KEY)) {
                 Map<String, String> init = new HashMap<>();
                 init.put("bootstrap", "1");
-                stringRedisTemplate.opsForStream().add(StreamRecords.string(init).withStreamKey(AI_ASYNC_TASK_DLQ_STREAM_KEY));
+                stringRedisTemplate
+                        .opsForStream()
+                        .add(
+                                StreamRecords.string(init)
+                                        .withStreamKey(AI_ASYNC_TASK_DLQ_STREAM_KEY));
             }
-            stringRedisTemplate.opsForStream().createGroup(AI_ASYNC_TASK_DLQ_STREAM_KEY, ReadOffset.latest(), AI_ASYNC_TASK_DLQ_STREAM_GROUP);
+            stringRedisTemplate
+                    .opsForStream()
+                    .createGroup(AI_ASYNC_TASK_DLQ_STREAM_KEY, ReadOffset.latest(), dlqGroup);
         } catch (Exception e) {
             if (isBusyGroupError(e)) {
-                log.debug("统一异步 DLQ 消费组已存在: {}", AI_ASYNC_TASK_DLQ_STREAM_GROUP);
+                log.debug("统一异步 DLQ 消费组已存在: {}", dlqGroup);
             } else {
-                log.warn("初始化统一异步 DLQ 消费组时发生异常，group={}", AI_ASYNC_TASK_DLQ_STREAM_GROUP, e);
+                log.warn("初始化统一异步 DLQ 消费组时发生异常，group={}", dlqGroup, e);
             }
         }
     }
@@ -132,11 +138,17 @@ public class AiAsyncTaskDlqProcessor implements SmartLifecycle {
     private void consumeDlqLoop() {
         while (running && !Thread.currentThread().isInterrupted()) {
             try {
-                List<MapRecord<String, Object, Object>> records = stringRedisTemplate.opsForStream().read(
-                        Consumer.from(AI_ASYNC_TASK_DLQ_STREAM_GROUP, consumerName + "-dlq"),
-                        StreamReadOptions.empty().count(Math.max(batchSize, 1)).block(Duration.ofMillis(Math.max(blockMs, 1000))),
-                        StreamOffset.create(AI_ASYNC_TASK_DLQ_STREAM_KEY, ReadOffset.lastConsumed())
-                );
+                List<MapRecord<String, Object, Object>> records =
+                        stringRedisTemplate
+                                .opsForStream()
+                                .read(
+                                        Consumer.from(dlqGroup, consumerName + "-dlq"),
+                                        StreamReadOptions.empty()
+                                                .count(Math.max(batchSize, 1))
+                                                .block(Duration.ofMillis(Math.max(blockMs, 1000))),
+                                        StreamOffset.create(
+                                                AI_ASYNC_TASK_DLQ_STREAM_KEY,
+                                                ReadOffset.lastConsumed()));
 
                 if (records == null || records.isEmpty()) {
                     continue;
@@ -146,7 +158,9 @@ public class AiAsyncTaskDlqProcessor implements SmartLifecycle {
                     disposeDlqRecord(record);
                 }
             } catch (Exception e) {
-                if (!running || Thread.currentThread().isInterrupted() || isRedisStoppedException(e)) {
+                if (!running
+                        || Thread.currentThread().isInterrupted()
+                        || isRedisStoppedException(e)) {
                     log.debug("统一异步 DLQ 处置线程停止中，结束消费循环");
                     break;
                 }
@@ -169,7 +183,8 @@ public class AiAsyncTaskDlqProcessor implements SmartLifecycle {
             // NOTIFICATION_TASK：进行重试，次数不大于 notificationMaxDlqReplay
             // PERSONA_TASK：如果是 AI 画像任务，直接标记失败；否则调用 compensate 接口进行补偿后 ACK
             if (asyncTaskDomain == AsyncTaskDomain.NOTIFICATION_TASK) {
-                replayDlqNotification(record, domain, taskJson, bizId, traceId, errorCode, lastError);
+                replayDlqNotification(
+                        record, domain, taskJson, bizId, traceId, errorCode, lastError);
             } else if (asyncTaskDomain == AsyncTaskDomain.PERSONA_TASK) {
                 if (isAiTaskPayload(taskJson)) {
                     failVisibleDlqAiTask(taskJson, bizId, traceId, errorCode, lastError);
@@ -185,7 +200,14 @@ public class AiAsyncTaskDlqProcessor implements SmartLifecycle {
         }
     }
 
-    private void replayDlqNotification(MapRecord<String, Object, Object> record, String domain, String taskJson, String bizId, String traceId, String errorCode, String lastError) {
+    private void replayDlqNotification(
+            MapRecord<String, Object, Object> record,
+            String domain,
+            String taskJson,
+            String bizId,
+            String traceId,
+            String errorCode,
+            String lastError) {
         int dlqReplay = parseRetryCount(record.getValue().get("dlq_replay_count")) + 1;
         if (dlqReplay > Math.max(notificationMaxDlqReplay, 0)) {
             acknowledgeDlq(record);
@@ -193,32 +215,54 @@ public class AiAsyncTaskDlqProcessor implements SmartLifecycle {
         }
 
         Map<String, String> payload = new HashMap<>();
+        record.getValue()
+                .forEach(
+                        (key, value) -> {
+                            if (key != null && value != null)
+                                payload.put(String.valueOf(key), String.valueOf(value));
+                        });
         payload.put("domain", domain);
         payload.put("task", taskJson);
         payload.put("biz_id", firstNonBlank(bizId, "notify:unknown"));
         payload.put("trace_id", firstNonBlank(traceId, UUID.randomUUID().toString()));
         payload.put("retry_count", "0");
-        payload.put("created_at", String.valueOf(Instant.now().getEpochSecond()));
+        payload.putIfAbsent(
+                "created_at_epoch",
+                firstNonBlank(
+                        asString(record.getValue().get("created_at")),
+                        String.valueOf(Instant.now().getEpochSecond())));
         payload.put("dlq_replay_count", String.valueOf(dlqReplay));
-        stringRedisTemplate.opsForStream().add(StreamRecords.string(payload).withStreamKey(AI_ASYNC_TASK_STREAM_KEY));
-        acknowledgeDlq(record);
+        RedisStreamTransfers.transfer(
+                stringRedisTemplate,
+                AI_ASYNC_TASK_DLQ_STREAM_KEY,
+                dlqGroup,
+                record.getId().getValue(),
+                AI_ASYNC_TASK_STREAM_KEY,
+                payload);
     }
 
-    private void compensateDropDlqPersona(String taskJson, String bizId, String traceId, String errorCode, String lastError) {
+    private void compensateDropDlqPersona(
+            String taskJson, String bizId, String traceId, String errorCode, String lastError) {
         AiPersonaTaskDTO task = JsonUtil.fromJson(taskJson, AiPersonaTaskDTO.class);
         if (task == null || task.getUserId() == null || task.getTaskType() == null) {
             return;
         }
 
-        aiConfigService.compensatePersonaTaskDrop(task.getUserId(), task.getTaskType().name(), lastError);
+        aiConfigService.compensatePersonaTaskDrop(
+                task.getUserId(), task.getTaskType().name(), lastError);
     }
 
-    private void failVisibleDlqAiTask(String taskJson, String bizId, String traceId, String errorCode, String lastError) {
+    private void failVisibleDlqAiTask(
+            String taskJson, String bizId, String traceId, String errorCode, String lastError) {
         AiAsyncTaskDTO task = JsonUtil.fromJson(taskJson, AiAsyncTaskDTO.class);
         if (task == null || task.getUserId() == null || task.getAiTaskId() == null) {
             return;
         }
-        aiTaskExecutionService.failQueuedAiTask(task.getUserId(), task.getAiTaskId(), firstNonBlank(errorCode, ErrorCodes.AI_TASK_DLQ), lastError);
+        aiTaskExecutionService.failQueuedAiTask(
+                task.getUserId(),
+                task.getAiTaskId(),
+                firstNonBlank(errorCode, ErrorCodes.AI_TASK_DLQ),
+                lastError);
     }
 
     private boolean isAiTaskPayload(String taskJson) {
@@ -230,7 +274,9 @@ public class AiAsyncTaskDlqProcessor implements SmartLifecycle {
     }
 
     private void acknowledgeDlq(MapRecord<String, Object, Object> record) {
-        stringRedisTemplate.opsForStream().acknowledge(AI_ASYNC_TASK_DLQ_STREAM_KEY, AI_ASYNC_TASK_DLQ_STREAM_GROUP, record.getId());
+        stringRedisTemplate
+                .opsForStream()
+                .acknowledge(AI_ASYNC_TASK_DLQ_STREAM_KEY, dlqGroup, record.getId());
     }
 
     private AsyncTaskDomain parseDomain(String domain) {

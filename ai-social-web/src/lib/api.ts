@@ -206,7 +206,43 @@ export async function stream(
     }
   }
 }
-export async function subscribe(onEvent: (event: any) => void, signal: AbortSignal) {
+export interface RealtimeNotification {
+  type: string;
+  payload?: unknown;
+}
+export interface SubscriptionFailure {
+  stage: 'parse' | 'handler';
+  error: unknown;
+  eventType?: string;
+}
+const subscriptionDiagnostics = {
+  connectionAttempts: 0,
+  reconnectAttempts: 0,
+  handshakes: 0,
+  parseFailures: 0,
+  handlerFailures: 0,
+  activeHandlers: 0,
+  maxConcurrentHandlers: 0,
+};
+/** Cumulative diagnostics for this page module; identifiers never become metric labels. */
+export function getSubscriptionDiagnostics() {
+  return Object.freeze({ ...subscriptionDiagnostics });
+}
+export function recordSubscriptionAttempt(reconnect: boolean) {
+  subscriptionDiagnostics.connectionAttempts++;
+  if (reconnect) subscriptionDiagnostics.reconnectAttempts++;
+}
+/** Also used for business work deliberately detached from the network callback. */
+export function recordSubscriptionFailure(stage: SubscriptionFailure['stage']) {
+  if (stage === 'parse') subscriptionDiagnostics.parseFailures++;
+  else subscriptionDiagnostics.handlerFailures++;
+}
+export async function subscribe(
+  onEvent: (event: RealtimeNotification) => void | Promise<void>,
+  signal: AbortSignal,
+  onFailure: (failure: SubscriptionFailure) => void = (failure) =>
+    console.error(`SSE ${failure.stage} failed`, failure.error),
+) {
   const response = await openStream('/sse/subscribe', {
     headers: { Accept: 'text/event-stream' },
     signal,
@@ -226,13 +262,54 @@ export async function subscribe(onEvent: (event: any) => void, signal: AbortSign
         .filter((l) => l.startsWith('data:'))
         .map((l) => l.slice(5).trim())
         .join('\n');
-      if (text) {
-        try {
-          onEvent(JSON.parse(text));
-        } catch {
-          /* 心跳事件 */
-        }
+      if (!text) continue; // SSE comment frames carry heartbeat traffic without JSON data.
+      let event: RealtimeNotification;
+      try {
+        const parsed = JSON.parse(text);
+        if (
+          !parsed ||
+          typeof parsed !== 'object' ||
+          typeof parsed.type !== 'string' ||
+          !parsed.type
+        )
+          throw new Error('无效的实时事件结构');
+        event = parsed;
+      } catch (error) {
+        report({ stage: 'parse', error });
+        continue;
       }
+      if (event.type === 'CONNECTION_ESTABLISHED') subscriptionDiagnostics.handshakes++;
+      subscriptionDiagnostics.activeHandlers++;
+      subscriptionDiagnostics.maxConcurrentHandlers = Math.max(
+        subscriptionDiagnostics.maxConcurrentHandlers,
+        subscriptionDiagnostics.activeHandlers,
+      );
+      try {
+        // Business work controls its own concurrency; a slow handler must not stall network reads.
+        const result = onEvent(event);
+        if (result && typeof result.then === 'function') {
+          Promise.resolve(result).then(
+            () => {
+              subscriptionDiagnostics.activeHandlers--;
+            },
+            (error) => {
+              subscriptionDiagnostics.activeHandlers--;
+              report({ stage: 'handler', error, eventType: event.type });
+            },
+          );
+        } else subscriptionDiagnostics.activeHandlers--;
+      } catch (error) {
+        subscriptionDiagnostics.activeHandlers--;
+        report({ stage: 'handler', error, eventType: event.type });
+      }
+    }
+  }
+  function report(failure: SubscriptionFailure) {
+    recordSubscriptionFailure(failure.stage);
+    try {
+      onFailure(failure);
+    } catch (error) {
+      console.error('SSE error reporting failed', error);
     }
   }
 }

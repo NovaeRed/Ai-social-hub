@@ -1,374 +1,544 @@
 package cn.redture.chat.sse;
 
-import lombok.RequiredArgsConstructor;
+import static cn.redture.chat.sse.SseConnection.CloseReason.*;
+
+import cn.redture.common.integration.notification.DispatchResult;
+import cn.redture.common.util.TraceContext;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import jakarta.annotation.PreDestroy;
+
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
-import java.util.Comparator;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
+/** 编排连接注册、通知分发、资源回收与健康巡检。 */
 @Slf4j
 @Service
-@RequiredArgsConstructor
-public class SseEmitterServiceImpl implements SseEmitterService {
+@org.springframework.jmx.export.annotation.ManagedResource(
+        objectName = "cn.redture.sse:type=Connections")
+public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
+    private final PushConfig config;
+    private final ConnectionRegistry registry = new ConnectionRegistry();
+    // 已移出注册表的连接仍占资源，直到写入线程和传输结束操作都退出。
+    private final ConcurrentMap<String, ManagedConnection> live = new ConcurrentHashMap<>();
+    private final Semaphore instanceSlots;
+    private final InstanceQueueBudget queueBudget;
+    private final SseMetrics metrics;
+    private final SseConnectionWriter writer;
+    private final ScheduledExecutorService inspector;
+    private final Supplier<SseEmitter> emitterFactory;
+    private final ObjectMapper objectMapper;
+    private final Map<String, Long> warningSince = new HashMap<>();
+    private final Set<String> activeWarnings = new HashSet<>();
+    private final AtomicBoolean stopping = new AtomicBoolean();
 
-    private final PushConfig pushConfig;
+    public SseEmitterServiceImpl(PushConfig config) {
+        this(
+                config,
+                () -> new SseEmitter(config.getConnectionTimeoutMs()),
+                QueuedEvent.defaultMapper());
+    }
 
-    // 用户ID -> (clientId -> EmitterContext)
-    private final Map<Long, Map<String, EmitterContext>> userConnectionMap = new ConcurrentHashMap<>();
+    @org.springframework.beans.factory.annotation.Autowired
+    public SseEmitterServiceImpl(PushConfig config, ObjectMapper objectMapper) {
+        this(config, () -> new SseEmitter(config.getConnectionTimeoutMs()), objectMapper);
+    }
 
+    SseEmitterServiceImpl(PushConfig config, Supplier<SseEmitter> emitterFactory) {
+        this(config, emitterFactory, QueuedEvent.defaultMapper());
+    }
+
+    private SseEmitterServiceImpl(
+            PushConfig config, Supplier<SseEmitter> emitterFactory, ObjectMapper objectMapper) {
+        config.validate();
+        this.config = config;
+        this.emitterFactory = emitterFactory;
+        this.objectMapper = objectMapper;
+        this.instanceSlots = new Semaphore(config.getMaxConnectionsPerInstance());
+        this.queueBudget = new InstanceQueueBudget(config.getMaxQueueBytesPerInstance());
+        this.metrics = new SseMetrics(config.isEnableMetrics(), config.getWarningWindowMs());
+        this.writer = new SseConnectionWriter(config, metrics, this::terminate);
+        this.inspector =
+                Executors.newSingleThreadScheduledExecutor(
+                        task -> {
+                            Thread thread = new Thread(task, "sse-inspector");
+                            thread.setDaemon(true);
+                            return thread;
+                        });
+        inspector.scheduleWithFixedDelay(
+                this::inspectSafely,
+                config.getInspectionIntervalMs(),
+                config.getInspectionIntervalMs(),
+                TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 准入并注册新连接，将握手入队后启动唯一写入线程。
+     *
+     * @param userId 连接所属用户 ID
+     * @return 新建事件流连接
+     */
     @Override
     public SseEmitter createEmitter(Long userId) {
-        String clientId = UUID.randomUUID().toString();
-
-        // 原子获取或创建用户连接映射
-        Map<String, EmitterContext> contexts = userConnectionMap.computeIfAbsent(userId, k -> new ConcurrentHashMap<>());
-
-        // 1. 处理相同clientId的复用（避免重复连接）
-        EmitterContext previous = contexts.get(clientId);
-        if (previous != null) {
-            log.info("检测到相同clientId重连，清理旧连接: 用户ID={}, 客户端ID={}", userId, clientId);
-            safeCleanup(userId, clientId);
+        Objects.requireNonNull(userId, "userId");
+        if (stopping.get() || !instanceSlots.tryAcquire()) {
+            metrics.increment("admission.rejected");
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "SSE connection capacity exhausted");
         }
-
-        // 2. 检查连接数限制，智能淘汰
-        if (contexts.size() >= pushConfig.getMaxConnectionsPerUser()) {
-            String victimId = selectVictimConnection(contexts);
-            if (victimId != null) {
-                log.info("用户{}连接数超限({})，淘汰连接: {}",
-                        userId, pushConfig.getMaxConnectionsPerUser(), victimId);
-                safeCleanup(userId, victimId);
-            }
-        }
-
-        // 3. 创建新连接
-        SseEmitter emitter = new SseEmitter(pushConfig.getConnectionTimeoutMs());
-        EmitterContext context = new EmitterContext(userId, clientId, emitter, pushConfig.getQueueCapacity());
-
-        // 4. 注册
-        contexts.put(clientId, context);
-        log.info("成功创建SSE连接: 用户ID={}, 客户端ID={}", userId, clientId);
-
-        // 5. 注册回调（统一由 safeCleanup 处理，确保幂等）
-        emitter.onCompletion(() -> safeCleanup(userId, clientId));
-        emitter.onTimeout(() -> {
-            log.debug("SSE连接超时: 用户ID={}, 客户端ID={}", userId, clientId);
-            safeCleanup(userId, clientId);
-        });
-        emitter.onError(e -> {
-            if (!isConnectionAborted(e)) {
-                log.warn("SSE连接异常: 用户ID={}, 客户端ID={}, 错误={}", userId, clientId, e.getMessage());
-            }
-            safeCleanup(userId, clientId);
-        });
-
-        // 6. 启动writer线程
-        Thread writerThread = Thread.ofVirtual()
-                .name("sse-writer-" + userId + "-" + clientId)
-                .start(() -> runWriterLoop(context));
-        context.setWriterThread(writerThread);
-
-        // 7. 握手事件也走队列，由writer统一发送，避免竞态
-        enqueueConnectionEstablishedEvent(context);
-
-        return emitter;
-    }
-
-    /**
-     * 将握手事件入队，由writer线程发送（避免主线程与writer线程竞态）
-     */
-    private void enqueueConnectionEstablishedEvent(EmitterContext context) {
-        Notification<String> handshake = Notification.<String>builder()
-                .type("CONNECTION_ESTABLISHED")
-                .payload("SSE connection successful")
-                .build();
-        QueuedEvent event = new QueuedEvent(handshake, EventPriority.CRITICAL, System.currentTimeMillis(), shortTraceId());
-
-        // 握手事件必须成功入队，否则连接无意义
-        boolean enqueued = context.enqueue(event, pushConfig);
-        if (!enqueued) {
-            log.error("握手事件入队失败，立即关闭连接: 用户ID={}, 客户端ID={}",
-                    context.getUserId(), context.getClientId());
-            safeCleanup(context.getUserId(), context.getClientId());
-        }
-    }
-
-    /**
-     * 幂等清理，避免重复释放资源
-     */
-    private void safeCleanup(Long userId, String clientId) {
-        Map<String, EmitterContext> contexts = userConnectionMap.get(userId);
-        if (contexts == null) {
-            return;
-        }
-
-        EmitterContext context = contexts.remove(clientId);
-        if (context == null) {
-            return;
-        }
-
-        context.markClosed();
-
-        // 执行一次性资源释放
+        ManagedConnection managed = null;
+        boolean registered = false;
         try {
-            // 1. 标记inactive，中断writer
-            context.markInactive();
-
-            // 2. 关闭emitter（幂等调用）
-            SseEmitter emitter = context.getEmitter();
-            if (emitter != null) {
-                try {
-                    emitter.complete();
-                } catch (IllegalStateException ignored) {
-                    // emitter可能已被其他回调关闭
-                }
+            var emitter = emitterFactory.get();
+            var context =
+                    new EmitterContext(
+                            userId,
+                            UUID.randomUUID().toString(),
+                            emitter,
+                            config.getQueueCapacity(),
+                            queueBudget);
+            var connection = new SseConnection(context);
+            managed = new ManagedConnection(connection);
+            var owned = managed;
+            Thread thread =
+                    Thread.ofVirtual()
+                            .name("sse-writer-" + context.getClientId())
+                            .unstarted(
+                                    () -> {
+                                        try {
+                                            writer.run(connection);
+                                        } finally {
+                                            owned.writerExited.set(true);
+                                            releaseIfFinished(owned);
+                                        }
+                                    });
+            context.setWriterThread(thread);
+            emitter.onCompletion(() -> terminate(connection, EMITTER_ENDED));
+            emitter.onTimeout(() -> terminate(connection, CONNECTION_TIMEOUT));
+            emitter.onError(
+                    error ->
+                            terminate(
+                                    connection,
+                                    switch (SendFailureClassifier.classify(error)) {
+                                        case PEER_DISCONNECTED -> PEER_DISCONNECTED;
+                                        case WRITE_TIMEOUT -> WRITE_TIMEOUT;
+                                        case EMITTER_ENDED -> EMITTER_ENDED;
+                                        case SERIALIZATION -> SERIALIZATION_FAILURE;
+                                        case APPLICATION -> APPLICATION_FAILURE;
+                                        case TRANSPORT -> TRANSPORT_FAILURE;
+                                    }));
+            live.put(context.getClientId(), managed);
+            var handshake =
+                    new QueuedEvent(
+                            new Notification<>(
+                                    "CONNECTION_ESTABLISHED", "SSE connection successful"),
+                            EventPriority.CRITICAL,
+                            System.currentTimeMillis(),
+                            TraceContext.getTraceId(),
+                            objectMapper);
+            // 注册前先将握手入队，确保并发业务通知不会先于握手发送。
+            if (!context.enqueue(handshake, config, 0)) {
+                metrics.increment("admission.rejected");
+                terminate(connection, HANDSHAKE_REJECTED);
+                throw new ResponseStatusException(
+                        HttpStatus.SERVICE_UNAVAILABLE, "SSE handshake capacity exhausted");
             }
-
-            // 3. 中断writer线程（如果还在运行）
-            Thread wt = context.getWriterThread();
-            if (wt != null && wt.isAlive() && !wt.isInterrupted()) {
-                wt.interrupt();
+            SseConnection victim = registry.register(connection, config.getMaxConnectionsPerUser());
+            registered = true;
+            metrics.increment("admission.accepted");
+            log.debug("SSE registered: userId={}, clientId={}", userId, context.getClientId());
+            if (victim != null) {
+                metrics.increment("admission.replaced");
+                terminate(victim, REPLACED);
             }
-
-            log.debug("SSE连接资源释放完成: 用户ID={}, 客户端ID={}", userId, clientId);
-
-        } catch (Exception e) {
-            log.error("清理连接时发生异常: 用户ID={}, 客户端ID={}", userId, clientId, e);
-        } finally {
-            // 原子清理空的用户映射，避免内存泄漏
-            userConnectionMap.compute(userId, (k, v) ->
-                    (v == null || v.isEmpty()) ? null : v);
+            thread.start();
+            return emitter;
+        } catch (RuntimeException | Error error) {
+            if (managed == null) instanceSlots.release();
+            else {
+                live.putIfAbsent(managed.connection.context().getClientId(), managed);
+                managed.writerExited.set(true);
+                terminate(managed.connection, stopping.get() ? SHUTDOWN : APPLICATION_FAILURE);
+                releaseIfFinished(managed);
+            }
+            if (!registered && stopping.get())
+                throw new ResponseStatusException(
+                        HttpStatus.SERVICE_UNAVAILABLE, "SSE service is stopping", error);
+            throw error;
         }
-    }
-
-    /**
-     * 智能选择待淘汰连接
-     * 策略：非活跃 > 队列积压多 > 创建时间早
-     */
-    private String selectVictimConnection(Map<String, EmitterContext> contexts) {
-        return contexts.entrySet().stream()
-                .min(Comparator
-                        // 1. 优先淘汰非活跃连接（最后活跃时间最早）
-                        .comparingLong((Map.Entry<String, EmitterContext> e) -> e.getValue().getLastActivityTime().get())
-                        // 2. 其次淘汰队列积压多的（消费能力差）
-                        .thenComparingInt(e -> e.getValue().getQueueSize())
-                        // 3. 最后淘汰创建时间早的（老连接）
-                        .thenComparingLong(e -> e.getValue().getCreateTime())
-                )
-                .map(Map.Entry::getKey)
-                .orElse(null);
     }
 
     @Override
-    public void sendToUser(Long userId, Notification<?> notification) {
-        EventPriority priority = resolvePriority(notification.getType());
-        sendToUser(userId, notification, priority);
+    public DispatchResult sendToUser(Long userId, Notification<?> notification) {
+        return sendToUser(userId, notification, EventPriority.forType(notification.getType()));
     }
 
+    /**
+     * 在整次分发等待预算内，向目标用户的连接入队通知。
+     *
+     * @param userId 目标用户 ID
+     * @param notification 待分发通知
+     * @param priority 事件优先级
+     * @return 目标数、成功入队数及各类拒绝数，不表示客户端送达
+     */
     @Override
-    public void sendToUser(Long userId, Notification<?> notification, EventPriority priority) {
-        Map<String, EmitterContext> contexts = userConnectionMap.get(userId);
-        if (contexts == null || contexts.isEmpty()) {
-            log.debug("用户{}无活跃连接，事件丢弃: type={}", userId, notification.getType());
-            return;
-        }
-
-        QueuedEvent event = new QueuedEvent(notification, priority, System.currentTimeMillis(), shortTraceId());
-        int successCount = 0;
-
-        for (EmitterContext ctx : contexts.values()) {
-            if (ctx.isActive() && ctx.enqueue(event, pushConfig)) {
-                ctx.touch(); // 更新活跃时间
-                successCount++;
-            }
-        }
-
-        if (successCount == 0) {
-            log.debug("用户{}的所有连接均未成功入队事件: type={}", userId, notification.getType());
-        }
-    }
-
-    private EventPriority resolvePriority(String type) {
-        if (type == null) return EventPriority.NORMAL;
-        String upper = type.toUpperCase();
-        if (upper.contains("CRITICAL") || upper.contains("MESSAGE") ||
-                upper.contains("FRIEND") || upper.contains("CONNECTION")) {
-            return EventPriority.CRITICAL;
-        } else if (upper.contains("STATUS") || upper.contains("READ") || upper.contains("TYPING")) {
-            return EventPriority.LOW;
-        }
-        return EventPriority.NORMAL;
-    }
-
-    /**
-     * Writer主循环：统一处理事件发送 + 心跳 + 慢消费者检测
-     */
-    private void runWriterLoop(EmitterContext context) {
-        long lastHeartbeat = System.currentTimeMillis();
-        long heartbeatInterval = pushConfig.getHeartbeatIntervalMs();
-        long pollTimeout = pushConfig.getQueuePollTimeoutMs();
-        long resetInterval = pushConfig.getSlowCountResetIntervalMs();
-
+    public DispatchResult sendToUser(
+            Long userId, Notification<?> notification, EventPriority priority) {
+        long start = System.nanoTime();
+        metrics.increment("notification.created");
         try {
-            while (!context.isClosed() && !Thread.currentThread().isInterrupted()) {
-
-                // 1. 检查慢消费者计数是否需要重置
-                context.checkAndResetSlowCount(resetInterval);
-
-                // 2. 尝试获取事件（带超时，便于心跳和状态检查）
-                QueuedEvent event = context.pollNext(pollTimeout, TimeUnit.MILLISECONDS, pushConfig.getPriorityStrategy());
-
-                if (event != null) {
-                    // 3. 发送事件
-                    if (sendEventSafely(context, event)) {
-                        context.resetSlowCount();
-                        context.touch();
-                    }
-                } else {
-                    // 4. 无事件时发送心跳（避免客户端断开）
-                    long now = System.currentTimeMillis();
-                    if (now - lastHeartbeat >= heartbeatInterval && context.isActive()) {
-                        sendHeartbeat(context);
-                        lastHeartbeat = now;
-                    }
-                    continue;
-                }
-
-                // 5. 如果处于DRAINING状态且队列为空，优雅退出
-                if (context.getState() == EmitterContext.State.DRAINING && context.isQueueEmpty()) {
-                    log.debug("连接处于DRAINING状态且队列已空，优雅退出: 用户ID={}", context.getUserId());
-                    break;
-                }
+            var targets = registry.connections(userId);
+            if (targets.isEmpty()) {
+                metrics.increment("notification.noActiveConnection");
+                return DispatchResult.noActiveConnection();
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.debug("Writer线程被中断: 用户ID={}, 客户端ID={}", context.getUserId(), context.getClientId());
-        } catch (Exception e) {
-            log.error("Writer循环未预期异常: 用户ID={}, 客户端ID={}",
-                    context.getUserId(), context.getClientId(), e);
-        } finally {
-            // 最终清理（safeCleanup已幂等，可安全调用）
-            safeCleanup(context.getUserId(), context.getClientId());
-        }
-    }
-
-    /**
-     * 安全发送单个事件，处理各种异常
-     */
-    private boolean sendEventSafely(EmitterContext context, QueuedEvent event) {
-        try {
-            context.getEmitter().send(SseEmitter.event()
-                    .name(event.getNotification().getType())
-                    .data(event.getNotification()));
-            return true;
-        } catch (IOException e) {
-            if (isConnectionAborted(e)) {
-                log.debug("连接已断开，停止发送: 用户ID={}, 错误={}", context.getUserId(), e.getMessage());
-                return false;
-            }
-            log.warn("发送IO异常: 用户ID={}, traceId={}, 错误={}",
-                    context.getUserId(), event.getTraceId(), e.getMessage());
-            handleSendFailure(context);
-            return false;
-        } catch (IllegalStateException e) {
-            log.debug("Emitter已关闭: 用户ID={}", context.getUserId());
-            return false;
-        } catch (Exception e) {
-            log.error("发送未预期异常: 用户ID={}, traceId={}",
-                    context.getUserId(), event.getTraceId(), e);
-            handleSendFailure(context);
-            return false;
-        }
-    }
-
-    private void sendHeartbeat(EmitterContext context) {
-        try {
-            context.getEmitter().send(SseEmitter.event()
-                    .name("HEARTBEAT")
-                    .data(Notification.builder()
-                            .type("HEARTBEAT")
-                            .payload(String.valueOf(System.currentTimeMillis()))
-                            .build()));
-        } catch (IOException e) {
-            if (!isConnectionAborted(e)) {
-                log.warn("心跳发送失败: 用户ID={}", context.getUserId());
-            }
-            handleSendFailure(context);
-        }
-    }
-
-    private boolean isConnectionAborted(Throwable e) {
-        if (e == null) {
-            return false;
-        }
-        String msg = e.getMessage();
-        return msg != null && (
-                msg.contains("Broken pipe") ||
-                        msg.contains("Connection reset") ||
-                        msg.contains("Connection timed out") ||
-                        msg.contains("ClientAbortException")
-        );
-    }
-
-    private String shortTraceId() {
-        return UUID.randomUUID().toString().substring(0, 8);
-    }
-
-    private void handleSendFailure(EmitterContext context) {
-        int failures = context.incrementSlowCount();
-        int maxFailures = pushConfig.getMaxSlowCount();
-
-        if (failures >= maxFailures) {
-            // 熔断前先尝试排水关键事件
-            drainCriticalEvents(context);
-
-            log.error("[熔断保护] 连续发送失败{}次，断开连接: 用户ID={}, 客户端ID={}",
-                    maxFailures, context.getUserId(), context.getClientId());
-
-            context.markInactive();
-            safeCleanup(context.getUserId(), context.getClientId());
-
+            final QueuedEvent event;
             try {
-                context.getEmitter().completeWithError(new RuntimeException("Slow client circuit breaker"));
-            } catch (Exception ignore) {
-                // 可能已关闭
+                event =
+                        new QueuedEvent(
+                                notification,
+                                priority,
+                                System.currentTimeMillis(),
+                                TraceContext.getTraceId(),
+                                objectMapper);
+            } catch (RuntimeException error) {
+                metrics.increment("notification.serializationFailed");
+                throw error;
             }
+            long budget = TimeUnit.MILLISECONDS.toNanos(config.getDispatchTimeoutMs());
+            int enqueued = 0, full = 0, closed = 0;
+            for (var target : targets) {
+                long before = System.nanoTime();
+                var context = target.context();
+                metrics.increment("enqueue.attempted");
+                var outcome =
+                        context.enqueueResult(
+                                event, config, Math.max(0, budget - (before - start)));
+                switch (outcome) {
+                    case ACCEPTED -> {
+                        enqueued++;
+                        metrics.increment("enqueue.accepted");
+                    }
+                    case CLOSED -> {
+                        closed++;
+                        metrics.increment("enqueue.rejectedClosed");
+                    }
+                    case FULL, TOO_LARGE -> {
+                        full++;
+                        metrics.increment("enqueue.rejectedFull");
+                        if (outcome == EmitterContext.EnqueueResult.TOO_LARGE)
+                            metrics.increment("enqueue.rejectedTooLarge");
+                    }
+                }
+                if (priority == EventPriority.CRITICAL)
+                    metrics.criticalAttempt(outcome != EmitterContext.EnqueueResult.ACCEPTED);
+                metrics.enqueueWait(System.nanoTime() - before);
+            }
+            return new DispatchResult(targets.size(), enqueued, full, closed);
+        } finally {
+            metrics.dispatchDuration(System.nanoTime() - start);
         }
     }
 
     /**
-     * 尝试快速消费队列中的关键事件，减少消息丢失
+     * 一次性终止连接、移除注册并异步结束传输，保留首次原因。
+     *
+     * @param connection 待终止连接
+     * @param reason 本次终止原因
      */
-    private void drainCriticalEvents(EmitterContext context) {
-        int drained = 0;
-        QueuedEvent event;
-        try {
-            while (drained < 10 && (event = context.pollNext(0, TimeUnit.MILLISECONDS, pushConfig.getPriorityStrategy())) != null) {
-                if (event.getPriority() == EventPriority.CRITICAL) {
-                    try {
-                        context.getEmitter().send(SseEmitter.event()
-                                .name(event.getNotification().getType())
-                                .data(event.getNotification()));
-                        drained++;
-                    } catch (Exception ignore) {
-                        break; // 发送失败则停止
-                    }
-                } else {
-                    // 熔断期间不发送普通事件；重新入队，避免它被“排水”逻辑静默丢弃。
-                    context.enqueue(event, pushConfig);
-                    break;
-                }
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+    private void terminate(SseConnection connection, SseConnection.CloseReason reason) {
+        if (!connection.terminate(reason)) return;
+        var context = connection.context();
+        context.markClosed();
+        registry.remove(connection);
+        metrics.increment("connection.closed." + reason.name());
+        metrics.add("event.abandoned", context.getAbandonedCount());
+        log.debug(
+                "SSE closed: userId={}, clientId={}, reason={}, abandoned={}",
+                context.getUserId(),
+                context.getClientId(),
+                reason,
+                context.getAbandonedCount());
+        var thread = context.getWriterThread();
+        if (thread != null && thread != Thread.currentThread()) thread.interrupt();
+        var managed = live.get(context.getClientId());
+        // 容器结束操作可能等待网络写入，不能阻塞共享巡检或持有注册锁执行。
+        Thread.ofVirtual()
+                .name("sse-completion-" + context.getClientId())
+                .start(
+                        () -> {
+                            try {
+                                if (reason == APPLICATION_FAILURE
+                                        || reason == SERIALIZATION_FAILURE) {
+                                    context.getEmitter()
+                                            .completeWithError(
+                                                    new IllegalStateException(
+                                                            "SSE terminated: " + reason));
+                                } else context.getEmitter().complete();
+                            } catch (RuntimeException error) {
+                                log.debug(
+                                        "SSE completion finished with container error: clientId={},"
+                                                + " reason={}",
+                                        context.getClientId(),
+                                        reason,
+                                        error);
+                            } finally {
+                                if (managed != null) {
+                                    managed.completionExited.set(true);
+                                    releaseIfFinished(managed);
+                                }
+                            }
+                        });
+    }
+
+    /**
+     * 写入线程和传输结束操作均退出后，归还实例连接名额。
+     *
+     * @param managed 待检查的连接资源
+     */
+    private void releaseIfFinished(ManagedConnection managed) {
+        if (managed.writerExited.get()
+                && managed.completionExited.get()
+                && managed.released.compareAndSet(false, true)) {
+            live.remove(managed.connection.context().getClientId(), managed);
+            instanceSlots.release();
         }
-        if (drained > 0) {
-            log.info("熔断前排水关键事件{}条: 用户ID={}", drained, context.getUserId());
+    }
+
+    /** 执行共享巡检并记录异常，避免后续定时巡检被取消。 */
+    private void inspectSafely() {
+        try {
+            inspect();
+        } catch (RuntimeException error) {
+            log.warn("SSE inspection failed", error);
+        }
+    }
+
+    /** 独立检查写入停滞、排空期限和队列压力，并更新预警。 */
+    void inspect() {
+        long now = System.nanoTime();
+        long oldestQueued = 0;
+        int stalled = 0, orphanWriters = 0, congestedQueues = 0;
+        for (var owned : live.values()) {
+            var connection = owned.connection;
+            var context = connection.context();
+            long writeAge = connection.writeAgeNanos(now);
+            if (connection.observeQueueOccupation(now, config)) congestedQueues++;
+            oldestQueued = Math.max(oldestQueued, context.getOldestQueuedAgeNanos(now));
+            if (context.isClosed() && !owned.writerExited.get()) orphanWriters++;
+            if (config.getWriteStallTimeoutMs() > 0
+                    && writeAge >= TimeUnit.MILLISECONDS.toNanos(config.getWriteStallTimeoutMs())) {
+                stalled++;
+                terminate(connection, WRITE_TIMEOUT);
+            }
+            if (context.getState() == EmitterContext.State.DRAINING
+                    && connection.drainAgeNanos(now)
+                            >= TimeUnit.MILLISECONDS.toNanos(config.getDrainTimeoutMs())) {
+                terminate(connection, DRAIN_TIMEOUT);
+            }
+        }
+        synchronized (warningSince) {
+            var recent = metrics.recent();
+            warning(
+                    "capacity",
+                    (double) live.size() / config.getMaxConnectionsPerInstance()
+                            >= config.getCapacityWarningRatio(),
+                    now);
+            warning(
+                    "queueDelay",
+                    config.getQueueDelayWarningMs() > 0
+                            && oldestQueued
+                                    >= TimeUnit.MILLISECONDS.toNanos(
+                                            config.getQueueDelayWarningMs()),
+                    now);
+            warning("writeStalled", stalled > 0, now);
+            warning("writerAfterClose", orphanWriters > 0, now);
+            warning("queueOccupation", congestedQueues > 0, now);
+            warning(
+                    "criticalRejectionRate",
+                    config.getCriticalRejectionWarningRatio() > 0
+                            && recent.get("criticalAttempts") >= config.getWarningMinSamples()
+                            && (double) recent.get("criticalRejected")
+                                            / recent.get("criticalAttempts")
+                                    >= config.getCriticalRejectionWarningRatio(),
+                    now);
+            warning(
+                    "queueP99",
+                    config.getQueueDelayWarningMs() > 0
+                            && recent.get("queueSamples") >= config.getWarningMinSamples()
+                            && recent.get("queueP99UpperBoundMs")
+                                    >= config.getQueueDelayWarningMs(),
+                    now);
+        }
+    }
+
+    /**
+     * 按持续时间触发预警，条件消失后记录恢复。
+     *
+     * @param code 固定预警原因码
+     * @param present 预警条件当前是否成立
+     * @param now 当前单调时间，单位为纳秒
+     */
+    private void warning(String code, boolean present, long now) {
+        if (!present) {
+            warningSince.remove(code);
+            if (activeWarnings.remove(code)) {
+                metrics.increment("warning.recovered." + code);
+                log.info("SSE warning recovered: reason={}", code);
+            }
+            return;
+        }
+        long since = warningSince.computeIfAbsent(code, ignored -> now);
+        if (now - since >= TimeUnit.MILLISECONDS.toNanos(config.getWarningSustainMs())
+                && activeWarnings.add(code)) {
+            metrics.increment("warning.raised." + code);
+            log.warn(
+                    "SSE warning: reason={}, sustainedMs={}, registered={}, liveResources={},"
+                            + " budget={}, window={}, diagnostics=JMX"
+                            + " cn.redture.sse:type=Connections/diagnostics",
+                    code,
+                    TimeUnit.NANOSECONDS.toMillis(now - since),
+                    registry.size(),
+                    live.size(),
+                    config.getMaxConnectionsPerInstance(),
+                    metrics.recent());
+        }
+    }
+
+    /**
+     * 汇总连接进展、资源占用、指标及预警，供 JMX 查询。
+     *
+     * @return 只读诊断快照；耗时单位见字段名
+     */
+    @org.springframework.jmx.export.annotation.ManagedOperation(
+            description = "SSE lifecycle, queue, write progress, counters and warnings")
+    public Map<String, Object> diagnostics() {
+        long now = System.nanoTime();
+        long writingAge = 0, oldestQueued = 0, queued = 0, writers = 0;
+        var details = new ArrayList<Map<String, Object>>();
+        for (var managed : live.values()) {
+            var connection = managed.connection;
+            var context = connection.context();
+            long writeAge = connection.writeAgeNanos(now);
+            long queueAge = context.getOldestQueuedAgeNanos(now);
+            String health =
+                    context.isClosed()
+                            ? "TERMINATED"
+                            : config.getWriteStallTimeoutMs() > 0
+                                            && writeAge
+                                                    >= TimeUnit.MILLISECONDS.toNanos(
+                                                            config.getWriteStallTimeoutMs())
+                                    ? "NO_PROGRESS"
+                                    : config.getQueueDelayWarningMs() > 0
+                                                    && queueAge
+                                                            >= TimeUnit.MILLISECONDS.toNanos(
+                                                                    config.getQueueDelayWarningMs())
+                                            ? "CONGESTED"
+                                            : "NORMAL";
+            var detail =
+                    new LinkedHashMap<String, Object>(
+                            Map.of(
+                                    "userId",
+                                    context.getUserId(),
+                                    "clientId",
+                                    context.getClientId(),
+                                    "state",
+                                    context.getState().name(),
+                                    "health",
+                                    health,
+                                    "writeAgeNanos",
+                                    writeAge,
+                                    "lastSuccessfulWriteAt",
+                                    connection.lastSuccessfulWriteAt(),
+                                    "queueSize",
+                                    context.getQueueSize(),
+                                    "queueBytes",
+                                    context.getQueueBytes(),
+                                    "oldestQueuedAgeNanos",
+                                    queueAge,
+                                    "closeReason",
+                                    connection.closeReason() == null
+                                            ? ""
+                                            : connection.closeReason().name()));
+            detail.put("queueCapacity", context.queueCapacity());
+            detail.put("queueHighAgeNanos", connection.queueHighAgeNanos(now));
+            details.add(Collections.unmodifiableMap(detail));
+            writingAge = Math.max(writingAge, connection.writeAgeNanos(now));
+            oldestQueued =
+                    Math.max(oldestQueued, connection.context().getOldestQueuedAgeNanos(now));
+            queued += connection.context().getQueueSize();
+            if (!managed.writerExited.get()) writers++;
+        }
+        Set<String> warnings;
+        synchronized (warningSince) {
+            warnings = Set.copyOf(activeWarnings);
+        }
+        var result = new LinkedHashMap<String, Object>();
+        result.put("registeredConnections", registry.size());
+        result.put("liveResources", live.size());
+        result.put("writers", writers);
+        result.put("writingAgeNanos", writingAge);
+        result.put("oldestQueuedAgeNanos", oldestQueued);
+        result.put("queuedEvents", queued);
+        result.put("queuedBytes", queueBudget.usedBytes());
+        result.put("counters", metrics.counters());
+        result.put("latency", metrics.latency());
+        result.put("recent", metrics.recent());
+        result.put("warnings", warnings);
+        result.put("connections", details);
+        result.put("instanceConnectionBudget", config.getMaxConnectionsPerInstance());
+        result.put("instanceQueueBytesBudget", config.getMaxQueueBytesPerInstance());
+        return Collections.unmodifiableMap(result);
+    }
+
+    List<EmitterContext> connections(Long userId) {
+        return registry.connections(userId).stream().map(SseConnection::context).toList();
+    }
+
+    /** 停止准入并限时排空连接，超时后终止剩余连接和巡检任务。 */
+    @Override
+    @PreDestroy
+    public void close() {
+        if (!stopping.compareAndSet(false, true)) return;
+        var active = registry.stopAdmission();
+        active.forEach(SseConnection::beginDrain);
+        long start = System.nanoTime(),
+                budget = TimeUnit.MILLISECONDS.toNanos(config.getDrainTimeoutMs());
+        for (var managed : List.copyOf(live.values())) {
+            long remaining = budget - (System.nanoTime() - start);
+            if (remaining <= 0) break;
+            try {
+                Thread thread = managed.connection.context().getWriterThread();
+                if (thread != null)
+                    thread.join(Math.max(1, TimeUnit.NANOSECONDS.toMillis(remaining)));
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        for (var owned : live.values()) terminate(owned.connection, DRAIN_TIMEOUT);
+        inspector.shutdownNow();
+    }
+
+    /** 保存连接及两类资源的退出标记。 */
+    private static final class ManagedConnection {
+        final SseConnection connection;
+        final AtomicBoolean writerExited = new AtomicBoolean();
+        final AtomicBoolean completionExited = new AtomicBoolean();
+        final AtomicBoolean released = new AtomicBoolean();
+
+        ManagedConnection(SseConnection connection) {
+            this.connection = connection;
         }
     }
 }
