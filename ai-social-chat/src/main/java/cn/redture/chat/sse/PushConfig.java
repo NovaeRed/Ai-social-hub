@@ -7,6 +7,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+/** SSE 连接、队列、传输和预警配置。 */
 @Data
 @Component
 @ConfigurationProperties(prefix = "chat.sse.push")
@@ -37,6 +38,7 @@ public class PushConfig {
     // 优先级丢弃策略
     private PriorityStrategy priorityStrategy = new PriorityStrategy();
 
+    /** 优先级丢弃阈值及连续发送配额。 */
     @Data
     public static class PriorityStrategy {
         // CRITICAL: 队列满时最多阻塞等待时间(毫秒)，0 表示立即返回
@@ -67,6 +69,7 @@ public class PushConfig {
     private int warningMinSamples = 100;
     private double criticalRejectionWarningRatio = 0;
 
+    /** 校验配置范围及容量、超时之间的关联约束。 */
     @PostConstruct
     public void validate() {
         if (maxConnectionsPerUser <= 0

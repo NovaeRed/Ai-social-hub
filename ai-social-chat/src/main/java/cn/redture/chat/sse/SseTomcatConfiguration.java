@@ -5,7 +5,7 @@ import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactor
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.context.annotation.Configuration;
 
-/** Opt-in Tomcat HTTP/1.1 NIO blocking write timeout. Applies to the whole connector. */
+/** 配置 Tomcat HTTP/1.1 NIO 的传输超时。 */
 @Configuration(proxyBeanMethods = false)
 public class SseTomcatConfiguration
         implements WebServerFactoryCustomizer<TomcatServletWebServerFactory> {
@@ -15,6 +15,11 @@ public class SseTomcatConfiguration
         this.config = config;
     }
 
+    /**
+     * 启用传输预算时，设置整个 Tomcat NIO 连接器的读写超时。
+     *
+     * @param factory 待定制的 Tomcat 服务工厂
+     */
     @Override
     public void customize(TomcatServletWebServerFactory factory) {
         if (config.getTransportWriteTimeoutMs() <= 0) return;

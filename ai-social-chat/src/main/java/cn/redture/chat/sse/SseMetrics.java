@@ -4,7 +4,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
-/** Bounded-cardinality counters; no user/client/event identifiers become labels. */
+/** 汇总固定指标码的计数、耗时和滚动窗口数据。 */
 public final class SseMetrics {
     private final boolean enabled;
     private final Map<String, LongAdder> counters = new ConcurrentHashMap<>();
@@ -35,6 +35,12 @@ public final class SseMetrics {
         add(code, 1);
     }
 
+    /**
+     * 启用采集时，按固定指标码累加计数。
+     *
+     * @param code 固定指标码，不含用户或连接标识
+     * @param amount 本次增加的数量
+     */
     void add(String code, long amount) {
         if (enabled) counters.computeIfAbsent(code, ignored -> new LongAdder()).add(amount);
     }
@@ -43,6 +49,11 @@ public final class SseMetrics {
         if (enabled) dispatch.record(nanos);
     }
 
+    /**
+     * 同时记录累计及滚动窗口内的排队耗时。
+     *
+     * @param nanos 事件排队时长，单位为纳秒
+     */
     void queueWait(long nanos) {
         if (enabled) {
             queueWait.record(nanos);
@@ -58,12 +69,22 @@ public final class SseMetrics {
         if (enabled) write.record(nanos);
     }
 
+    /**
+     * 汇总当前计数，隔离外部对内部统计的修改。
+     *
+     * @return 按指标码分组的只读计数快照
+     */
     public Map<String, Long> counters() {
         var result = new TreeMap<String, Long>();
         counters.forEach((key, value) -> result.put(key, value.sum()));
         return Collections.unmodifiableMap(result);
     }
 
+    /**
+     * 汇总分发、排队、入队等待和写入的累计耗时指标。
+     *
+     * @return 各阶段的样本数、纳秒总耗时及 P99 毫秒上界
+     */
     public Map<String, Map<String, Long>> latency() {
         return Map.of(
                 "dispatch",
@@ -76,7 +97,7 @@ public final class SseMetrics {
                 write.snapshot());
     }
 
-    /** Twelve fixed buckets, bounded memory. Oldest partial bucket may be excluded. */
+    /** 使用十二个固定时间桶统计近期样本。 */
     static final class Window {
         private final long bucketNanos;
         private final long configuredWindowMs;
@@ -94,6 +115,12 @@ public final class SseMetrics {
                                     / buckets.length);
         }
 
+        /**
+         * 定位当前时间桶，复用旧桶时清空过期样本。
+         *
+         * @param now 当前单调时间，单位为纳秒
+         * @return 当前可记录样本的时间桶
+         */
         private Bucket current(long now) {
             long epoch = Math.floorDiv(now, bucketNanos);
             var bucket = buckets[Math.floorMod(epoch, buckets.length)];
@@ -105,12 +132,24 @@ public final class SseMetrics {
             return bucket;
         }
 
+        /**
+         * 记录滚动窗口内的一次关键事件入队尝试。
+         *
+         * @param rejected 本次尝试是否被拒绝
+         * @param now 当前单调时间，单位为纳秒
+         */
         synchronized void criticalAttempt(boolean rejected, long now) {
             var bucket = current(now);
             bucket.attempted++;
             if (rejected) bucket.rejected++;
         }
 
+        /**
+         * 按耗时上界将排队样本计入当前时间桶。
+         *
+         * @param nanos 排队时长，单位为纳秒
+         * @param now 当前单调时间，单位为纳秒
+         */
         synchronized void queueWait(long nanos, long now) {
             var bucket = current(now);
             for (int i = 0; i < Latency.BOUNDS.length; i++) {
@@ -123,6 +162,12 @@ public final class SseMetrics {
             }
         }
 
+        /**
+         * 汇总有效时间桶，计算关键事件拒绝数和排队 P99 上界。
+         *
+         * @param now 当前单调时间，单位为纳秒
+         * @return 窗口大小、尝试和拒绝数、排队样本数及 P99 毫秒上界
+         */
         synchronized Map<String, Long> snapshot(long now) {
             long epoch = Math.floorDiv(now, bucketNanos), attempted = 0, rejected = 0;
             long[] queue = new long[Latency.BOUNDS.length];
@@ -153,6 +198,7 @@ public final class SseMetrics {
                     p99);
         }
 
+        /** 保存单个时间桶的计数和耗时分布。 */
         private static final class Bucket {
             long epoch = Long.MIN_VALUE / 2;
             long attempted, rejected;
@@ -160,8 +206,9 @@ public final class SseMetrics {
         }
     }
 
+    /** 按固定耗时上界汇总累计样本。 */
     private static final class Latency {
-        // Upper bounds in milliseconds. Last bucket is overflow; p99 is a bucket upper bound.
+        // 上界单位为毫秒，末桶接纳溢出样本；P99 使用桶上界。
         private static final long[] BOUNDS = {
             1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000, 30_000, Long.MAX_VALUE
         };
@@ -171,6 +218,11 @@ public final class SseMetrics {
                         .toArray(LongAdder[]::new);
         private final LongAdder totalNanos = new LongAdder();
 
+        /**
+         * 将非负耗时计入累计总量及对应分桶。
+         *
+         * @param nanos 本次耗时，单位为纳秒；负数按 0 处理
+         */
         void record(long nanos) {
             totalNanos.add(Math.max(0, nanos));
             long safeNanos = Math.max(0, nanos);
@@ -182,6 +234,11 @@ public final class SseMetrics {
                 }
         }
 
+        /**
+         * 汇总累计耗时，并以分桶上界估计 P99。
+         *
+         * @return 样本数、纳秒总耗时及 P99 毫秒上界
+         */
         Map<String, Long> snapshot() {
             long count = Arrays.stream(buckets).mapToLong(LongAdder::sum).sum();
             long accumulated = 0, p99 = 0;

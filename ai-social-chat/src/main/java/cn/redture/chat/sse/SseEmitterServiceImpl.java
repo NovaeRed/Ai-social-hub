@@ -21,6 +21,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
+/** 编排连接注册、通知分发、资源回收与健康巡检。 */
 @Slf4j
 @Service
 @org.springframework.jmx.export.annotation.ManagedResource(
@@ -28,7 +29,7 @@ import java.util.function.Supplier;
 public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
     private final PushConfig config;
     private final ConnectionRegistry registry = new ConnectionRegistry();
-    // Includes detached connections until both writer and completion have really exited.
+    // 已移出注册表的连接仍占资源，直到写入线程和传输结束操作都退出。
     private final ConcurrentMap<String, ManagedConnection> live = new ConcurrentHashMap<>();
     private final Semaphore instanceSlots;
     private final InstanceQueueBudget queueBudget;
@@ -81,6 +82,12 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
                 TimeUnit.MILLISECONDS);
     }
 
+    /**
+     * 准入并注册新连接，将握手入队后启动唯一写入线程。
+     *
+     * @param userId 连接所属用户 ID
+     * @return 新建事件流连接
+     */
     @Override
     public SseEmitter createEmitter(Long userId) {
         Objects.requireNonNull(userId, "userId");
@@ -139,8 +146,7 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
                             System.currentTimeMillis(),
                             TraceContext.getTraceId(),
                             objectMapper);
-            // Reserve the handshake before publication, so concurrent business dispatch cannot
-            // precede it.
+            // 注册前先将握手入队，确保并发业务通知不会先于握手发送。
             if (!context.enqueue(handshake, config, 0)) {
                 metrics.increment("admission.rejected");
                 terminate(connection, HANDSHAKE_REJECTED);
@@ -177,6 +183,14 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
         return sendToUser(userId, notification, EventPriority.forType(notification.getType()));
     }
 
+    /**
+     * 在整次分发等待预算内，向目标用户的连接入队通知。
+     *
+     * @param userId 目标用户 ID
+     * @param notification 待分发通知
+     * @param priority 事件优先级
+     * @return 目标数、成功入队数及各类拒绝数，不表示客户端送达
+     */
     @Override
     public DispatchResult sendToUser(
             Long userId, Notification<?> notification, EventPriority priority) {
@@ -236,6 +250,12 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
         }
     }
 
+    /**
+     * 一次性终止连接、移除注册并异步结束传输，保留首次原因。
+     *
+     * @param connection 待终止连接
+     * @param reason 本次终止原因
+     */
     private void terminate(SseConnection connection, SseConnection.CloseReason reason) {
         if (!connection.terminate(reason)) return;
         var context = connection.context();
@@ -252,8 +272,7 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
         var thread = context.getWriterThread();
         if (thread != null && thread != Thread.currentThread()) thread.interrupt();
         var managed = live.get(context.getClientId());
-        // Completion can wait on a container write. Never run it on the shared inspector or
-        // registry lock.
+        // 容器结束操作可能等待网络写入，不能阻塞共享巡检或持有注册锁执行。
         Thread.ofVirtual()
                 .name("sse-completion-" + context.getClientId())
                 .start(
@@ -282,6 +301,11 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
                         });
     }
 
+    /**
+     * 写入线程和传输结束操作均退出后，归还实例连接名额。
+     *
+     * @param managed 待检查的连接资源
+     */
     private void releaseIfFinished(ManagedConnection managed) {
         if (managed.writerExited.get()
                 && managed.completionExited.get()
@@ -291,6 +315,7 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
         }
     }
 
+    /** 执行共享巡检并记录异常，避免后续定时巡检被取消。 */
     private void inspectSafely() {
         try {
             inspect();
@@ -299,6 +324,7 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
         }
     }
 
+    /** 独立检查写入停滞、排空期限和队列压力，并更新预警。 */
     void inspect() {
         long now = System.nanoTime();
         long oldestQueued = 0;
@@ -356,6 +382,13 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
         }
     }
 
+    /**
+     * 按持续时间触发预警，条件消失后记录恢复。
+     *
+     * @param code 固定预警原因码
+     * @param present 预警条件当前是否成立
+     * @param now 当前单调时间，单位为纳秒
+     */
     private void warning(String code, boolean present, long now) {
         if (!present) {
             warningSince.remove(code);
@@ -382,6 +415,11 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
         }
     }
 
+    /**
+     * 汇总连接进展、资源占用、指标及预警，供 JMX 查询。
+     *
+     * @return 只读诊断快照；耗时单位见字段名
+     */
     @org.springframework.jmx.export.annotation.ManagedOperation(
             description = "SSE lifecycle, queue, write progress, counters and warnings")
     public Map<String, Object> diagnostics() {
@@ -467,6 +505,7 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
         return registry.connections(userId).stream().map(SseConnection::context).toList();
     }
 
+    /** 停止准入并限时排空连接，超时后终止剩余连接和巡检任务。 */
     @Override
     @PreDestroy
     public void close() {
@@ -491,6 +530,7 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
         inspector.shutdownNow();
     }
 
+    /** 保存连接及两类资源的退出标记。 */
     private static final class ManagedConnection {
         final SseConnection connection;
         final AtomicBoolean writerExited = new AtomicBoolean();

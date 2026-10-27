@@ -2,12 +2,18 @@ package cn.redture.chat.sse;
 
 import java.util.Locale;
 
+/** 事件优先级及类型映射。 */
 public enum EventPriority {
     CRITICAL,
     NORMAL,
     LOW;
 
-    /** Exact protocol names; unknown event types use NORMAL. */
+    /**
+     * 按明确的事件名称映射优先级。
+     *
+     * @param type 事件类型，可为 null
+     * @return 匹配的优先级，空值或未知类型为 NORMAL
+     */
     public static EventPriority forType(String type) {
         if (type == null) return NORMAL;
         return switch (type.toUpperCase(Locale.ROOT)) {

@@ -11,6 +11,7 @@ import java.util.IdentityHashMap;
 import java.util.Locale;
 import java.util.Set;
 
+/** 统一识别业务事件和心跳的发送故障。 */
 final class SendFailureClassifier {
     enum Failure {
         PEER_DISCONNECTED,
@@ -21,6 +22,12 @@ final class SendFailureClassifier {
         APPLICATION
     }
 
+    /**
+     * 沿异常原因链分类发送故障，优先识别写入超时。
+     *
+     * @param error 发送异常，可为 null
+     * @return 故障类别，空值或未匹配时为 APPLICATION
+     */
     static Failure classify(Throwable error) {
         Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         Failure result = Failure.APPLICATION;

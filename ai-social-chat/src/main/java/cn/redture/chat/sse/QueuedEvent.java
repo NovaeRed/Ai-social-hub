@@ -12,9 +12,7 @@ import lombok.Getter;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
-/**
- * Immutable serialized snapshot: caller mutation cannot change accepted events or byte accounting.
- */
+/** 保存不可变事件快照及连接级入队时间。 */
 @Getter
 public final class QueuedEvent {
     private static final ObjectMapper DEFAULT_MAPPER = defaultMapper();
@@ -30,6 +28,11 @@ public final class QueuedEvent {
     @Getter(lombok.AccessLevel.NONE)
     private final JsonNode payloadSnapshot;
 
+    /**
+     * 创建使用 ISO 日期且忽略空字段的默认序列化器。
+     *
+     * @return 默认 JSON 序列化器
+     */
     static ObjectMapper defaultMapper() {
         return JsonMapper.builder()
                 .findAndAddModules()
@@ -77,13 +80,20 @@ public final class QueuedEvent {
         this.enqueuedAtNanos = enqueuedAtNanos;
     }
 
-    /** Same immutable wire bytes, but each connection owns its actual acceptance time. */
+    /**
+     * 复用事件快照，记录当前连接实际接受入队的时刻。
+     *
+     * @param now 当前单调时间，单位为纳秒
+     * @return 带有本连接入队时间的事件
+     */
     QueuedEvent acceptedAt(long now) {
         return new QueuedEvent(this, now);
     }
 
     /**
-     * Defensive view retained for diagnostics; writer uses the serialized bytes and type directly.
+     * 生成通知的防御性副本，避免外部修改影响已排队事件。
+     *
+     * @return 包含载荷副本的通知
      */
     public Notification<?> getNotification() {
         return new Notification<>(

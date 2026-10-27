@@ -1,6 +1,6 @@
 package cn.redture.common.integration.notification;
 
-/** Connection-level queue admission; this result does not acknowledge client delivery. */
+/** 连接级通知入队结果，不表示客户端送达。 */
 public record DispatchResult(
         int targetConnections, int enqueuedConnections, int rejectedFull, int rejectedClosed) {
     public enum Status {
@@ -27,6 +27,11 @@ public record DispatchResult(
         return new DispatchResult(0, 0, 0, 0);
     }
 
+    /**
+     * 根据目标连接的接纳和拒绝计数确定分发状态。
+     *
+     * @return 分发状态；全部拒绝且包含容量拒绝时为 REJECTED_FULL
+     */
     public Status status() {
         if (targetConnections == 0) return Status.NO_ACTIVE_CONNECTION;
         if (enqueuedConnections == targetConnections) return Status.ENQUEUED;

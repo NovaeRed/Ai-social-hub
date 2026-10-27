@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** Connection-local queue and admission state share one lock. Network operations never hold it. */
+/** 管理单连接的有界优先级队列及接纳状态。 */
 public class EmitterContext {
     @Getter private final Long userId;
     @Getter private final String clientId;
@@ -101,6 +101,13 @@ public class EmitterContext {
         consecutiveFailures.set(0);
     }
 
+    /**
+     * 按优先级策略和默认等待预算接纳事件。
+     *
+     * @param event 待发送事件
+     * @param config 推送配置
+     * @return 是否成功入队，不表示客户端已收到
+     */
     public boolean enqueue(QueuedEvent event, PushConfig config) {
         return enqueue(
                 event,
@@ -109,10 +116,26 @@ public class EmitterContext {
                         config.getPriorityStrategy().getCriticalBlockTimeoutMs()));
     }
 
+    /**
+     * 在调用方剩余等待预算内接纳事件。
+     *
+     * @param event 待发送事件
+     * @param config 推送配置
+     * @param maxWaitNanos 最大等待纳秒数，非正数表示不等待
+     * @return 是否成功入队
+     */
     public boolean enqueue(QueuedEvent event, PushConfig config, long maxWaitNanos) {
         return enqueueResult(event, config, maxWaitNanos) == EnqueueResult.ACCEPTED;
     }
 
+    /**
+     * 在同一锁内检查状态和容量，接纳事件或返回拒绝原因。
+     *
+     * @param event 待发送事件
+     * @param config 优先级、等待及字节限制配置
+     * @param maxWaitNanos 剩余等待纳秒数，仅关键事件允许等待
+     * @return 接纳结果；等待超时或被中断时返回 FULL
+     */
     public EnqueueResult enqueueResult(QueuedEvent event, PushConfig config, long maxWaitNanos) {
         Objects.requireNonNull(event);
         long waitNanos =
@@ -122,7 +145,7 @@ public class EmitterContext {
                                 TimeUnit.MILLISECONDS.toNanos(
                                         config.getPriorityStrategy().getCriticalBlockTimeoutMs()))
                         : 0;
-        // The budget includes acquiring this lock, as well as waiting for a free slot.
+        // 等待预算包含获取队列锁和等待空位的时间。
         long started = System.nanoTime();
         try {
             if (!queueLock.tryLock(waitNanos, TimeUnit.NANOSECONDS)) return EnqueueResult.FULL;
@@ -146,7 +169,7 @@ public class EmitterContext {
                                     && event.getSizeBytes()
                                             <= config.getMaxQueueBytes() - queueBytes;
                     if (hasCapacity) {
-                        // Instance exhaustion rejects immediately; no cross-connection queue waits.
+                        // 实例字节预算耗尽时立即拒绝，避免跨连接等待。
                         if (!sharedBudget.tryReserve(event.getSizeBytes()))
                             return EnqueueResult.FULL;
                         priorityQueues
@@ -171,6 +194,15 @@ public class EmitterContext {
         }
     }
 
+    /**
+     * 按公平配额取出事件，并归还数量和字节预算。
+     *
+     * @param timeout 队列为空时的最大等待时长
+     * @param unit 等待时长单位
+     * @param strategy 优先级连续发送配额
+     * @return 下一条事件；等待超时或停止接纳且队列为空时为 null
+     * @throws InterruptedException 等待锁或事件时被中断
+     */
     public QueuedEvent pollNext(long timeout, TimeUnit unit, PushConfig.PriorityStrategy strategy)
             throws InterruptedException {
         long remaining = Math.max(0, unit.toNanos(timeout));
@@ -191,6 +223,12 @@ public class EmitterContext {
         }
     }
 
+    /**
+     * 在持有队列锁且队列非空时，按连续配额选择事件。
+     *
+     * @param strategy 各优先级的连续发送配额
+     * @return 被取出的事件
+     */
     private QueuedEvent selectNext(PushConfig.PriorityStrategy strategy) {
         ArrayDeque<QueuedEvent> critical = priorityQueues.get(EventPriority.CRITICAL);
         ArrayDeque<QueuedEvent> normal = priorityQueues.get(EventPriority.NORMAL);
@@ -248,6 +286,12 @@ public class EmitterContext {
         return getQueueSize() == 0;
     }
 
+    /**
+     * 计算最早待发事件已排队的时间。
+     *
+     * @param now 当前单调时间，单位为纳秒
+     * @return 最长排队纳秒数，队列为空时为 0
+     */
     public long getOldestQueuedAgeNanos(long now) {
         queueLock.lock();
         try {
@@ -262,7 +306,13 @@ public class EmitterContext {
         }
     }
 
-    /** Only forward lifecycle transitions are accepted; close atomically discards and releases. */
+    /**
+     * 仅允许状态向前迁移，关闭时清队并唤醒等待线程。
+     *
+     * @param expected 预期当前状态
+     * @param target 目标状态
+     * @return 状态是否成功迁移
+     */
     public boolean transitionState(State expected, State target) {
         queueLock.lock();
         try {
@@ -283,10 +333,12 @@ public class EmitterContext {
         }
     }
 
+    /** 停止接纳新事件，保留已入队事件供限时排空。 */
     public void markInactive() {
         transitionState(State.ACTIVE, State.DRAINING);
     }
 
+    /** 幂等关闭队列，统计遗弃事件并释放排队预算。 */
     public void markClosed() {
         queueLock.lock();
         try {

@@ -11,6 +11,7 @@ public interface NotificationExternalService {
      * @param userId 用户 ID
      * @param eventType 事件类型
      * @param payload 事件载荷
+     * @return 各目标连接的入队和拒绝计数，不表示客户端送达
      */
     DispatchResult sendToUser(Long userId, String eventType, Map<String, Object> payload);
 }

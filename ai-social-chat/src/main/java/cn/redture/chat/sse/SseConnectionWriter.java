@@ -11,7 +11,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
-/** The sole transport sender for a connection, including heartbeats. */
+/** 作为单连接唯一写入者，串行发送业务事件和心跳。 */
 @Slf4j
 final class SseConnectionWriter {
     private final PushConfig config;
@@ -27,6 +27,11 @@ final class SseConnectionWriter {
         this.terminate = terminate;
     }
 
+    /**
+     * 串行发送事件和空闲心跳，退出时触发连接清理。
+     *
+     * @param connection 当前写入线程负责的连接
+     */
     void run(SseConnection connection) {
         var context = connection.context();
         metrics.increment("writer.started");
@@ -95,8 +100,14 @@ final class SseConnectionWriter {
     }
 
     /**
-     * Returns whether a send was attempted; failure and unattempted abandonment have separate
-     * counters.
+     * 统一发送事件或心跳，分类统计失败并按原因终止连接。
+     *
+     * @param connection 目标连接
+     * @param event 待写入的事件帧
+     * @param eventId 事件标识，用于诊断
+     * @param traceId 链路标识，心跳可为 null
+     * @param handshake 是否为握手事件
+     * @return 是否已尝试发送；true 不代表发送成功
      */
     private boolean tryStartSend(
             SseConnection connection,
@@ -133,8 +144,7 @@ final class SseConnectionWriter {
                 case EMITTER_ENDED -> terminate.accept(connection, EMITTER_ENDED);
                 case WRITE_TIMEOUT -> terminate.accept(connection, WRITE_TIMEOUT);
                 case TRANSPORT -> terminate.accept(connection, TRANSPORT_FAILURE);
-                // A rejected event is not a successful write. Only application/format failures may
-                // continue, and only until the configured consecutive failure threshold.
+                // 仅应用或格式故障允许继续发送，达到连续失败阈值后终止。
                 case SERIALIZATION, APPLICATION -> {
                     if (failures >= config.getMaxSlowCount())
                         terminate.accept(
