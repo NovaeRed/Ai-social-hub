@@ -300,6 +300,8 @@ location /api/ {
 
 `proxy_pass` 不附加新的路径，保留 `/api/v1`。根据实际可信代理地址配置后端白名单，并同步配置上传大小、后端 multipart 限制和连接超时；聊天服务自身的文件大小检查不能替代入口层配置。
 
+SSE 的连接预算、写入超时适配、JMX 指标及预警配置见 [SSE 生命周期说明](docs/sse-lifecycle.md)，通知结果与 Redis ACK、重试及死信边界见 [通知契约](docs/sse-notification-contract.md)。本轮修复与真实 HTTP、Redis 和浏览器验证范围见 [验收记录](docs/sse-verification-20261027.md)。
+
 ### 后端容器部署
 
 项目已有 Dockerfile，先在仓库根目录打包，再构建应用镜像：
