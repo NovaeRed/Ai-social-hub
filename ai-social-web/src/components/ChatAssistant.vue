@@ -1,26 +1,27 @@
 <script setup lang="ts">
+import type { AiModel } from '../types/domain';
 import { computed, ref, onBeforeUnmount } from 'vue';
 import { Sparkles, X, RotateCcw, Copy } from 'lucide-vue-next';
-import { demo, stream, type Message } from '../lib/api';
+import { IS_DEMO_MODE, stream, type Message } from '../services/http';
 import { redactIdentifiers } from '../lib/presentation';
 type Tool = 'polish' | 'smart-reply' | 'summarize';
 const props = defineProps<{
   conversationId: string;
   draft: string;
   messages: Message[];
-  models: any[];
+  models: AiModel[];
   userId: string;
 }>();
 const emit = defineEmits<{ 'update:draft': [text: string]; busy: [value: boolean] }>();
 const tool = ref<Tool>('polish'),
-  visible = ref(false),
-  busy = ref(false),
+  isVisible = ref(false),
+  isBusy = ref(false),
   output = ref(''),
   error = ref(''),
   model = ref(''),
   original = ref(''),
-  applied = ref(false),
-  copied = ref(false);
+  isApplied = ref(false),
+  isCopied = ref(false);
 const labels: Record<Tool, string> = {
   polish: 'AI 润色',
   'smart-reply': '回复建议',
@@ -45,21 +46,21 @@ let controller: AbortController | undefined,
 function cancel() {
   generation++;
   controller?.abort();
-  busy.value = false;
+  isBusy.value = false;
   emit('busy', false);
 }
 function close() {
   cancel();
-  visible.value = false;
+  isVisible.value = false;
 }
 async function run(next: Tool) {
-  if (busy.value) return;
+  if (isBusy.value) return;
   tool.value = next;
-  visible.value = true;
+  isVisible.value = true;
   output.value = '';
   error.value = '';
-  applied.value = false;
-  copied.value = false;
+  isApplied.value = false;
+  isCopied.value = false;
   original.value = props.draft;
   if (next === 'polish' && !props.draft.trim()) {
     error.value = '先写下想说的话，再点润色。';
@@ -75,16 +76,16 @@ async function run(next: Tool) {
       available.value.find((m) => m.option_code === preferred)?.option_code ||
       available.value[0]?.option_code ||
       '';
-  if (!demo && !model.value) {
+  if (!IS_DEMO_MODE && !model.value) {
     error.value = 'AI 暂时不可用，请稍后再试。你的草稿已保留。';
     return;
   }
   const id = ++generation;
   controller = new AbortController();
-  busy.value = true;
+  isBusy.value = true;
   emit('busy', true);
   try {
-    if (demo)
+    if (IS_DEMO_MODE)
       output.value =
         next === 'polish'
           ? '【演示润色】很期待和你交流这个想法，我们找个时间好好聊聊吧。'
@@ -120,7 +121,7 @@ async function run(next: Tool) {
     if (!output.value.trim()) throw new Error('没有生成可用内容，请重试。');
     if (next === 'polish') {
       emit('update:draft', output.value);
-      applied.value = true;
+      isApplied.value = true;
     }
   } catch (e) {
     if (!disposed && generation === id && (e as Error).name !== 'AbortError') {
@@ -134,23 +135,23 @@ async function run(next: Tool) {
     }
   } finally {
     if (!disposed && generation === id) {
-      busy.value = false;
+      isBusy.value = false;
       emit('busy', false);
     }
   }
 }
 function undo() {
   emit('update:draft', original.value);
-  visible.value = false;
+  isVisible.value = false;
 }
 function applyReply() {
   emit('update:draft', output.value);
-  visible.value = false;
+  isVisible.value = false;
 }
 async function copy() {
   try {
     await navigator.clipboard.writeText(output.value);
-    copied.value = true;
+    isCopied.value = true;
   } catch {
     error.value = '复制失败，请选择上方内容手动复制。';
   }
@@ -164,28 +165,29 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <section v-if="visible" class="chat-ai-tray" aria-label="聊天内 AI 助手" :aria-busy="busy">
+  <section v-if="isVisible" class="chat-ai-tray" aria-label="聊天内 AI 助手" :aria-busy="isBusy">
     <div class="chat-ai-heading">
-      <strong><Sparkles :size="15" />{{ labels[tool] }}<small v-if="demo">演示</small></strong
+      <strong
+        ><Sparkles :size="15" />{{ labels[tool] }}<small v-if="IS_DEMO_MODE">演示</small></strong
       ><button class="icon-button" aria-label="关闭聊天助手" @click="close">
         <X :size="16" />
       </button>
     </div>
-    <p v-if="busy" class="chat-ai-progress" role="status">
+    <p v-if="isBusy" class="chat-ai-progress" role="status">
       {{ tool === 'polish' ? '正在润色，完成后填入编辑框…' : '正在整理…'
       }}<button type="button" class="text-button" @click="cancel">停止</button>
     </p>
     <p v-if="error" class="chat-ai-error" role="alert">{{ redactIdentifiers(error) }}</p>
-    <p v-if="output && (!applied || tool !== 'polish')" class="chat-ai-output" aria-live="polite">
+    <p v-if="output && (!isApplied || tool !== 'polish')" class="chat-ai-output" aria-live="polite">
       {{ output }}
     </p>
-    <div v-if="applied" class="chat-ai-applied" role="status">
+    <div v-if="isApplied" class="chat-ai-applied" role="status">
       <span>已填入编辑框，确认后再发送。</span
       ><button type="button" class="text-button" @click="undo">
         <RotateCcw :size="13" />撤销润色
       </button>
     </div>
-    <div v-if="!busy" class="chat-ai-actions">
+    <div v-if="!isBusy" class="chat-ai-actions">
       <button v-if="error || output" type="button" class="text-button" @click="run(tool)">
         重新生成</button
       ><button
@@ -201,7 +203,7 @@ onBeforeUnmount(() => {
         class="text-button"
         @click="copy"
       >
-        <Copy :size="13" />{{ copied ? '已复制' : '复制总结' }}
+        <Copy :size="13" />{{ isCopied ? '已复制' : '复制总结' }}
       </button>
     </div>
   </section>

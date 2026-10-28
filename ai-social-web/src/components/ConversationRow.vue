@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { MoreHorizontal, Pin, Trash2 } from 'lucide-vue-next';
-import type { Conversation } from '../lib/api';
+import type { Conversation } from '../services/http';
+import { formatMessagePreview } from '../lib/presentation';
 defineProps<{ conversation: Conversation; selected: boolean; pinned: boolean; index: number }>();
 const emit = defineEmits<{ open: []; pin: []; remove: [] }>();
-const expanded = ref(false);
+const isExpanded = ref(false);
 let start: { x: number; y: number } | null = null,
   suppress = false;
 function down(event: PointerEvent) {
@@ -22,7 +23,7 @@ function move(event: PointerEvent) {
     return;
   }
   if (Math.abs(x) > 45 && Math.abs(x) > Math.abs(y) * 1.5) {
-    expanded.value = x < 0;
+    isExpanded.value = x < 0;
     suppress = true;
     start = null;
   }
@@ -32,19 +33,19 @@ function open() {
     suppress = false;
     return;
   }
-  expanded.value = false;
+  isExpanded.value = false;
   emit('open');
 }
 </script>
 <template>
-  <div class="conversation-item" @keydown.esc.stop="expanded = false">
+  <div class="conversation-item" @keydown.esc.stop="isExpanded = false">
     <button
       :class="['conversation-row', { selected, unread: conversation.unread_count > 0, pinned }]"
       @pointerdown="down"
       @pointermove="move"
       @pointerup="start = null"
       @pointercancel="start = null"
-      @contextmenu.prevent="expanded = !expanded"
+      @contextmenu.prevent="isExpanded = !isExpanded"
       @click="open"
     >
       <span :class="['avatar', ['peach', 'lavender', 'sage'][index % 3]]">{{
@@ -52,7 +53,7 @@ function open() {
       }}</span>
       <span class="conversation-info"
         ><strong><Pin v-if="pinned" :size="11" aria-label="已置顶" />{{ conversation.name }}</strong
-        ><small>{{ conversation.latest_message?.content || '暂无消息' }}</small></span
+        ><small>{{ formatMessagePreview(conversation.latest_message) }}</small></span
       >
       <span
         v-if="conversation.unread_count > 0"
@@ -64,16 +65,16 @@ function open() {
     <button
       class="conversation-more icon-button"
       :aria-label="'会话操作：' + conversation.name"
-      :aria-expanded="expanded"
-      @click="expanded = !expanded"
+      :aria-expanded="isExpanded"
+      @click="isExpanded = !isExpanded"
     >
       <MoreHorizontal :size="15" />
     </button>
-    <div v-if="expanded" class="conversation-row-actions">
+    <div v-if="isExpanded" class="conversation-row-actions">
       <button
         @click="
           emit('pin');
-          expanded = false;
+          isExpanded = false;
         "
       >
         <Pin :size="14" />{{ pinned ? '取消置顶' : '置顶聊天' }}
@@ -82,7 +83,7 @@ function open() {
         class="danger"
         @click="
           emit('remove');
-          expanded = false;
+          isExpanded = false;
         "
       >
         <Trash2 :size="14" />移除会话

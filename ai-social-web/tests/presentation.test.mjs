@@ -27,3 +27,21 @@ test('error messages and generated nicknames do not reveal technical IDs', () =>
     '关联记录',
   );
 });
+
+test('conversation previews distinguish attachments from absent messages', () => {
+  assert.equal(presentation.formatMessagePreview(undefined), '暂无消息');
+  assert.equal(presentation.formatMessagePreview({ content: '你好' }), '你好');
+  assert.equal(
+    presentation.formatMessagePreview({
+      content: '',
+      media_type: 'FILE',
+      file: { original_filename: '会议资料.pdf' },
+    }),
+    '[文件] 会议资料.pdf',
+  );
+  assert.equal(presentation.formatMessagePreview({ content: '', media_type: 'FILE' }), '[文件]');
+  assert.equal(presentation.formatMessagePreview({ content: '', media_type: 'IMAGE' }), '[图片]');
+  assert.equal(presentation.formatMessagePreview({ content: '', media_type: 'VOICE' }), '[语音]');
+  assert.equal(presentation.formatMessagePreview({ content: '', media_type: 'VIDEO' }), '[视频]');
+  assert.equal(presentation.formatMessagePreview({ content: '' }), '[消息]');
+});

@@ -1,0 +1,257 @@
+:root {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  /* 按背景、文字、边框分别配色；组件中的回退值保留原浅色外观。 */
+  color-scheme: dark;
+  --color-text: #e9eff7;
+  --color-surface: #1b2432;
+  --color-background: #111827;
+  --accent: #ffb29a;
+  --action-background: #aa3d27;
+  --line: #3c4b62;
+  --muted: #b8c5d8;
+  --theme-background-f5f2fb: hsl(260 25% 19%);
+  --theme-border-e5dff0: hsl(261 24% 35%);
+  --theme-background-e7dff6: hsl(261 25% 19%);
+  --theme-text-30343a: #e9eff7;
+  --theme-background-f4f0fa: hsl(264 25% 19%);
+  --theme-text-afb4bb: #b8c5d8;
+  --theme-background-fcebe4: hsl(17 25% 19%);
+  --theme-text-ba4e32: hsl(12 65% 80%);
+  --theme-border-b2a1e9: hsl(254 24% 35%);
+  --theme-border-e1e4e8: #3c4b62;
+  --theme-background-fff: #1b2432;
+  --theme-text-96979a: #b8c5d8;
+  --theme-text-888c94: #b8c5d8;
+  --theme-text-a6a9b0: #b8c5d8;
+  --theme-text-727780: #b8c5d8;
+  --theme-background-f8f8f9: #151e2c;
+  --theme-background-fff0e9: hsl(19 25% 19%);
+  --theme-background-eeebfb: hsl(251 25% 19%);
+  --theme-text-9b86c3: hsl(261 65% 80%);
+  --theme-background-f7e4dc: hsl(18 25% 19%);
+  --theme-text-cc694f: hsl(12 65% 80%);
+  --theme-background-faf5f1: hsl(27 25% 19%);
+  --theme-background-f8f3fb: hsl(278 25% 19%);
+  --theme-border-f2eae6: hsl(20 24% 35%);
+  --theme-text-bc8069: hsl(17 65% 80%);
+  --theme-text-56505a: #e9eff7;
+  --theme-text-92878b: #b8c5d8;
+  --theme-text-bb8069: hsl(17 65% 80%);
+  --theme-text-969ba3: #b8c5d8;
+  --theme-text-9298a1: #b8c5d8;
+  --theme-text-989ca5: #b8c5d8;
+  --theme-text-666c75: #b8c5d8;
+  --theme-text-89918d: #b8c5d8;
+  --theme-border-e8eeea: #3c4b62;
+  --theme-background-f8fbf9: hsl(140 25% 19%);
+  --theme-background-99b39e: #273449;
+  --theme-text-858a93: #b8c5d8;
+  --theme-background-f2f3f5: #151e2c;
+  --theme-text-737b87: #b8c5d8;
+  --theme-text-a5a1a0: #b8c5d8;
+  --theme-text-9699a0: #b8c5d8;
+  --theme-text-d9a97f: hsl(28 65% 80%);
+  --theme-text-8f949b: #b8c5d8;
+  --theme-border-f3e3d8: hsl(24 24% 35%);
+  --theme-background-faeadd: hsl(27 25% 19%);
+  --theme-border-e9cdbd: hsl(22 24% 35%);
+  --theme-text-b37c62: hsl(19 65% 80%);
+  --theme-background-fff5ecb8: color-mix(in srgb, hsl(28 25% 19%) 72%, transparent);
+  --theme-text-58483f: #e9eff7;
+  --theme-text-9c8272: #b8c5d8;
+  --theme-shadow-d2784820: color-mix(in srgb, hsl(21 35% 55%) 13%, transparent);
+  --theme-border-e5e7eb: #3c4b62;
+  --theme-text-ab9382: hsl(25 65% 80%);
+  --theme-border-e9ebef: #3c4b62;
+  --theme-shadow-2b394003: color-mix(in srgb, #000000 1%, transparent);
+  --theme-text-d88a72: hsl(14 65% 80%);
+  --theme-background-fcf0ea: hsl(20 25% 19%);
+  --theme-text-9b87c5: hsl(259 65% 80%);
+  --theme-background-f2eefb: hsl(258 25% 19%);
+  --theme-text-7b9f8b: #b8c5d8;
+  --theme-background-edf5ef: hsl(135 25% 19%);
+  --theme-text-7c9fbc: hsl(207 65% 80%);
+  --theme-background-edf4fb: hsl(210 25% 19%);
+  --theme-text-989ca3: #b8c5d8;
+  --theme-text-4b5058: #e9eff7;
+  --theme-text-a8acb2: #b8c5d8;
+  --theme-border-f3f4f6: #3c4b62;
+  --theme-text-a5a8af: #b8c5d8;
+  --theme-text-afb2b8: #b8c5d8;
+  --theme-text-989da4: #b8c5d8;
+  --theme-border-f3f4f5: #3c4b62;
+  --theme-background-fcfaf8: hsl(30 25% 19%);
+  --theme-background-f4e2d5: hsl(25 25% 19%);
+  --theme-text-a78365: hsl(27 65% 80%);
+  --theme-background-e8e3f1: hsl(261 25% 19%);
+  --theme-text-9b8aaf: hsl(268 65% 80%);
+  --theme-background-e5ede6: #151e2c;
+  --theme-text-7e9e88: #b8c5d8;
+  --theme-background-f1e9d6: hsl(42 25% 19%);
+  --theme-text-ac9866: hsl(43 65% 80%);
+  --theme-background-e4e9df: #151e2c;
+  --theme-text-76866e: #b8c5d8;
+  --theme-text-a3a6ae: #b8c5d8;
+  --theme-background-f2eff8: hsl(260 25% 19%);
+  --theme-text-a094b4: #b8c5d8;
+  --theme-text-a5a9b0: #b8c5d8;
+  --theme-border-f2f3f5: #3c4b62;
+  --theme-text-b1b4b9: #b8c5d8;
+  --theme-text-979ca3: #b8c5d8;
+  --theme-background-df9c83: hsl(16 25% 19%);
+  --theme-background-f0ece9: #151e2c;
+  --theme-background-b3a2ce: hsl(263 25% 19%);
+  --theme-text-b6a1d0: hsl(267 65% 80%);
+  --theme-text-a9adb4: #b8c5d8;
+  --theme-border-f1f2f5: #3c4b62;
+  --theme-text-a3a7ae: #b8c5d8;
+  --theme-text-b0b4bc: #b8c5d8;
+  --theme-text-565b63: #e9eff7;
+  --theme-text-a2a6ad: #b8c5d8;
+  --theme-shadow-40404008: color-mix(in srgb, #000000 3%, transparent);
+  --theme-border-e5d9d3: hsl(20 24% 35%);
+  --theme-text-acb0b7: #b8c5d8;
+  --theme-text-969ca5: #b8c5d8;
+  --theme-background-f3f0f8: hsl(262 25% 19%);
+  --theme-text-9786b2: hsl(263 65% 80%);
+  --theme-text-9298a2: #b8c5d8;
+  --theme-text-747b86: #b8c5d8;
+  --theme-background-fff1eb: hsl(18 25% 19%);
+  --theme-text-a3a8af: #b8c5d8;
+  --theme-background-fcfcfd: #1b2432;
+  --theme-text-b1b6bc: #b8c5d8;
+  --theme-text-a3a8b1: #b8c5d8;
+  --theme-border-e9ebee: #3c4b62;
+  --theme-border-f6e0d5: hsl(20 24% 35%);
+  --theme-text-a3a8b0: #b8c5d8;
+  --theme-text-aaaeb5: #b8c5d8;
+  --theme-text-9297a0: #b8c5d8;
+  --theme-border-f4d6c7: hsl(20 24% 35%);
+  --theme-text-a1a6ad: #b8c5d8;
+  --theme-border-eceef0: #3c4b62;
+  --theme-text-7a818a: #b8c5d8;
+  --theme-text-9ca2ab: #b8c5d8;
+  --theme-background-2d344455: color-mix(in srgb, hsl(222 57% 38%) 33%, transparent);
+  --theme-shadow-0002: color-mix(in srgb, #000000 13%, transparent);
+  --theme-text-949aa4: #b8c5d8;
+  --theme-text-c76757: hsl(9 65% 80%);
+  --theme-background-3a4741: #273449;
+  --theme-background-fff0ed: hsl(10 25% 19%);
+  --theme-text-bd6656: hsl(9 65% 80%);
+  --theme-border-efd4cc: hsl(14 24% 35%);
+  --theme-text-999: #b8c5d8;
+  --theme-shadow-26323e20: color-mix(in srgb, hsl(210 35% 55%) 13%, transparent);
+  --theme-background-0001: color-mix(in srgb, #273449 7%, transparent);
+  --theme-text-8a7467: #b8c5d8;
+  --theme-background-fff1ec: hsl(16 25% 19%);
+  --theme-text-a34e3c: hsl(10 65% 80%);
+  --theme-border-f0d6cc: hsl(17 24% 35%);
+  --theme-text-7c838e: #b8c5d8;
+  --theme-text-c79747: hsl(38 65% 80%);
+  --theme-text-9a85bd: hsl(263 65% 80%);
+  --theme-text-8b929d: #b8c5d8;
+  --theme-text-aaafb7: #b8c5d8;
+  --theme-text-9299a3: #b8c5d8;
+  --theme-background-fff0e8: hsl(21 25% 19%);
+  --theme-border-e7e4ed: hsl(260 24% 35%);
+  --theme-text-9d86bd: hsl(265 65% 80%);
+  --theme-text-989fa8: #b8c5d8;
+  --theme-text-969da6: #b8c5d8;
+  --theme-text-646d78: #b8c5d8;
+  --theme-border-eff0f4: #3c4b62;
+  --theme-text-9299a4: #b8c5d8;
+  --theme-background-fbfbfd: hsl(240 25% 19%);
+  --theme-text-79818d: #b8c5d8;
+  --theme-text-8c94a0: #b8c5d8;
+  --theme-background-f8f9fb: hsl(220 25% 19%);
+  --theme-background-fff1ee: hsl(11 25% 19%);
+  --theme-text-bc6b59: hsl(11 65% 80%);
+  --theme-text-8d94a0: #b8c5d8;
+  --theme-text-7a838e: #b8c5d8;
+  --theme-background-27303d30: color-mix(in srgb, hsl(215 57% 38%) 19%, transparent);
+  --theme-background-df684a: hsl(12 57% 38%);
+  --theme-text-fff: #f4f7fc;
+  --theme-border-e9e3f0: hsl(268 24% 35%);
+  --theme-background-fcfaff: hsl(264 25% 19%);
+  --theme-text-937aa9: hsl(272 65% 80%);
+  --theme-background-f1ebf7: hsl(270 25% 19%);
+  --theme-text-8a8194: #b8c5d8;
+  --theme-text-62596e: #e9eff7;
+  --theme-text-b06450: hsl(13 65% 80%);
+  --theme-text-8f77a8: hsl(269 65% 80%);
+  --theme-border-edf0f3: #3c4b62;
+  --theme-background-fff1e9: hsl(22 25% 19%);
+  --theme-border-edc5b5: hsl(17 24% 35%);
+  --theme-text-aa8672: hsl(21 65% 80%);
+  --theme-text-8c929d: #b8c5d8;
+  --theme-background-f4e8e1: hsl(22 25% 19%);
+  --theme-text-b35e42: hsl(15 65% 80%);
+  --theme-background-f4f0ed: hsl(26 25% 19%);
+  --theme-text-9096a0: #b8c5d8;
+  --theme-background-f2edf8: hsl(267 25% 19%);
+  --theme-shadow-d9ccec: hsl(264 35% 55%);
+  --theme-background-eee8f5: hsl(268 25% 19%);
+  --theme-border-e7def0: hsl(270 24% 35%);
+  --theme-shadow-5945720a: color-mix(in srgb, hsl(267 35% 55%) 4%, transparent);
+  --theme-background-f0e8f8: hsl(270 25% 19%);
+  --theme-border-e9e6ee: #3c4b62;
+  --theme-border-efc6b5: hsl(18 24% 35%);
+  --theme-border-d5b9ec: hsl(273 24% 35%);
+  --theme-background-fdfbff: hsl(270 25% 19%);
+  --theme-shadow-efebf5: hsl(264 35% 55%);
+  --theme-text-868e98: #b8c5d8;
+  --theme-text-a08bb9: hsl(267 65% 80%);
+  --theme-border-efedf3: #3c4b62;
+  --theme-border-f0e8e0: hsl(30 24% 35%);
+  --theme-background-fbf8f3: hsl(38 25% 19%);
+  --theme-text-99856d: #b8c5d8;
+  --theme-text-9d9386: #b8c5d8;
+  --theme-text-a4a8b0: #b8c5d8;
+  --theme-border-d8c8e9: hsl(269 24% 35%);
+  --theme-text-c7cbd0: #b8c5d8;
+  --theme-border-eac6b6: hsl(18 24% 35%);
+  --theme-background-b49acc: hsl(271 25% 19%);
+}
+:root[data-theme='dark'] :is(input, textarea, select) {
+  color: var(--color-text);
+  background-color: #111a28;
+  border-color: #687990;
+}
+:root[data-theme='dark'] :is(input, textarea)::placeholder {
+  color: #aab9cd;
+  opacity: 1;
+}
+:root[data-theme='dark'] .search-field input {
+  background: transparent;
+}
+/* 深色下的小字号更难辨认，保留正文层级并提高辅助信息的最小字号。 */
+:root[data-theme='dark'] :is(.message small, .chat-date, .conversation-info small, .field-note) {
+  font-size: 11px;
+}
+:root[data-theme='dark'] :is(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid #ffb29a;
+  outline-offset: 3px;
+}
+:root[data-theme='dark'] input:autofill {
+  box-shadow: inset 0 0 0 1000px #111a28;
+  -webkit-text-fill-color: #e9eff7;
+  caret-color: #e9eff7;
+}
+:root[data-theme='dark'] ::selection {
+  color: #fff;
+  background: #7b3a2b;
+}
+.theme-toggle {
+  min-width: 32px;
+  min-height: 32px;
+}
+@media (max-width: 480px) {
+  .top-actions {
+    gap: 8px;
+  }
+  .top-actions .connection {
+    display: none;
+  }
+}

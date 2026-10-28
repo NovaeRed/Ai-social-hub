@@ -11,7 +11,11 @@ export default defineConfig({
   use: { channel: 'msedge', headless: true },
   reporter: 'list',
   projects: [
-    { name: 'demo', testMatch: ['ui.spec.ts', 'chat.spec.ts'], use: { baseURL: demoUrl } },
+    {
+      name: 'demo',
+      testMatch: ['ui.spec.ts', 'chat.spec.ts', 'theme.spec.ts'],
+      use: { baseURL: demoUrl },
+    },
     {
       name: 'live',
       testMatch: ['live.spec.ts', 'chat-contract.spec.ts'],

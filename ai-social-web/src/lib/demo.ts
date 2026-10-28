@@ -1,17 +1,17 @@
-import type { User, Conversation, Message, Schedule, Job } from './api'
+import type { User, Conversation, Message, Schedule, Job } from '../services/http';
 export const me: User = {
   public_id: 'demo-me',
   nickname: '林沐',
   username: 'linmu',
   email: 'linmu@example.com',
   ai_analysis_enabled: true,
-}
+};
 export const friends: User[] = [
   { public_id: 'demo-1', nickname: '陈一诺', username: 'yinuo' },
   { public_id: 'demo-2', nickname: '许知远', username: 'zhiyuan' },
   { public_id: 'demo-3', nickname: '苏小满', username: 'xiaoman' },
   { public_id: 'demo-4', nickname: '周予安', username: 'yuan' },
-]
+];
 export const conversations: Conversation[] = [
   {
     public_id: 'demo-conv-1',
@@ -41,7 +41,7 @@ export const conversations: Conversation[] = [
     latest_message: { content: '好呀，那我们明天下午见' },
     unread_count: 0,
   },
-]
+];
 export const messages: Record<string, Message[]> = {
   'demo-conv-1': [
     {
@@ -63,8 +63,8 @@ export const messages: Record<string, Message[]> = {
       created_at: new Date().toISOString(),
     },
   ],
-}
-const day = new Date().toLocaleDateString('sv-SE')
+};
+const day = new Date().toLocaleDateString('sv-SE');
 export const schedules: Schedule[] = [
   {
     public_id: 'demo-sch-1',
@@ -90,7 +90,7 @@ export const schedules: Schedule[] = [
     end_time: `${day}T20:00:00+08:00`,
     location: '阅读 · 散步 · 放空',
   },
-]
+];
 export const jobs: Job[] = [
   {
     public_id: 'demo-job-1',
@@ -104,4 +104,4 @@ export const jobs: Job[] = [
     status: 'COMPLETED',
     created_at: new Date().toISOString(),
   },
-]
+];

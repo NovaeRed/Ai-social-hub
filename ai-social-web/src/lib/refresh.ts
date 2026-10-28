@@ -12,17 +12,17 @@ export interface CoalescedRefresh {
 }
 export function createCoalescedRefresh(task: () => Promise<void>): CoalescedRefresh {
   let flight: Promise<void> | null = null;
-  let requested = false;
+  let isRefreshRequested = false;
   const counts = { requests: 0, runs: 0, coalescedRequests: 0, failures: 0 };
   const refresh = () => {
     counts.requests++;
     if (flight) counts.coalescedRequests++;
-    requested = true;
+    isRefreshRequested = true;
     if (!flight) {
       flight = Promise.resolve().then(async () => {
         try {
-          while (requested) {
-            requested = false;
+          while (isRefreshRequested) {
+            isRefreshRequested = false;
             counts.runs++;
             await task();
           }
@@ -30,16 +30,16 @@ export function createCoalescedRefresh(task: () => Promise<void>): CoalescedRefr
           counts.failures++;
           throw error;
         } finally {
-          // Clear the flight in the same continuation that finishes the loop. A separate
-          // Promise.finally would leave a microtask window in which a trigger can be lost.
+          // 在结束循环的同一微任务中清理；额外的 finally 会留下丢失刷新触发的时间窗口。
           flight = null;
-          requested = false;
+          isRefreshRequested = false;
         }
       });
     }
     return flight;
   };
   return Object.assign(refresh, {
-    diagnostics: () => Object.freeze({ ...counts, running: flight !== null, pending: requested }),
+    diagnostics: () =>
+      Object.freeze({ ...counts, running: flight !== null, pending: isRefreshRequested }),
   });
 }

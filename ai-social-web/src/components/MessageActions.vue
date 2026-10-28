@@ -1,15 +1,17 @@
 <script setup lang="ts">
+import type { UploadedFile } from '../types/domain';
+
 import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue';
 import { MoreHorizontal, Share2, Trash2, X, FileText, Copy } from 'lucide-vue-next';
 import {
-  demo,
+  IS_DEMO_MODE,
   post,
   request,
   readChatFile,
   type Message,
   type User,
   type Conversation,
-} from '../lib/api';
+} from '../services/http';
 import { redactIdentifiers } from '../lib/presentation';
 const props = defineProps<{
   messages: Message[];
@@ -23,11 +25,11 @@ const emit = defineEmits<{
   notify: [message: string];
   sent: [target: string, message: Message];
 }>();
-const selecting = ref(false),
+const isSelecting = ref(false),
   picked = ref<string[]>([]),
   modal = ref(''),
   target = ref(''),
-  busy = ref(false),
+  isBusy = ref(false),
   error = ref(''),
   completed = ref(0);
 const dialog = ref<HTMLElement | null>(null),
@@ -94,7 +96,7 @@ onBeforeUnmount(() => {
   if (modal.value) document.body.style.overflow = previousOverflow;
 });
 function cancel() {
-  selecting.value = false;
+  isSelecting.value = false;
   picked.value = [];
   error.value = '';
 }
@@ -103,7 +105,7 @@ function select(m: Message) {
     emit('notify', '一次最多选择 20 条消息');
     return;
   }
-  selecting.value = true;
+  isSelecting.value = true;
   if (!picked.value.includes(m.public_id)) picked.value.push(m.public_id);
 }
 function down(event: PointerEvent, m: Message) {
@@ -129,7 +131,7 @@ function cancelPress() {
   clearTimeout(timer);
 }
 function capture(event: MouseEvent, m: Message) {
-  if (!selecting.value) return;
+  if (!isSelecting.value) return;
   if ((event.target as HTMLElement).closest('.message-choice')) return;
   event.preventDefault();
   event.stopPropagation();
@@ -170,7 +172,7 @@ async function copy() {
   }
 }
 async function forward() {
-  if (busy.value || !target.value || !selectedMessages.value.length) return;
+  if (isBusy.value || !target.value || !selectedMessages.value.length) return;
   const queue = [...forwardQueue.value],
     destination = target.value,
     epoch = generation;
@@ -178,27 +180,33 @@ async function forward() {
     error.value = '所选消息包含暂不支持转发的内容，请取消选择后重试。';
     return;
   }
-  busy.value = true;
+  isBusy.value = true;
   error.value = '';
   try {
     for (let i = completed.value; i < queue.length; i++) {
       const m = queue[i];
       const cacheKey = `${destination}:${m.public_id}`;
       if (!keys.has(cacheKey)) keys.set(cacheKey, crypto.randomUUID());
-      let body: any = {
+      let body: {
+        content?: string;
+        media_type?: string;
+        file_public_id?: string;
+        temp_id?: string;
+        media_url?: string;
+      } = {
         media_type: 'TEXT',
         content: `转发自 ${m.sender.nickname}：\n${m.content}`,
         temp_id: keys.get(cacheKey),
       };
       if (m.file) {
         if (!m.file.public_id) throw new Error('该附件暂无法转发，请重新选择。');
-        if (!demo && !attachments.has(cacheKey)) {
+        if (!IS_DEMO_MODE && !attachments.has(cacheKey)) {
           const blob = await readChatFile(m.file.public_id);
           if (epoch !== generation) return;
           const form = new FormData();
           form.append('file', blob, m.file.original_filename);
           form.append('conversation_public_id', destination);
-          const result = await request('/files', { method: 'POST', body: form });
+          const result = await request<UploadedFile>('/files', { method: 'POST', body: form });
           attachments.set(cacheKey, result.public_id);
         }
         body = {
@@ -208,7 +216,7 @@ async function forward() {
         };
       }
       if (epoch !== generation) return;
-      const result = demo
+      const result = IS_DEMO_MODE
         ? {
             ...m,
             content: m.file ? m.content : body.content,
@@ -216,9 +224,13 @@ async function forward() {
             sender: props.user,
             created_at: new Date().toISOString(),
           }
-        : await post(`/conversations/${encodeURIComponent(destination)}/messages`, body);
+        : await post<Message>(`/conversations/${encodeURIComponent(destination)}/messages`, body);
       if (epoch !== generation) return;
-      emit('sent', destination, { ...result, sender: result.sender || props.user });
+      emit('sent', destination, {
+        ...result,
+        content: result.content || '',
+        sender: result.sender || props.user,
+      });
       completed.value = i + 1;
     }
     modal.value = '';
@@ -227,14 +239,14 @@ async function forward() {
   } catch (e) {
     error.value = `已发送 ${completed.value}/${queue.length} 条。${(e as Error).message}，可继续重试剩余消息。`;
   } finally {
-    busy.value = false;
+    isBusy.value = false;
   }
 }
 const time = (value?: string) =>
   value ? new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
 </script>
 <template>
-  <div v-if="selecting" class="message-selection-bar" role="toolbar" aria-label="消息多选操作">
+  <div v-if="isSelecting" class="message-selection-bar" role="toolbar" aria-label="消息多选操作">
     <strong>已选 {{ picked.length }} 条</strong>
     <button :disabled="!picked.length" @click="openForward"><Share2 :size="15" />转发</button>
     <button :disabled="!picked.length" @click="copy"><Copy :size="15" />复制</button>
@@ -271,7 +283,7 @@ const time = (value?: string) =>
     @click.capture="capture($event, m)"
   >
     <input
-      v-if="selecting"
+      v-if="isSelecting"
       type="checkbox"
       class="message-choice"
       :checked="picked.includes(m.public_id)"
@@ -299,7 +311,7 @@ const time = (value?: string) =>
       />
     </div>
     <button
-      v-if="!selecting"
+      v-if="!isSelecting"
       class="message-more icon-button"
       :aria-label="'消息操作：' + (m.content || m.file?.original_filename || '附件')"
       @pointerdown.stop
@@ -313,13 +325,13 @@ const time = (value?: string) =>
     ><div
       v-if="modal"
       class="modal-overlay"
-      @click.self="!busy && (modal = '')"
-      @keydown.esc.stop="!busy && (modal = '')"
+      @click.self="!isBusy && (modal = '')"
+      @keydown.esc.stop="!isBusy && (modal = '')"
       @keydown="trapFocus"
     >
       <section
-        class="modal card"
         ref="dialog"
+        class="modal card"
         role="dialog"
         aria-modal="true"
         aria-labelledby="message-action-title"
@@ -327,7 +339,7 @@ const time = (value?: string) =>
         <button
           class="icon-button close"
           aria-label="关闭消息操作"
-          :disabled="busy"
+          :disabled="isBusy"
           @click="modal = ''"
         >
           <X :size="19" />
@@ -359,15 +371,15 @@ const time = (value?: string) =>
                 type="radio"
                 name="forward-target"
                 :value="c.public_id"
-                :disabled="busy || completed > 0"
+                :disabled="isBusy || completed > 0"
               />{{ c.name }}</label
             >
           </div>
           <p v-if="!targets.length" class="muted">没有其他会话，请先从好友或群聊页面发起聊天。</p>
           <p v-if="error" class="inline-error" role="alert">{{ redactIdentifiers(error) }}</p>
-          <button class="primary" :disabled="busy || !target" @click="forward">
+          <button class="primary" :disabled="isBusy || !target" @click="forward">
             {{
-              busy
+              isBusy
                 ? `发送中 ${completed}/${picked.length}`
                 : completed
                   ? '重试剩余消息'

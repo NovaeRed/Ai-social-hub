@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { readableJson } from '../lib/presentation';
+import { redactIdentifiers } from '../lib/presentation';
 import {
   Sparkles,
   RefreshCw,
@@ -10,135 +11,36 @@ import {
   ChevronRight,
   CircleAlert,
 } from 'lucide-vue-next';
-import { demo, request } from '../lib/api';
-import * as seed from '../lib/demo';
-import { readableJson, redactIdentifiers } from '../lib/presentation';
-const tab = ref('tasks'),
-  jobs = ref<any[]>([]),
-  profiles = ref<any[]>([]),
-  usage = ref<any>(null),
-  detail = ref<any>(null),
-  error = ref(''),
-  busy = ref(false),
-  status = ref(''),
-  taskType = ref(''),
-  cursor = ref<number | null>(null),
-  hasMore = ref(false),
-  profileType = ref(''),
-  provider = ref(''),
-  dateFrom = ref(
-    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('sv-SE'),
-  ),
-  dateTo = ref(new Date().toLocaleDateString('sv-SE'));
-const labels: Record<string, string> = {
-  PENDING: '排队中',
-  PROCESSING: '处理中',
-  COMPLETED: '已完成',
-  FAILED: '失败',
-  CANCELLED: '已取消',
-  POLISH: '表达润色',
-  TRANSLATION: '智能翻译',
-  SMART_REPLY: '智能回复',
-  CHAT_SUMMARY: '内容总结',
-  SPEECH_TO_TEXT: '语音转写',
-  SCHEDULE_EXTRACTION: '日程提取',
-  PERSONA_ANALYSIS: '画像分析',
-  PERSONA: '性格画像',
-  PREFERENCES: '沟通偏好',
-  BEHAVIOR: '行为分析',
-};
-const label = (s: string) => labels[s] || s;
-const usageRows = computed(() => usage.value?.daily_breakdown || []);
-let poll: ReturnType<typeof setTimeout> | undefined;
-async function load(more = false) {
-  if (busy.value) return;
-  busy.value = true;
-  error.value = '';
-  try {
-    if (tab.value === 'tasks') {
-      if (demo) jobs.value = seed.jobs;
-      else {
-        const qs = new URLSearchParams({ limit: '20' });
-        if (status.value) qs.set('status', status.value);
-        if (taskType.value) qs.set('task_type', taskType.value);
-        if (more && cursor.value) qs.set('cursor', String(cursor.value));
-        const page = await request('/ai/jobs?' + qs);
-        jobs.value = more ? [...jobs.value, ...page.items] : page.items;
-        cursor.value = page.next_cursor;
-        hasMore.value = page.has_more;
-      }
-    } else if (tab.value === 'usage') {
-      if (dateFrom.value > dateTo.value) throw new Error('开始日期不能晚于结束日期');
-      usage.value = demo
-        ? {
-            summary: {
-              total_tokens: 15000,
-              total_cost: 0.25,
-              input_tokens: 9000,
-              output_tokens: 6000,
-            },
-            daily_breakdown: [{ date: dateTo.value, tokens_used: 15000, cost: 0.25 }],
-            by_provider: [{ provider: 'demo', tokens_used: 15000, cost: 0.25 }],
-          }
-        : await request(
-            '/ai/usage?' +
-              new URLSearchParams({
-                date_from: dateFrom.value,
-                date_to: dateTo.value,
-                ...(provider.value ? { provider: provider.value } : {}),
-              }),
-          );
-    } else
-      profiles.value = demo
-        ? []
-        : (
-            await request(
-              '/ai/profiles' + (profileType.value ? '?profile_type=' + profileType.value : ''),
-            )
-          ).items;
-  } catch (e) {
-    error.value = (e as Error).message;
-  } finally {
-    busy.value = false;
-  }
-}
-async function changeTab(id: string) {
-  tab.value = id;
-  await load();
-}
-async function openJob(j: any) {
-  error.value = '';
-  try {
-    detail.value = demo
-      ? { ...j, output_payload: { message: '演示任务详情' } }
-      : await request('/ai/jobs/' + j.public_id);
-  } catch (e) {
-    error.value = (e as Error).message;
-  }
-}
-function schedulePoll() {
-  poll = setTimeout(async () => {
-    if (
-      tab.value === 'tasks' &&
-      jobs.value.some((j) => ['PENDING', 'PROCESSING'].includes(j.status))
-    ) {
-      if (detail.value && ['PENDING', 'PROCESSING'].includes(detail.value.status))
-        await openJob(detail.value);
-      await load();
-    }
-    schedulePoll();
-  }, 10000);
-}
-onMounted(async () => {
-  await load();
-  schedulePoll();
-});
-onUnmounted(() => clearTimeout(poll));
+import { useInsights } from '../composables/useInsights';
+
+const {
+  tab,
+  jobs,
+  profiles,
+  usage,
+  detail,
+  error,
+  isBusy,
+  status,
+  taskType,
+  hasMore,
+  profileType,
+  provider,
+  dateFrom,
+  dateTo,
+  label,
+  usageRows,
+  load,
+  changeTab,
+  openJob,
+} = useInsights();
 </script>
 <template>
   <div class="page-heading">
     <div><h1>AI 活动</h1></div>
-    <button class="secondary" :disabled="busy" @click="load()"><RefreshCw :size="16" />刷新</button>
+    <button class="secondary" :disabled="isBusy" @click="load()">
+      <RefreshCw :size="16" />刷新
+    </button>
   </div>
   <div class="ai-tabs">
     <button :class="{ active: tab === 'tasks' }" @click="changeTab('tasks')">
@@ -184,7 +86,7 @@ onUnmounted(() => clearTimeout(poll));
             {{ label(s) }}
           </option>
         </select></label
-      ><button class="primary" :disabled="busy">筛选任务</button>
+      ><button class="primary" :disabled="isBusy">筛选任务</button>
     </form>
     <section class="card jobs">
       <button v-for="j in jobs" :key="j.public_id" class="job-row job-button" @click="openJob(j)">
@@ -201,10 +103,10 @@ onUnmounted(() => clearTimeout(poll));
       </button>
       <div v-if="!jobs.length" class="empty">
         <Activity :size="38" />
-        <h3>{{ busy ? '正在加载任务…' : '还没有相关任务' }}</h3>
+        <h3>{{ isBusy ? '正在加载任务…' : '还没有相关任务' }}</h3>
         <p>使用 AI 工具后，可在这里追踪后台任务。</p>
       </div>
-      <button v-if="hasMore" class="secondary" :disabled="busy" @click="load(true)">
+      <button v-if="hasMore" class="secondary" :disabled="isBusy" @click="load(true)">
         加载更多任务
       </button>
     </section></template
@@ -220,7 +122,7 @@ onUnmounted(() => clearTimeout(poll));
           <option value="openai">OpenAI</option>
           <option value="anthropic">Anthropic</option>
         </select></label
-      ><button class="primary" :disabled="busy">查询用量</button>
+      ><button class="primary" :disabled="isBusy">查询用量</button>
     </form>
     <template v-if="usage"
       ><div class="usage-stats">
@@ -254,7 +156,9 @@ onUnmounted(() => clearTimeout(poll));
             <tbody>
               <tr v-for="r in usageRows" :key="r.date">
                 <td>{{ r.date }}</td>
-                <td>{{ Number(r.tokens_used || 0).toLocaleString() }}</td>
+                <td>
+                  {{ Number(r.tokens_used || 0).toLocaleString() }}
+                </td>
                 <td>{{ Number(r.cost || 0).toFixed(4) }}</td>
               </tr>
             </tbody>
@@ -282,7 +186,7 @@ onUnmounted(() => clearTimeout(poll));
           <option value="PREFERENCES">沟通偏好</option>
           <option value="BEHAVIOR">行为分析</option>
         </select></label
-      ><button class="primary" :disabled="busy">查询画像</button>
+      ><button class="primary" :disabled="isBusy">查询画像</button>
     </form>
     <div v-for="p in profiles" :key="p.profile_type" class="card data-section">
       <div class="section-heading">
@@ -290,7 +194,7 @@ onUnmounted(() => clearTimeout(poll));
         <span class="pill">{{ p.model_name }}</span>
       </div>
       <pre class="json-output">{{ readableJson(p.content) }}</pre>
-      <small class="muted">更新于 {{ new Date(p.updated_at).toLocaleString('zh-CN') }}</small>
+      <small class="muted">更新于 {{ new Date(p.updated_at || 0).toLocaleString('zh-CN') }}</small>
     </div>
     <div v-if="!profiles.length && !error" class="card empty">
       <UserRound :size="38" />
@@ -301,9 +205,9 @@ onUnmounted(() => clearTimeout(poll));
   <div
     v-if="detail"
     class="modal-overlay"
+    tabindex="-1"
     @click.self="detail = null"
     @keydown.esc="detail = null"
-    tabindex="-1"
   >
     <section
       class="modal card wide-modal"
@@ -323,7 +227,9 @@ onUnmounted(() => clearTimeout(poll));
         <dt>提供商</dt>
         <dd>{{ detail.resolved_provider || '暂未解析' }}</dd>
         <dt>创建时间</dt>
-        <dd>{{ new Date(detail.created_at).toLocaleString('zh-CN') }}</dd>
+        <dd>
+          {{ new Date(detail.created_at).toLocaleString('zh-CN') }}
+        </dd>
         <dt v-if="detail.completed_at">完成时间</dt>
         <dd v-if="detail.completed_at">
           {{ new Date(detail.completed_at).toLocaleString('zh-CN') }}
