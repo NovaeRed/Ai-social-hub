@@ -82,8 +82,7 @@ test('dashboard, chat, AI, friends, schedules and profile work', async ({ page }
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: '你好，林沐' })).toBeVisible();
-  await expect(page.locator('.hero img')).toHaveJSProperty('complete', true);
+  await expect(page.getByRole('heading', { name: '我的概览' })).toBeVisible();
   await page.locator('.recent .conversation-row').first().click();
   await page.getByRole('textbox', { name: '消息内容' }).fill('这是一条交互验证消息');
   await page.getByRole('button', { name: '发送', exact: true }).click();

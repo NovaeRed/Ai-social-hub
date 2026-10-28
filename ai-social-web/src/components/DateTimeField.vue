@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next';
 const props = defineProps<{ modelValue: string; label: string; disabled?: boolean }>();
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
-const expanded = ref(false),
+const isExpanded = ref(false),
   month = ref(new Date());
 const text = computed({
   get: () => props.modelValue.replace('T', ' '),
@@ -23,7 +23,7 @@ const days = computed(() => {
   });
 });
 function toggle() {
-  expanded.value = !expanded.value;
+  isExpanded.value = !isExpanded.value;
   const date = new Date(props.modelValue);
   month.value = Number.isNaN(date.getTime()) ? new Date() : date;
 }
@@ -41,14 +41,14 @@ function setTime(part: number, value: string) {
   );
 }
 function closeOnEscape(event: KeyboardEvent) {
-  if (expanded.value) {
-    expanded.value = false;
+  if (isExpanded.value) {
+    isExpanded.value = false;
     event.stopPropagation();
   }
 }
 function closeOnBlur(event: FocusEvent) {
   if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null))
-    expanded.value = false;
+    isExpanded.value = false;
 }
 </script>
 <template>
@@ -72,14 +72,14 @@ function closeOnBlur(event: FocusEvent) {
           class="icon-button"
           :disabled="disabled"
           :aria-label="'选择' + label"
-          :aria-expanded="expanded"
+          :aria-expanded="isExpanded"
           @click="toggle"
         >
           <CalendarDays :size="18" />
         </button>
       </span>
     </label>
-    <section v-if="expanded" class="date-time-picker" :aria-label="label + '选择器'">
+    <section v-if="isExpanded" class="date-time-picker" :aria-label="label + '选择器'">
       <div class="section-heading">
         <button
           type="button"
@@ -134,7 +134,7 @@ function closeOnBlur(event: FocusEvent) {
             </option>
           </select></label
         >
-        <button type="button" class="secondary" @click="expanded = false">确定时间</button>
+        <button type="button" class="secondary" @click="isExpanded = false">确定时间</button>
       </div>
     </section>
   </div>

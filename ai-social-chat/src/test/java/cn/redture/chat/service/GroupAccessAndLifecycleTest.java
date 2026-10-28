@@ -59,6 +59,25 @@ class GroupAccessAndLifecycleTest {
         Conversation created = service.createGroupCore(1L, "群聊");
         assertEquals(1L, created.getMemberCount());
     }
+    @Test void ownerCanPublishAndClearAnnouncement() {
+        ConversationMember owner = new ConversationMember(); owner.setRole(ConversationMemberRoleEnum.OWNER);
+        when(members.selectByConversationIdAndUserId(7L, 1L)).thenReturn(owner);
+        service.updateGroupAnnouncement(1L, "group", "  周五交付\n请提前准备  ");
+        assertEquals("周五交付\n请提前准备", group.getAnnouncement());
+        service.updateGroupAnnouncement(1L, "group", "");
+        assertEquals("", group.getAnnouncement());
+        assertThrows(cn.redture.common.exception.businessException.InvalidInputException.class,
+                () -> service.updateGroupAnnouncement(1L, "group", "字".repeat(2001)));
+        verify(groups, times(2)).updateById(group);
+    }
+    @Test void membersAdminsAndOutsidersCannotEditAnnouncement() {
+        ConversationMember member = new ConversationMember(); member.setRole(ConversationMemberRoleEnum.MEMBER);
+        ConversationMember admin = new ConversationMember(); admin.setRole(ConversationMemberRoleEnum.ADMIN);
+        when(members.selectByConversationIdAndUserId(7L, 2L)).thenReturn(member, admin, null);
+        for (int i = 0; i < 3; i++)
+            assertThrows(AccessDeniedException.class, () -> service.updateGroupAnnouncement(2L, "group", "无权修改"));
+        verify(groups, never()).updateById(any(Conversation.class));
+    }
     @Test void batchInsertionDoesNotPassNullOrDuplicateMembersToSql() {
         ConversationMember existing = new ConversationMember();
         when(members.selectByConversationIdAndUserId(7L, 1L)).thenReturn(existing);

@@ -1,11 +1,10 @@
-import { createApp } from 'vue'
-import { createRouter, createWebHashHistory } from 'vue-router'
-import App from './App.vue'
-import './style.css'
-const router = createRouter({
-  history: createWebHashHistory(),
-  routes: ['/', '/messages', '/friends', '/groups', '/schedules', '/ai', '/insights', '/settings', '/login'].map(
-    (path) => ({ path, component: { template: '<span />' } }),
-  ),
-})
-createApp(App).use(router).mount('#app')
+import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+import App from './App.vue';
+import { router } from './router';
+import './style.css';
+import './styles/theme.css';
+import { useThemeStore } from './stores/theme';
+const pinia = createPinia();
+useThemeStore(pinia);
+createApp(App).use(pinia).use(router).mount('#app');

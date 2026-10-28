@@ -16,6 +16,8 @@ public interface GroupService {
 
     ConversationSummaryVO updateGroup(Long currentUserId, String groupPublicId, String name);
 
+    void updateGroupAnnouncement(Long currentUserId, String groupPublicId, String announcement);
+
     void addGroupMembers(Long currentUserId, String groupPublicId, List<String> userPublicIds);
 
     List<GroupAdminVO> listGroupAdmins(Long currentUserId, String groupPublicId);

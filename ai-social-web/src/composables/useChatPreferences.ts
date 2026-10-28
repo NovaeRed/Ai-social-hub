@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from 'vue';
-import type { User } from './api';
+import type { User } from '../services/http';
 
 // 在服务端支持会话偏好与逐条消息隐藏之前，
 // 这些本机设置按账号和浏览器分别保存。
@@ -10,10 +10,12 @@ export function useChatPreferences(user: Ref<User>) {
   watch(
     () => user.value.public_id,
     (id) => {
-      let saved: any = {};
+      let saved: Record<string, unknown> = {};
       try {
         saved = JSON.parse(localStorage.getItem('chat-preferences:' + id) || '{}');
-      } catch {}
+      } catch {
+        /* 本机存储损坏时使用空偏好。 */
+      }
       if (!saved || typeof saved !== 'object' || Array.isArray(saved)) saved = {};
       pinned.value = Array.isArray(saved.pinned)
         ? saved.pinned.filter((id: unknown) => typeof id === 'string')

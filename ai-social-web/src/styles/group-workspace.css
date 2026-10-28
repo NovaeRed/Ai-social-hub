@@ -1,0 +1,255 @@
+.group-toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: var(--space-lg);
+}
+.group-toolbar .search-field {
+  max-width: 430px;
+  flex: 1;
+}
+.group-toolbar form {
+  flex-direction: row;
+  gap: 10px;
+}
+.group-toolbar .search-field button {
+  white-space: nowrap;
+}
+.group-workspace {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+  align-items: start;
+}
+.group-workspace.has-detail {
+  grid-template-columns: minmax(0, 1fr);
+}
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.group-card {
+  text-align: left;
+  padding: 22px;
+  position: relative;
+  overflow: hidden;
+}
+.group-card.selected {
+  border-color: var(--theme-border-d5b9ec, #d5b9ec);
+  background: var(--theme-background-fdfbff, #fdfbff);
+  box-shadow: 0 0 0 2px var(--theme-shadow-efebf5, #efebf5);
+}
+.group-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 70px;
+  border-radius: 24px;
+  margin-bottom: 20px;
+}
+.group-art .orbit {
+  width: 78px;
+  height: 37px;
+  border: 1px solid currentColor;
+  opacity: 0.25;
+  transform: rotate(-25deg);
+  position: absolute;
+  border-radius: 50%;
+}
+.group-card h3 {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.group-card > p {
+  font-size: 11px;
+  color: var(--theme-text-868e98, #868e98);
+  margin: 10px 0 22px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.group-open {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--theme-text-a08bb9, #a08bb9);
+  font-size: 11px;
+  padding-top: 15px;
+  border-top: 1px solid var(--theme-border-efedf3, #efedf3);
+}
+.group-detail {
+  padding: 25px;
+  min-width: 0;
+}
+.group-detail h2 {
+  font-size: 22px;
+  line-height: 1.7;
+  margin-top: 15px;
+  overflow-wrap: anywhere;
+}
+.group-announcement {
+  border: 1px solid var(--theme-border-f0e8e0, #f0e8e0);
+  background: var(--theme-background-fbf8f3, #fbf8f3);
+  border-radius: 10px;
+  padding: 15px;
+  margin: 20px 0 25px;
+}
+.group-announcement strong {
+  font-size: 12px;
+  color: var(--theme-text-99856d, #99856d);
+}
+.group-announcement p {
+  font-size: 11px;
+  color: var(--theme-text-9d9386, #9d9386);
+  margin-top: 7px;
+}
+.member-list {
+  max-height: 430px;
+  overflow: auto;
+  margin-top: 12px;
+}
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
+}
+.member-identity {
+  min-width: 0;
+  flex: 1;
+}
+.member-identity strong {
+  font-size: 12px;
+  font-weight: 500;
+  display: block;
+  overflow-wrap: anywhere;
+}
+.member-identity strong small {
+  font-size: 9px;
+  color: var(--theme-text-a4a8b0, #a4a8b0);
+  margin-left: 6px;
+}
+.member-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.member-actions .text-button {
+  font-size: 9px;
+}
+.group-leave {
+  width: 100%;
+  margin-top: 20px;
+}
+.group-card:hover {
+  border-color: var(--theme-border-d8c8e9, #d8c8e9);
+}
+.member-row button {
+  white-space: nowrap;
+}
+@media (max-width: 1150px) {
+  .group-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1150px) {
+}
+@media (max-width: 1150px) {
+  .group-card {
+    padding: 20px;
+  }
+}
+@media (max-width: 850px) {
+}
+@media (max-width: 850px) {
+  .group-detail {
+    order: -1;
+  }
+}
+@media (max-width: 850px) {
+  .group-detail {
+    padding: 22px;
+  }
+}
+@media (max-width: 850px) {
+  .group-announcement {
+    margin: 20px 0;
+  }
+}
+@media (max-width: 600px) {
+  .group-grid {
+    gap: 12px;
+  }
+}
+@media (max-width: 600px) {
+  .group-card {
+    padding: 17px;
+  }
+}
+@media (max-width: 600px) {
+  .group-card h3 {
+    font-size: 13px;
+  }
+}
+@media (max-width: 600px) {
+  .group-art {
+    width: 53px;
+    height: 53px;
+    border-radius: 18px;
+  }
+}
+@media (max-width: 600px) {
+  .group-art .orbit {
+    width: 62px;
+  }
+}
+@media (max-width: 600px) {
+  .group-card > p {
+    font-size: 10px;
+  }
+}
+@media (max-width: 600px) {
+  .group-open {
+    font-size: 10px;
+  }
+}
+@media (max-width: 600px) {
+  .group-toolbar {
+    gap: 9px;
+  }
+}
+@media (max-width: 600px) {
+  .group-toolbar .secondary {
+    padding: 9px 12px;
+  }
+}
+@media (max-width: 600px) {
+  .group-detail h2 {
+    font-size: 21px;
+  }
+}
+@media (max-width: 600px) {
+  .member-row {
+    gap: var(--space-sm);
+  }
+}
+@media (max-width: 600px) {
+  .member-actions .text-button {
+    font-size: 9px;
+  }
+}
+@media (max-width: 600px) {
+  .group-workspace {
+    gap: var(--space-md);
+  }
+}
+
+/* 详情独占内容区，不在详情下方重复呈现其他群卡片。 */
+.group-announcement p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

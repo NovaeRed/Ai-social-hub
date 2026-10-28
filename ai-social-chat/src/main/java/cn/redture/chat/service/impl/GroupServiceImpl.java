@@ -136,6 +136,21 @@ public class GroupServiceImpl implements GroupService {
         return ConversationConverter.INSTANCE.toConversationSummaryVO(group);
     }
 
+    @Override
+    @Transactional
+    public void updateGroupAnnouncement(Long currentUserId, String groupPublicId, String announcement) {
+        Conversation group = getConversationByPublicId(groupPublicId);
+        ConversationMember operator = conversationMemberMapper.selectByConversationIdAndUserId(group.getId(), currentUserId);
+        if (operator == null || operator.getRole() != ConversationMemberRoleEnum.OWNER) {
+            throw new AccessDeniedException("只有群主才能编辑群公告");
+        }
+        if (announcement == null || announcement.length() > 2000) {
+            throw new InvalidInputException("公告内容不能为空值且不能超过 2000 字");
+        }
+        group.setAnnouncement(announcement.trim());
+        conversationMapper.updateById(group);
+    }
+
     /**
      * 添加群成员
      *

@@ -4,6 +4,7 @@ import cn.redture.chat.pojo.dto.AddMembersRequestDTO;
 import cn.redture.chat.pojo.dto.CreateGroupRequestDTO;
 import cn.redture.chat.pojo.dto.NewOwnerRequestDTO;
 import cn.redture.chat.pojo.dto.UpdateGroupRequestDTO;
+import cn.redture.chat.pojo.dto.UpdateGroupAnnouncementDTO;
 import cn.redture.chat.pojo.entity.Conversation;
 import cn.redture.chat.pojo.vo.*;
 import cn.redture.chat.service.GroupService;
@@ -35,7 +36,14 @@ public class GroupController {
         return RestResult.created(group);
     }
 
-    // TODO 更改通知公告等功能
+    @PatchMapping("/{group_public_id}/announcement")
+    public RestResult<Void> updateAnnouncement(@PathVariable("group_public_id") String groupPublicId,
+                                               @RequestBody UpdateGroupAnnouncementDTO request) {
+        if (request == null) throw new InvalidInputException("请填写公告内容");
+        groupService.updateGroupAnnouncement(SecurityContextHolderUtil.getUserId(), groupPublicId, request.getAnnouncement());
+        return RestResult.noContent();
+    }
+
     @PatchMapping("/{group_public_id}")
     public RestResult<ConversationSummaryVO> updateGroup(@PathVariable("group_public_id") String groupPublicId,
                                                          @RequestBody UpdateGroupRequestDTO request) {

@@ -35,7 +35,17 @@
         ELSE c.name END AS name,
         c.latest_message_id AS latestMessageId,
         m.public_id AS latestMessagePublicId,
-        m.content AS latestMessageContent,
+        CASE
+            WHEN NULLIF(BTRIM(m.content), '') IS NOT NULL THEN m.content
+            WHEN m.public_id IS NULL THEN NULL
+            WHEN m.media_type = 'FILE' THEN '[文件]' ||
+                CASE WHEN NULLIF(BTRIM(cf.original_filename), '') IS NOT NULL
+                     THEN ' ' || cf.original_filename ELSE '' END
+            WHEN m.media_type = 'IMAGE' THEN '[图片]'
+            WHEN m.media_type = 'VOICE' THEN '[语音]'
+            WHEN m.media_type = 'VIDEO' THEN '[视频]'
+            ELSE '[消息]'
+        END AS latestMessageContent,
         m.created_at AS latestMessageCreatedAt,
         (SELECT COUNT(*)
         FROM messages m2
@@ -47,6 +57,7 @@
         FROM conversations c
         INNER JOIN conversation_members cm ON c.id = cm.conversation_id
         LEFT JOIN messages m ON m.id = c.latest_message_id
+        LEFT JOIN chat_files cf ON cf.id = m.file_id AND cf.deleted_at IS NULL
         WHERE cm.user_id = #{userId}
         AND c.deleted_at IS NULL
         <if test="cursorId != null">

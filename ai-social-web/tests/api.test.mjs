@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
-const source = (await readFile(new URL('../src/lib/api.ts', import.meta.url), 'utf8')).replaceAll(
+const source = (await readFile(new URL('../src/services/http.ts', import.meta.url), 'utf8')).replaceAll(
   'import.meta.env',
   '({ VITE_DEMO_MODE: "false" })',
 );
