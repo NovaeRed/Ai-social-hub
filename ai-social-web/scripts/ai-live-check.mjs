@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 const a = JSON.parse(
     await readFile(new URL('../.local/accounts.json', import.meta.url), 'utf8'),
   )[0],
@@ -50,9 +50,9 @@ const tests = [
 const records = [];
 for (const [path, type, body] of tests) {
   const supported = models.filter((m) => m.capabilities.includes(type)),
-    selected = supported.find((m) => m.name === 'qwen3-max-2026-01-23') || supported[0];
+    selected = supported.find((m) => m.name === 'deepseek-v4.1-flash' && m.provider === 'dashscope');
   if (!selected) {
-    records.push({ path, pass: false, error: '无可用能力模型' });
+    records.push({ path, pass: false, error: 'deepseek-v4.1-flash 未配置或不支持该能力' });
     continue;
   }
   console.log('开始验证', path, selected.option_code);
@@ -96,8 +96,9 @@ for (const [path, type, body] of tests) {
     });
   }
 }
+await mkdir(new URL('../artifacts/integration/', import.meta.url), { recursive: true });
 await writeFile(
-  new URL('../../doc/frontend-ai-live-evidence.json', import.meta.url),
+  new URL('../artifacts/integration/frontend-ai-live-evidence.json', import.meta.url),
   JSON.stringify({ timestamp: new Date().toISOString(), models, records }, null, 2),
 );
 console.log('已保存 AI 联调证据');

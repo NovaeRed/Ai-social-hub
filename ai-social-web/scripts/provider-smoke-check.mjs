@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 const source = await readFile(
   new URL('../../ai-social-app/src/main/resources/application.yaml', import.meta.url),
   'utf8',
@@ -30,7 +30,7 @@ function resolve(value) {
 const url = resolve(values.get('ai.providers.dashscope.url'));
 const key = resolve(values.get('ai.providers.dashscope.api-key'));
 const endpoint = resolve(values.get('ai.providers.dashscope.endpoints.chat'));
-const model = process.env.PROBE_MODEL || 'qwen-plus-latest';
+const model = process.env.PROBE_MODEL || 'deepseek-v4.1-flash';
 let report;
 if (!url || !key || !endpoint || key.includes('${'))
   report = {
@@ -75,8 +75,9 @@ else {
     };
   }
 }
+await mkdir(new URL('../artifacts/integration/', import.meta.url), { recursive: true });
 await writeFile(
-  new URL('../../doc/provider-probe-evidence.json', import.meta.url),
+  new URL('../artifacts/integration/provider-probe-evidence.json', import.meta.url),
   JSON.stringify(report, null, 2),
 );
 console.log(JSON.stringify(report));

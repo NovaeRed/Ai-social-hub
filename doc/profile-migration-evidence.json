@@ -1,9 +1,0 @@
-{
-  "timestamp": "2026-10-23T13:05:49.088Z",
-  "migration": "20261023_user_ai_profiles.sql",
-  "authorized": true,
-  "checks": {
-    "profile_table_exists": true,
-    "indexes": 4
-  }
-}

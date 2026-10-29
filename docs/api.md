@@ -905,7 +905,7 @@ Cookie: access_token=<access_token>
 ```json
 {
   "message": "我想要吃一个比较甜的食物可以吧",
-  "model_option_code": "qwen3-max"
+  "model_option_code": "dashscope:deepseek-v4.1-flash"
 }
 ```
 
@@ -935,7 +935,7 @@ Cookie: access_token=<access_token>
       "timestamp": "2025-12-01T11:00:00Z"
     }
   ],
-  "model_option_code": "dashscope:qwen-max",
+  "model_option_code": "dashscope:deepseek-v4.1-flash",
   "context": {
     "timezone": "Asia/Shanghai",
     "user_preferences": {
@@ -980,8 +980,8 @@ Cookie: access_token=<access_token>
       "public_id": "task_t1u2v3w4",
       "type": "SCHEDULE_EXTRACTION",
       "status": "COMPLETED",
-      "requested_model_option_code": "dashscope:qwen-max",
-      "resolved_model_name": "qwen-max",
+      "requested_model_option_code": "dashscope:deepseek-v4.1-flash",
+      "resolved_model_name": "deepseek-v4.1-flash",
       "resolved_provider": "dashscope",
       "created_at": "2025-12-01T10:00:00Z",
       "completed_at": "2025-12-01T10:00:05Z",
@@ -1021,8 +1021,8 @@ Cookie: access_token=<access_token>
   "public_id": "task_p1q2r3s4",
   "type": "PERSONA_ANALYSIS",
   "status": "COMPLETED",
-  "requested_model_option_code": "dashscope:qwen-max",
-  "resolved_model_name": "qwen-max",
+  "requested_model_option_code": "dashscope:deepseek-v4.1-flash",
+  "resolved_model_name": "deepseek-v4.1-flash",
   "resolved_provider": "dashscope",
   "input_payload": {
     "messages": "...",
@@ -1132,7 +1132,7 @@ PROCESSING -> CANCELLED (可选，取决于执行器是否支持中断)
     "role": "项目经理",
     "communication_style": "professional"
   },
-  "model_option_code": "dashscope:qwen-max"
+  "model_option_code": "dashscope:deepseek-v4.1-flash"
 }
 ```
 
@@ -1175,7 +1175,7 @@ data: {"output":"，需要准备什么材料吗？"}
     "决策",
     "行动项"
   ],
-  "model_option_code": "dashscope:qwen-max"
+  "model_option_code": "dashscope:deepseek-v4.1-flash"
 }
 ```
 
@@ -1199,7 +1199,7 @@ data: {"output":"要点1: ..."}
   "target_language": "zh",
   "domain": "business",
   // business, casual, technical, academic
-  "model_option_code": "dashscope:qwen-max"
+  "model_option_code": "dashscope:deepseek-v4.1-flash"
 }
 ```
 
@@ -1222,9 +1222,9 @@ data: {"output":"，你怎么样？"}
 {
   "models": [
     {
-      "option_code": "dashscope:qwen-max",
-      "display_name": "通义千问 Max",
-      "name": "qwen-max",
+      "option_code": "dashscope:deepseek-v4.1-flash",
+      "display_name": "DeepSeek V4.1 Flash",
+      "name": "deepseek-v4.1-flash",
       "provider": "dashscope",
       "capabilities": [
         "text",
@@ -1268,7 +1268,7 @@ data: {"output":"，你怎么样？"}
           "解决问题导向"
         ]
       },
-      "model_name": "qwen-max",
+      "model_name": "deepseek-v4.1-flash",
       "provider": "dashscope",
       "updated_at": "2025-12-01T10:00:00Z"
     }

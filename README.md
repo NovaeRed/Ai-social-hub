@@ -227,23 +227,19 @@ ai:
       endpoints:
         chat: /compatible-mode/v1/chat/completions
   chat:
-    default-model: qwen-plus
+    default-model: deepseek-v4.1-flash
     candidates:
-      - id: qwen-plus
+      - id: deepseek-v4.1-flash
         provider: dashscope
-        model: qwen-plus-latest
+        model: deepseek-v4.1-flash
         enabled: true
 ```
 
 将这些环境变量配置到本地终端、IDE 或部署平台。`APP_DB_URL` 使用 `jdbc:postgresql://主机:端口/数据库名`；`APP_JWT_SECRET` 使用至少 32 字节的随机密钥。不要把实际口令、令牌或模型密钥写入 README、提交记录或截图。
 
-模型候选配置本身不自动创建数据库能力记录。选择示例 Qwen 模型时，先审阅并按需应用以下增量配置：
+模型候选配置本身不自动创建数据库能力记录。`docs/ai_social.sql` 已包含示例 `deepseek-v4.1-flash` 的润色、回复、翻译、总结和日程提取五项能力登记，且不设置为默认路由；新库初始化后无需再执行单独的增量 SQL。
 
-```bash
-psql -h 127.0.0.1 -U your_user -d ai_social_hub -v ON_ERROR_STOP=1 -f doc/migrations/20261023_qwen_plus_capabilities.sql
-```
-
-该迁移启用润色、回复、翻译、总结和日程提取五种能力，不涵盖所有后台分析任务。需要画像分析时，另行核对默认模型对应的分析能力与供应商支持。
+已有数据库应先核对画像表、索引和模型能力记录，仅补齐实际缺失项，不要重新执行初始化脚本。上述五项能力不涵盖所有后台分析任务；需要画像分析时，另行核对默认模型对应的分析能力与供应商支持。
 
 ### 3. 构建并运行后端
 
@@ -269,7 +265,7 @@ npm ci
 VITE_DEMO_MODE=false
 VITE_API_BASE=/api/v1
 API_PROXY_TARGET=http://127.0.0.1:8082
-VITE_DEFAULT_MODEL=dashscope:qwen-plus-latest
+VITE_DEFAULT_MODEL=dashscope:deepseek-v4.1-flash
 ```
 
 ```bash
@@ -308,7 +304,6 @@ location /api/ {
 
 `proxy_pass` 不附加新的路径，保留 `/api/v1`。根据实际可信代理地址配置后端白名单，并同步配置上传大小、后端 multipart 限制和连接超时；聊天服务自身的文件大小检查不能替代入口层配置。
 
-SSE 的连接预算、写入超时适配、JMX 指标及预警配置见 [SSE 生命周期说明](docs/sse-lifecycle.md)，通知结果与 Redis ACK、重试及死信边界见 [通知契约](docs/sse-notification-contract.md)。本轮修复与真实 HTTP、Redis 和浏览器验证范围见 [验收记录](docs/sse-verification-20261027.md)。
 
 ### 后端容器部署
 

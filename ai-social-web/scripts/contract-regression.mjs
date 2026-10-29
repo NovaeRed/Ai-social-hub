@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import net from 'node:net';
 const accounts = JSON.parse(
@@ -256,8 +256,9 @@ const report = {
     failed: records.filter((r) => !r.pass).length,
   },
 };
+await mkdir(new URL('../artifacts/integration/', import.meta.url), { recursive: true });
 await writeFile(
-  new URL('../../doc/frontend-contract-regression.json', import.meta.url),
+  new URL('../artifacts/integration/frontend-contract-regression.json', import.meta.url),
   JSON.stringify(report, null, 2),
 );
 console.log('Summary', report.summary, 'Redis', redis);

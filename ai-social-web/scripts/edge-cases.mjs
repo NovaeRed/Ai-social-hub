@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 const accounts = JSON.parse(
     await readFile(new URL('../.local/accounts.json', import.meta.url), 'utf8'),
   ),
@@ -101,8 +101,9 @@ const report = {
     failed: records.filter((r) => !r.pass).length,
   },
 };
+await mkdir(new URL('../artifacts/integration/', import.meta.url), { recursive: true });
 await writeFile(
-  new URL('../../doc/frontend-edge-evidence.json', import.meta.url),
+  new URL('../artifacts/integration/frontend-edge-evidence.json', import.meta.url),
   JSON.stringify(report, null, 2),
 );
 console.log(report.summary);

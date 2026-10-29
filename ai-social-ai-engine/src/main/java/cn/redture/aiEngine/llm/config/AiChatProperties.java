@@ -43,7 +43,7 @@ public class AiChatProperties {
         private String provider;
 
         /**
-         * 厂商的模型标识 (如: qwen-plus-latest)
+         * 厂商的模型标识 (如: deepseek-v4.1-flash)
          */
         private String model;
 

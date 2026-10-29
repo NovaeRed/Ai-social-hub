@@ -207,5 +207,6 @@ const report = {
     failed: records.filter((r) => !r.pass).length,
   },
 };
-await writeFile(new URL('doc/frontend-live-evidence.json', root), JSON.stringify(report, null, 2));
+await mkdir(new URL('../artifacts/integration/', import.meta.url), { recursive: true });
+await writeFile(new URL('../artifacts/integration/frontend-live-evidence.json', import.meta.url), JSON.stringify(report, null, 2));
 console.log('Summary', report.summary, 'Database', database);

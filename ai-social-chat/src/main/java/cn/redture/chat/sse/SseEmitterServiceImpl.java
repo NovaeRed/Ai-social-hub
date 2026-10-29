@@ -11,7 +11,9 @@ import jakarta.annotation.PreDestroy;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.jmx.export.annotation.ManagedResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -24,7 +26,7 @@ import java.util.function.Supplier;
 /** 编排连接注册、通知分发、资源回收与健康巡检。 */
 @Slf4j
 @Service
-@org.springframework.jmx.export.annotation.ManagedResource(
+@ManagedResource(
         objectName = "cn.redture.sse:type=Connections")
 public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
     private final PushConfig config;
@@ -49,7 +51,7 @@ public class SseEmitterServiceImpl implements SseEmitterService, AutoCloseable {
                 QueuedEvent.defaultMapper());
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
+    @Autowired
     public SseEmitterServiceImpl(PushConfig config, ObjectMapper objectMapper) {
         this(config, () -> new SseEmitter(config.getConnectionTimeoutMs()), objectMapper);
     }

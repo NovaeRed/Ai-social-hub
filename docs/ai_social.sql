@@ -336,3 +336,12 @@ INSERT INTO ai_provider_configs (provider_name, display_name, is_enabled)
 VALUES ('openai', 'OpenAI', true),
        ('anthropic', 'Anthropic', true),
        ('dashscope', 'DashScope', true);
+-- 示例 DeepSeek 模型能力；与 README 中的候选配置对应，不覆盖默认路由。
+-- 登记项目五项交互能力，不代表已完成该模型的线上调用验证。
+INSERT INTO ai_model_capabilities
+    (model_name, provider, capability_type, is_enabled, is_default)
+VALUES ('deepseek-v4.1-flash', 'dashscope', 'POLISH', TRUE, FALSE),
+       ('deepseek-v4.1-flash', 'dashscope', 'SMART_REPLY', TRUE, FALSE),
+       ('deepseek-v4.1-flash', 'dashscope', 'TRANSLATION', TRUE, FALSE),
+       ('deepseek-v4.1-flash', 'dashscope', 'CHAT_SUMMARY', TRUE, FALSE),
+       ('deepseek-v4.1-flash', 'dashscope', 'SCHEDULE_EXTRACTION', TRUE, FALSE);

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 const base = process.env.AUDIT_API_BASE || 'http://127.0.0.1:8083/api/v1';
 const accounts = JSON.parse(
@@ -239,8 +239,9 @@ if (jobs.data?.items[0]) {
   );
   check('other accounts cannot read task detail', denied.status === 404, denied.status);
 }
+await mkdir(new URL('../artifacts/integration/', import.meta.url), { recursive: true });
 await writeFile(
-  new URL('../../doc/core-iteration-evidence.json', import.meta.url),
+  new URL('../artifacts/integration/core-iteration-evidence.json', import.meta.url),
   JSON.stringify(
     {
       timestamp: new Date().toISOString(),

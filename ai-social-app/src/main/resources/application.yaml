@@ -66,15 +66,11 @@ ai:
         chat: /compatible-mode/v1/chat/completions
 
   chat:
-    default-model: deepseek-v4-flash-0731
+    default-model: deepseek-v4.1-flash
     candidates:
-      - id: deepseek-v4-flash-0731
+      - id: deepseek-v4.1-flash
         provider: dashscope
-        model: deepseek-v4-flash-0731
-        enabled: true
-      - id: qwen-plus
-        provider: dashscope
-        model: qwen-plus-latest
+        model: deepseek-v4.1-flash
         enabled: true
 
 jwt:

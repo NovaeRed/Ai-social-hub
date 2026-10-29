@@ -137,8 +137,9 @@ try {
   // Reauthenticate every account with the requested password; tokens remain in memory only.
   for(const actor of actors)await api(null,'/auth/login','POST',{username:actor.username,password});
   const report={date:today,accounts:people.map((p,i)=>({username:actors[i].username,nickname:p.nickname,role:p.role,note:p.note})),groups:groupPlans.map(p=>({name:p.name,owner:people[p.owner].nickname,admin:p.admin===null?null:people[p.admin].nickname,members:[p.owner,...p.members].map(i=>people[i].nickname)})),counts,operations};
-  await writeFile(new URL('doc/test-community-summary.json',root),JSON.stringify(report,null,2));
+  await mkdir(new URL('../artifacts/integration/', import.meta.url), { recursive: true });
+  await writeFile(new URL('../artifacts/integration/test-community-summary.json',import.meta.url),JSON.stringify(report,null,2));
   const table=report.accounts.map(a=>`| ${a.username} | ${a.nickname} | ${a.note} |`).join('\n');
-  await writeFile(new URL('doc/test-community-guide.md',root),`# 共鸣测试账号与关联数据\n\n创建日期：${today}（Asia/Shanghai）。密码统一使用用户指定的测试密码，本文不保存密码。\n\n| 登录用户名 | 昵称 | 测试角色 |\n| --- | --- | --- |\n${table}\n\n已创建并核对：5 个账号、7 对好友、7 个私聊、3 个群聊、34 条消息、15 条日程；另有 2 条待处理好友申请和 1 条已拒绝申请。\n\n群空间：\n\n${report.groups.map(g=>`- ${g.name}：群主${g.owner}${g.admin?'，管理员'+g.admin:''}；成员${g.members.join('、')}。`).join('\n')}\n\n每人有今天的产品会、明天的看展安排，以及晚间个人/读书散步日程；其中 13 条日程关联群内约定消息。建议先登录林沐，再切换其他账号测试未读消息、申请处理和不同群角色的操作。\n\n数据通过真实业务 API 写入，密码按后端规则加密；数据库仅只读核对，没有修改原有账号。可复用脚本为 ai-social-web/scripts/seed-test-community.mjs，需要设置 SEED_PASSWORD，幂等状态位于被 Git 忽略的 .local/sample-community.json。\n`);
+  await writeFile(new URL('../artifacts/integration/test-community-guide.md',import.meta.url),`# 共鸣测试账号与关联数据\n\n创建日期：${today}（Asia/Shanghai）。密码统一使用用户指定的测试密码，本文不保存密码。\n\n| 登录用户名 | 昵称 | 测试角色 |\n| --- | --- | --- |\n${table}\n\n已创建并核对：5 个账号、7 对好友、7 个私聊、3 个群聊、34 条消息、15 条日程；另有 2 条待处理好友申请和 1 条已拒绝申请。\n\n群空间：\n\n${report.groups.map(g=>`- ${g.name}：群主${g.owner}${g.admin?'，管理员'+g.admin:''}；成员${g.members.join('、')}。`).join('\n')}\n\n每人有今天的产品会、明天的看展安排，以及晚间个人/读书散步日程；其中 13 条日程关联群内约定消息。建议先登录林沐，再切换其他账号测试未读消息、申请处理和不同群角色的操作。\n\n数据通过真实业务 API 写入，密码按后端规则加密；数据库仅只读核对，没有修改原有账号。可复用脚本为 ai-social-web/scripts/seed-test-community.mjs，需要设置 SEED_PASSWORD，幂等状态位于被 Git 忽略的 .local/sample-community.json。\n`);
   console.log(JSON.stringify(report,null,2));
 } finally { await db.end(); }
