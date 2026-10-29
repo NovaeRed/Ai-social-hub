@@ -114,8 +114,6 @@ PostgreSQL：用户、好友、会话、消息、附件元数据、日程、AI �
 | `docs` | 数据库初始化结构与页面图片 |
 | `doc` | API/联调资料、缺陷反馈、验收记录和增量迁移 |
 
-上述后端模块由 `ai-social-app` 统一启动；`gateway` 是应用内部的安全模块，不需要另行启动一个网关服务。
-
 ## Agent 机制
 
 ### ReAct-like 工具决策循环
@@ -139,8 +137,6 @@ PostgreSQL：用户、好友、会话、消息、附件元数据、日程、AI �
 | `resolve_chat_file_content` | 读取当前用户有权访问的聊天附件，提取文本并标记是否截断 | 日程提取 |
 
 工具定义以函数描述与 JSON 参数 Schema 提供给模型。服务端另行检查必填字段、参数类型及额外字段，不依赖模型遵守 Schema。执行上下文携带用户、任务、会话和追踪信息；附件访问权限来自服务端上下文，不允许模型通过参数指定另一位用户。
-
-附件在打开内容前先做授权检查。AI 解析单文件限制为 **20 MiB**，提取文本限制为 **120,000 字符**；结果携带不可信文档声明。普通聊天上传与 AI 文档解析使用不同限制，不能将“上传成功”理解为“一定可由 AI 解析”。
 
 ### 会话记忆
 
@@ -184,98 +180,6 @@ PostgreSQL：用户、好友、会话、消息、附件元数据、日程、AI �
 | 存储与网络 | 后端可访问数据库、Redis 和模型接口；附件目录和日志目录可写，持久化卷可保留附件 |
 | 生产入口 | HTTPS、静态资源服务、API 反向代理及支持长连接的超时设置 |
 
-不配置模型时，不能验收 AI 生成；聊天、好友和手动日程仍可单独使用。新环境应使用自己的数据库、Redis、JWT 密钥和模型凭证，避免沿用开发环境配置。
-
-## 本地启动
-
-### 1. 初始化数据库
-
-创建独立数据库，在**空数据库**中运行初始化结构：
-
-```bash
-psql -h 127.0.0.1 -U your_user -d ai_social_hub -v ON_ERROR_STOP=1 -f docs/ai_social.sql
-```
-
-初始化结构包含枚举、表和索引，不是可对已有库重复执行的幂等迁移。数据库角色需要创建扩展的权限，或由管理员预先安装扩展。已有数据库按实际差异应用增量迁移，不要重新导入全部结构。
-
-### 2. 配置后端
-
-后端默认端口为 **8082**，API 前缀为 **`/api/v1`**，Redis 属性前缀为 **`spring.data.redis`**。
-
-创建仅保存在本地的 `config/application-local.yaml`，用外部配置覆盖开发默认值：
-
-```yaml
-server:
-  port: 8082
-spring:
-  datasource:
-    url: ${APP_DB_URL}
-    username: ${APP_DB_USER}
-    password: ${APP_DB_PASSWORD}
-  data:
-    redis:
-      host: ${APP_REDIS_HOST}
-      port: ${APP_REDIS_PORT:6379}
-      password: ${APP_REDIS_PASSWORD:}
-jwt:
-  secret: ${APP_JWT_SECRET}
-ai:
-  providers:
-    dashscope:
-      url: https://dashscope.aliyuncs.com
-      api-key: ${DASHSCOPE_API_KEY:}
-      endpoints:
-        chat: /compatible-mode/v1/chat/completions
-  chat:
-    default-model: deepseek-v4.1-flash
-    candidates:
-      - id: deepseek-v4.1-flash
-        provider: dashscope
-        model: deepseek-v4.1-flash
-        enabled: true
-```
-
-将这些环境变量配置到本地终端、IDE 或部署平台。`APP_DB_URL` 使用 `jdbc:postgresql://主机:端口/数据库名`；`APP_JWT_SECRET` 使用至少 32 字节的随机密钥。不要把实际口令、令牌或模型密钥写入 README、提交记录或截图。
-
-模型候选配置本身不自动创建数据库能力记录。`docs/ai_social.sql` 已包含示例 `deepseek-v4.1-flash` 的润色、回复、翻译、总结和日程提取五项能力登记，且不设置为默认路由；新库初始化后无需再执行单独的增量 SQL。
-
-已有数据库应先核对画像表、索引和模型能力记录，仅补齐实际缺失项，不要重新执行初始化脚本。上述五项能力不涵盖所有后台分析任务；需要画像分析时，另行核对默认模型对应的分析能力与供应商支持。
-
-### 3. 构建并运行后端
-
-在仓库根目录执行：
-
-```bash
-mvn package -DskipTests
-java -jar ai-social-app/target/ai-social-app-1.0-SNAPSHOT.jar --spring.config.additional-location=file:./config/application-local.yaml
-```
-
-默认访问地址为 `http://127.0.0.1:8082/api/v1`。这里的打包命令跳过测试；验证命令见下文。
-
-### 4. 启动前端
-
-```bash
-cd ai-social-web
-npm ci
-```
-
-复制 `.env.example` 为 `.env.local`，按环境调整：
-
-```dotenv
-VITE_DEMO_MODE=false
-VITE_API_BASE=/api/v1
-API_PROXY_TARGET=http://127.0.0.1:8082
-VITE_DEFAULT_MODEL=dashscope:deepseek-v4.1-flash
-```
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5186 --strictPort
-```
-
-打开 `http://127.0.0.1:5186/`。先注册自己的账号，再添加好友和群聊。开发代理目标改变后需重启 Vite。
-
-如仅查看交互，可将 `VITE_DEMO_MODE=true` 后重启前端：此时使用明确标记的内存演示数据，不验证真实后端或模型服务。
-
 ## 生产部署
 
 ### 前端静态部署
@@ -302,8 +206,6 @@ location /api/ {
 }
 ```
 
-`proxy_pass` 不附加新的路径，保留 `/api/v1`。根据实际可信代理地址配置后端白名单，并同步配置上传大小、后端 multipart 限制和连接超时；聊天服务自身的文件大小检查不能替代入口层配置。
-
 
 ### 后端容器部署
 
@@ -320,7 +222,6 @@ docker build -t ai-social-hub:local ai-social-app
 docker run -d --name ai-social-hub --env-file .env.runtime -p 8082:8082 -v "${PWD}/config:/app/config:ro" -v "${PWD}/runtime/chat-files:/app/data/chat-files" -v "${PWD}/runtime/logs:/app/logs" -e SPRING_CONFIG_ADDITIONAL_LOCATION=file:/app/config/application-local.yaml ai-social-hub:local
 ```
 
-环境文件提供上文的连接参数和密钥，容器中的数据库/Redis 主机名应指向容器可达的地址，不能直接照搬宿主机的 `127.0.0.1`。
 
 现有 `ai-social-app/docker-compose.yaml` **只定义应用服务**，不包含数据库和 Redis；其端口映射为 8080，且 command 与 Dockerfile ENTRYPOINT 需要统一后再使用。完整部署应先准备依赖与外部配置，上面的直接 `docker run` 示例按 8082 端口运行。
 
